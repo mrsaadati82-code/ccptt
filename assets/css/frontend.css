@@ -744,3 +744,48 @@
 	border: 3px solid rgba(255,255,255,0.35) !important;
 	border-top-color: rgba(255,255,255,0.95) !important;
 }
+/* ===== Report CTA (project completed) ===== */
+.cptt-reportCta{
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #f3f4f6;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+
+  text-align: center;
+}
+
+.cptt-reportCta__msg{
+  font-weight: 900;
+  color: #065f46;
+  background: rgba(34,197,94,0.10);
+  border: 1px solid rgba(34,197,94,0.20);
+  padding: 10px 12px;
+  border-radius: 14px;
+  width: 100%;
+}
+
+.cptt-btn{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  text-decoration: none;
+  border-radius: 14px;
+  padding: 10px 14px;
+  font-weight: 900;
+
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: #111827;
+
+  min-width: 220px;
+}
+
+.cptt-btn--primary{
+  border-color: rgba(34,197,94,0.25);
+  background: rgba(34,197,94,0.12);
+}

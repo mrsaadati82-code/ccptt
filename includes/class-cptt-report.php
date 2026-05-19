@@ -143,16 +143,23 @@ class CPTT_Report {
 			padding: 0 14px;
 		}
 		.topbar{
+			position: relative;
 			display:flex;
 			align-items:center;
-			justify-content: space-between;
+			justify-content: center;
 			gap: 12px;
 			margin-bottom: 14px;
 		}
 		.brand{
 			display:flex;
 			align-items:center;
+			justify-content:center;
 			gap: 10px;
+			width: 100%;
+		}
+
+			.brandCenter{
+			justify-content:center;
 		}
 		.brand img{
 			max-height: 44px;
@@ -173,6 +180,10 @@ class CPTT_Report {
 		}
 
 		.actions{
+			position: absolute;
+			left: 0;
+			top: 0;
+
 			display:flex;
 			gap: 8px;
 			flex-wrap: wrap;
@@ -191,7 +202,130 @@ class CPTT_Report {
 			border-color: rgba(34,197,94,0.25);
 			background: rgba(34,197,94,0.12);
 		}
+		/* ===== Header text blocks ===== */
+		.autoText{
+		margin-top: 6px;
+		color: var(--muted);
+		font-size: 13px;
+		}
 
+		.siteBlock{
+		margin-top: 6px;
+		text-align: center;
+		}
+
+		.siteBlock .brandTitle{
+		font-size: 14px;
+		font-weight: 950;
+		}
+
+		.siteBlock .brandUrl{
+		font-size: 12px;
+		color: var(--muted);
+		}
+
+		/* ===== PDF Hint ===== */
+		.pdfHint{
+		margin: 10px 0 0;
+		padding: 10px 12px;
+		background: #fff7ed;
+		border: 1px solid #fed7aa;
+		border-radius: 14px;
+		color: #9a3412;
+		font-weight: 800;
+		font-size: 13px;
+		}
+
+		/* ===== Step layout (new order) ===== */
+		.stepTitle{
+		font-weight: 950;
+		font-size: 15px;
+		margin: 0; /* قبلاً margin داشت */
+		}
+
+		.stepDesc{
+		margin-top: 6px;
+		color: #111827;
+		font-size: 13px;
+		}
+
+		.stepMeta{
+		margin-top: 10px;
+		padding-top: 8px;
+		border-top: 1px dashed #eef2f7;
+		}
+
+		/* ===== Mobile: actions sticky at bottom ===== */
+		@media (max-width: 640px){
+		.wrap{
+			margin: 14px auto;
+			padding-bottom: 92px; /* جا برای نوار دکمه‌ها */
+		}
+
+		.actions{
+			position: fixed;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			top: auto;
+
+			padding: 10px 14px;
+			background: #fff;
+			border-top: 1px solid var(--border);
+			box-shadow: 0 -10px 25px rgba(15,23,42,.08);
+
+			flex-wrap: nowrap;
+			z-index: 999;
+		}
+
+		.actions .btn{
+			flex: 1;
+			text-align: center;
+		}
+		}
+
+		/* ===== Final confirmation box (signBox) responsive + print safe ===== */
+		.signBox > div{
+		flex: 1 1 280px;
+		}
+
+		.signBox img{
+		max-width: 100%;
+		height: auto;
+		}
+
+		@media (max-width: 520px){
+		.signBox{
+			flex-direction: column;
+			align-items: stretch;
+		}
+
+		.signBox img{
+			max-height: 90px;
+		}
+		}
+
+		@media print{
+		.pdfHint{ display:none !important; }
+
+		.signBox{
+			flex-wrap: nowrap;
+			align-items: flex-start;
+		}
+
+		.signBox > div{
+			width: 50%;
+		}
+
+		.signBox img{
+			max-height: 95px;
+		}
+
+		.signCard{
+			break-inside: avoid;
+			page-break-inside: avoid;
+		}
+		}
 		.card{
 			background:#fff;
 			border: 1px solid var(--border);
@@ -313,24 +447,47 @@ class CPTT_Report {
 <body>
 	<div class="wrap">
 		<div class="topbar">
-			<div class="brand">
-				<?php if ($logo): ?>
-					<img src="<?php echo esc_url($logo); ?>" alt="logo">
-				<?php endif; ?>
-				<div>
-					<div class="brandTitle"><?php echo esc_html($brand['brand_name'] ?? get_bloginfo('name')); ?></div>
-					<div class="brandUrl"><?php echo esc_html($brand['site_url'] ?? home_url('/')); ?></div>
-				</div>
-			</div>
-
-			<div class="actions">
-				<button class="btn btnPrimary" onclick="window.print()">چاپ گزارش</button>
-				<a class="btn" href="<?php echo esc_url( wp_get_referer() ?: home_url('/') ); ?>">بازگشت</a>
-			</div>
+		<div class="brand brandCenter">
+			<?php if ($logo): ?>
+			<img src="<?php echo esc_url($logo); ?>" alt="logo">
+			<?php else: ?>
+			<div class="brandTitle"><?php echo esc_html($brand['brand_name'] ?? get_bloginfo('name')); ?></div>
+			<?php endif; ?>
 		</div>
+
+		<div class="actions" role="group" aria-label="عملیات گزارش">
+			<button class="btn btnPrimary" type="button" onclick="window.print()">چاپ گزارش</button>
+
+			<button class="btn" type="button" onclick="cpttSaveAsPdf()">ذخیره PDF</button>
+
+			<a class="btn" href="<?php echo esc_url( wp_get_referer() ?: home_url('/') ); ?>">بازگشت</a>
+		</div>
+		</div>
+
+		<div class="pdfHint" id="cpttPdfHint" style="display:none;">
+		برای ذخیره PDF، در پنجره چاپ مقصد (Destination) را روی «Save as PDF» قرار دهید.
+		</div>
+
+		<script>
+		function cpttSaveAsPdf(){
+		var el = document.getElementById('cpttPdfHint');
+		if (el) el.style.display = 'block';
+		window.print();
+		}
+		</script>
 
 		<div class="card">
 			<div class="h1">گزارش نهایی پروژه</div>
+
+			<div class="autoText">
+			<?php echo esc_html($brand['footer_text'] ?? 'این گزارش به صورت خودکار تولید شده است.'); ?>
+			</div>
+
+			<div class="siteBlock">
+			<div class="brandTitle"><?php echo esc_html($brand['brand_name'] ?? get_bloginfo('name')); ?></div>
+			<div class="brandUrl"><?php echo esc_html($brand['site_url'] ?? home_url('/')); ?></div>
+			</div>
+
 			<div class="meta">تاریخ تولید گزارش: <?php echo esc_html($created_fa); ?></div>
 
 			<div class="grid2">
@@ -361,54 +518,63 @@ class CPTT_Report {
 			?>
 				<div class="step">
 					<div class="stepHead">
-						<span class="badge <?php echo esc_attr($badgeClass); ?>"><?php echo esc_html($badgeText); ?></span>
-						<span class="small"><?php echo esc_html($updated_at_fa ? ('آخرین تغییر: ' . $updated_at_fa) : ''); ?>
-							<?php echo $updated_by ? esc_html(' — توسط: ' . $updated_by) : ''; ?>
+						<div class="stepTitle">
+						<?php echo esc_html(($idx+1) . '. ' . ($s['title'] ?? '')); ?>
+						</div>
+
+						<span class="badge <?php echo esc_attr($badgeClass); ?>">
+						<?php echo esc_html($badgeText); ?>
 						</span>
 					</div>
 
-					<div class="stepTitle"><?php echo esc_html(($idx+1) . '. ' . ($s['title'] ?? '')); ?></div>
-
 					<?php if ($desc !== ''): ?>
-						<div class="small" style="color:#111827;"><?php echo esc_html($desc); ?></div>
+						<div class="stepDesc"><?php echo esc_html($desc); ?></div>
 					<?php endif; ?>
 
 					<?php if (!empty($cl)): ?>
 						<div class="hr"></div>
 						<div style="font-weight:900;">چک‌لیست</div>
+
 						<ul class="cl">
-							<?php foreach ($cl as $it):
-								$text = (string)($it['text'] ?? '');
-								if ($text === '') continue;
+						<?php foreach ($cl as $it):
+							$text = (string)($it['text'] ?? '');
+							if ($text === '') continue;
 
-								$done = !empty($it['done']);
-								$done_at = (string)($it['done_at_fa'] ?? '');
-								$done_by = !empty($it['done_by']) ? $this->user_name((int)$it['done_by']) : '';
-								$url = trim((string)($it['url'] ?? ''));
-							?>
-								<li class="<?php echo $done ? 'done' : ''; ?>">
-									<?php echo esc_html($text); ?>
+							$done = !empty($it['done']);
+							$done_at = (string)($it['done_at_fa'] ?? '');
+							$done_by = !empty($it['done_by']) ? $this->user_name((int)$it['done_by']) : '';
+							$url = trim((string)($it['url'] ?? ''));
+						?>
+							<li class="<?php echo $done ? 'done' : ''; ?>">
+							<?php echo esc_html($text); ?>
 
-									<?php if ($done && $url && (str_starts_with($url,'http://') || str_starts_with($url,'https://'))): ?>
-										<a href="<?php echo esc_url($url); ?>" target="_blank" rel="noopener noreferrer">مشاهده نتیجه</a>
-									<?php endif; ?>
+							<?php if ($done && $url && (str_starts_with($url,'http://') || str_starts_with($url,'https://'))): ?>
+								<a href="<?php echo esc_url($url); ?>" target="_blank" rel="noopener noreferrer">مشاهده نتیجه</a>
+							<?php endif; ?>
 
-									<?php if ($done_at || $done_by): ?>
-										<div class="small">
-											<?php echo esc_html($done_at ?: ''); ?>
-											<?php echo $done_by ? esc_html(' — توسط: ' . $done_by) : ''; ?>
-										</div>
-									<?php endif; ?>
-								</li>
-							<?php endforeach; ?>
+							<?php if ($done_at || $done_by): ?>
+								<div class="small">
+								<?php echo esc_html($done_at ?: ''); ?>
+								<?php echo $done_by ? esc_html(' — توسط: ' . $done_by) : ''; ?>
+								</div>
+							<?php endif; ?>
+							</li>
+						<?php endforeach; ?>
 						</ul>
+					<?php endif; ?>
+
+					<?php if ($updated_at_fa || $updated_by): ?>
+						<div class="stepMeta small">
+						<?php echo $updated_at_fa ? esc_html('تاریخ و زمان: ' . $updated_at_fa) : ''; ?>
+						<?php echo $updated_by ? esc_html(' — کارشناس: ' . $updated_by) : ''; ?>
+						</div>
 					<?php endif; ?>
 				</div>
 			<?php endforeach; ?>
 		</div>
 
 		<?php if ($sign || $stamp || !empty($brand['manager_name']) || !empty($brand['manager_title'])): ?>
-		<div class="card">
+		<div class="card signCard">
 			<div class="h1" style="font-size:16px;">تأیید نهایی</div>
 			<div class="signBox">
 				<div>

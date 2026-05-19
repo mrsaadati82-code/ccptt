@@ -276,11 +276,18 @@ class CPTT_Frontend {
 							</ol>
 
 							<?php if ($is_complete && $report_url): ?>
-								<div style="margin-top:12px;">
-									<a class="button" href="<?php echo esc_url($report_url); ?>" target="_blank" rel="noopener noreferrer">
-										مشاهده گزارش
-									</a>
+							<div class="cptt-reportCta">
+								<div class="cptt-reportCta__msg">
+								تبریک! پروژه‌ی شما با موفقیت به اتمام رسید.
 								</div>
+
+								<a class="cptt-btn cptt-btn--primary"
+								href="<?php echo esc_url($report_url); ?>"
+								target="_blank"
+								rel="noopener noreferrer">
+								مشاهده گزارش
+								</a>
+							</div>
 							<?php endif; ?>
 
 						<?php endif; ?>
