@@ -1,0 +1,279 @@
+/* =========================
+   CPTT Admin UI (Responsive Card-based)
+   ========================= */
+
+.cptt-admin-box .cptt-row{
+	display: grid;
+	grid-template-columns: 110px minmax(0,1fr);
+	gap: 10px;
+	align-items: center;
+	margin: 10px 0;
+}
+.cptt-label{ font-weight: 800; }
+
+.cptt-select{
+	width: 100%;
+	max-width: 720px;
+}
+
+.cptt-help{
+	display:block;
+	color:#6b7280;
+	font-size: 12px;
+	margin-top: 6px;
+	line-height: 1.8;
+}
+
+@media (max-width: 782px){
+	.cptt-admin-box .cptt-row{
+		grid-template-columns: 1fr;
+	}
+}
+
+/* Experts checkbox list */
+.cptt-row--experts{
+	display:grid;
+	grid-template-columns: 110px minmax(0,1fr);
+	gap: 10px;
+	align-items: start;
+	margin: 10px 0;
+}
+.cptt-expertsList{
+	display:grid;
+	grid-template-columns: repeat(2, minmax(0,1fr));
+	gap: 8px;
+	padding: 10px;
+	border: 1px solid #eef2f7;
+	border-radius: 12px;
+	background: #fff;
+	max-width: 720px;
+}
+@media (max-width: 900px){
+	.cptt-expertsList{ grid-template-columns: 1fr; }
+}
+.cptt-expertOpt{
+	display:flex;
+	gap: 10px;
+	align-items:flex-start;
+	padding: 10px 10px;
+	border: 1px solid #f1f5f9;
+	border-radius: 12px;
+	background: #fbfdff;
+	transition: background 150ms ease, border-color 150ms ease;
+}
+.cptt-expertOpt input{
+	width: 18px;
+	height: 18px;
+	margin-top: 3px;
+	accent-color: #22c55e;
+}
+.cptt-expertOpt.is-checked{
+	background: rgba(34,197,94,0.10);
+	border-color: rgba(34,197,94,0.25);
+}
+.cptt-expertName{ font-weight: 900; color:#111827; display:block; }
+.cptt-expertEmail{ color:#6b7280; display:block; margin-top: 2px; }
+
+/* =========================
+   Steps editor
+   ========================= */
+.cptt-admin-steps{ margin-top: 6px; direction: rtl; }
+.cptt-admin-steps, .cptt-admin-steps *{ box-sizing: border-box; }
+
+.cptt-toolbar{
+	display:flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 10px;
+	margin: 0 0 12px;
+	padding: 10px;
+	background: #f8fafc;
+	border: 1px solid #eef2f7;
+	border-radius: 12px;
+	flex-wrap: wrap;
+}
+.cptt-toolbar select{ min-width: 240px; max-width: 100%; }
+
+.cptt-fieldLabel{
+	display:block;
+	font-size: 12px;
+	font-weight: 900;
+	color:#475569;
+	margin-bottom: 6px;
+}
+
+.cptt-step-row{ margin-bottom: 12px; }
+.cptt-stepCard{
+	border: 1px solid #eef2f7;
+	border-radius: 16px;
+	background: #fff;
+	padding: 12px;
+	box-shadow: 0 8px 22px rgba(15,23,42,0.04);
+}
+
+.cptt-stepCard__head{
+	display:grid;
+	grid-template-columns: 54px minmax(200px, 1fr) 160px 220px 70px;
+	gap: 12px;
+	align-items: start;
+}
+.cptt-stepCard__drag{
+	display:flex;
+	align-items:center;
+	justify-content:center;
+	height: 42px;
+	border: 1px dashed #cbd5e1;
+	border-radius: 12px;
+	color:#64748b;
+	background:#f8fafc;
+	cursor: grab;
+	user-select:none;
+}
+.cptt-stepCard__drag:active{ cursor: grabbing; }
+
+.cptt-stepCard__title input[type="text"],
+.cptt-stepCard__status select{
+	width: 100%;
+	max-width: 100%;
+}
+
+.cptt-updBox{
+	padding: 10px 10px;
+	border: 1px solid #f1f5f9;
+	border-radius: 12px;
+	background: #fbfdff;
+	color: #111827;
+}
+.cptt-updBox small{ display:block; margin-top: 6px; color:#6b7280; }
+
+.cptt-stepCard__delete .cptt-remove-step{
+	width: 100%;
+	height: 42px;
+}
+
+.cptt-stepCard__body{
+	display:grid;
+	grid-template-columns: minmax(220px, 360px) minmax(0, 1fr);
+	gap: 12px;
+	margin-top: 12px;
+	align-items: start;
+}
+
+.cptt-stepCard__desc textarea{
+	width: 100%;
+	max-width: 100%;
+	min-height: 100px;
+	resize: vertical;
+}
+
+.cptt-stepCard__checklist{
+	border: 1px dashed #cbd5e1;
+	border-radius: 14px;
+	background: #fbfdff;
+	padding: 10px;
+}
+
+.cptt-checklist-head{
+	display:flex;
+	justify-content: space-between;
+	gap: 10px;
+	align-items: center;
+	flex-wrap: wrap;
+	margin-bottom: 10px;
+}
+.cptt-checklist-title{
+	font-weight: 900;
+	color:#111827;
+}
+
+.cptt-checklist-toolbar{
+	display:flex;
+	gap: 8px;
+	align-items: center;
+	flex-wrap: wrap;
+}
+.cptt-checklist-toolbar select{
+	min-width: 220px;
+	max-width: 100%;
+}
+
+/* checklist items */
+.cptt-checkitems{
+	display:flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.cptt-checkitem-row{
+	display:grid;
+	grid-template-columns: 22px 170px minmax(200px, 1fr) minmax(200px, 1fr) 44px;
+	gap: 8px;
+	align-items: start;
+	padding: 10px;
+	border: 1px solid #eef2f7;
+	border-radius: 12px;
+	background: #fff;
+}
+.cptt-checkitem-handle{
+	cursor: grab;
+	color:#64748b;
+	text-align:center;
+	user-select:none;
+	margin-top: 6px;
+}
+.cptt-checkitem-handle:active{ cursor: grabbing; }
+
+.cptt-checkitem-done{
+	font-size: 12px;
+	color:#111827;
+	line-height: 1.6;
+}
+.cptt-checkitem-done input{ margin-left: 6px; accent-color:#22c55e; }
+.cptt-checkitem-done small{
+	display:block;
+	margin-top: 4px;
+	color:#6b7280;
+}
+
+.cptt-checkitem-row input[type="text"],
+.cptt-checkitem-row input[type="url"]{
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+}
+
+.cptt-remove-checkitem{
+	width: 44px;
+	height: 36px;
+}
+
+/* Responsive: stack head + body on smaller widths */
+@media (max-width: 1200px){
+	.cptt-stepCard__head{
+		grid-template-columns: 54px minmax(0,1fr) 70px;
+	}
+	.cptt-stepCard__title,
+	.cptt-stepCard__status,
+	.cptt-stepCard__updated{
+		grid-column: 2;
+	}
+	.cptt-stepCard__delete{ grid-column: 3; }
+	.cptt-stepCard__body{
+		grid-template-columns: 1fr;
+	}
+}
+
+@media (max-width: 900px){
+	.cptt-checkitem-row{
+		grid-template-columns: 22px minmax(0,1fr) 44px;
+	}
+	.cptt-checkitem-row .cptt-checkitem-done,
+	.cptt-checkitem-row input[type="text"],
+	.cptt-checkitem-row input[type="url"]{
+		grid-column: 2;
+	}
+	.cptt-remove-checkitem{
+		grid-column: 3;
+		justify-self: end;
+	}
+}

@@ -1,0 +1,22 @@
+.cptt-mediaField{
+	border: 1px solid #e5e7eb;
+	border-radius: 12px;
+	padding: 12px;
+	background: #fff;
+	max-width: 520px;
+}
+.cptt-mediaField__label{ font-weight: 800; margin-bottom: 10px; }
+.cptt-mediaField__preview{
+	border: 1px dashed #cbd5e1;
+	border-radius: 12px;
+	padding: 10px;
+	background:#f8fafc;
+	min-height: 90px;
+	display:flex;
+	align-items:center;
+	justify-content:center;
+	margin-bottom: 10px;
+}
+.cptt-mediaField__preview img{ max-height: 120px; max-width: 100%; }
+.cptt-mediaField__empty{ color:#64748b; }
+.cptt-mediaField__actions{ display:flex; gap:8px; flex-wrap:wrap; }

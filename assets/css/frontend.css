@@ -1,0 +1,746 @@
+/* =========================
+   CPTT Frontend UI (Stable + Mobile Continuous Timeline)
+   ========================= */
+
+.cptt-wrap, .cptt-wrap *{ box-sizing: border-box; }
+
+.cptt-wrap{
+	--done: #22c55e;
+	--current: #f59e0b;
+	--todo: #cbd5e1;
+
+	font-family: inherit;
+	color: #111827;
+	max-width: 980px;
+	margin: 0 auto;
+	direction: rtl;
+}
+
+.cptt-wrap button{ font: inherit; letter-spacing: normal; }
+
+.cptt-title{ font-size: 18px; font-weight: 800; margin: 10px 0 18px; }
+
+.cptt-notice, .cptt-empty{
+	background: #f3f4f6;
+	border: 1px solid #e5e7eb;
+	padding: 12px 14px;
+	border-radius: 12px;
+	color: #374151;
+}
+
+.cptt-project{
+	background: #fff;
+	border: 1px solid #e5e7eb;
+	border-radius: 16px;
+	padding: 14px;
+	margin: 0 0 16px;
+	box-shadow: 0 10px 25px rgba(17, 24, 39, 0.04);
+	overflow: hidden;
+}
+
+.cptt-project__header{
+	display:flex;
+	gap: 12px;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	padding-bottom: 12px;
+	border-bottom: 1px solid #f3f4f6;
+}
+.cptt-project__title{ margin:0; font-size: 16px; font-weight: 900; }
+.cptt-project__meta{ margin-top: 6px; color: #6b7280; font-size: 13px; }
+
+.cptt-project__progress{
+	display:flex;
+	gap:10px;
+	align-items:center;
+	min-width: 180px;
+}
+@media (max-width: 640px){
+	.cptt-project__progress{ min-width: 100%; }
+	.cptt-wrap{ padding-bottom: 90px; }
+}
+
+.cptt-progressbar{
+	height: 10px;
+	background: #f3f4f6;
+	border-radius: 999px;
+	overflow:hidden;
+	flex: 1;
+	border: 1px solid #e5e7eb;
+}
+.cptt-progressbar__fill{
+	height: 100%;
+	background: linear-gradient(90deg, #10b981, #22c55e);
+	width: 0%;
+	transition: width 800ms cubic-bezier(.2,.8,.2,1);
+}
+.cptt-progressbar__label{ font-size: 12px; color: #374151; min-width: 52px; text-align: left; }
+
+/* ===== Stepper base ===== */
+.cptt-wrap ol.cptt-stepper{
+	/* برای خط ممتد موبایل */
+	--cptt-progress: 0%;
+
+	list-style: none !important;
+	padding: 0 !important;
+	margin: 14px 0 0 !important;
+}
+.cptt-wrap ol.cptt-stepper > li{
+	list-style: none !important;
+	margin: 0 !important;
+	padding: 0 !important;
+}
+.cptt-wrap ol.cptt-stepper > li::marker{ content: "" !important; }
+
+@keyframes cptt-spin{ to { transform: rotate(360deg); } }
+
+/* ===== Badge ===== */
+.cptt-step__badge{
+	display:inline-flex;
+	align-items:center;
+	padding: 4px 10px;
+	border-radius: 999px;
+	font-size: 12px;
+	font-weight: 900;
+	margin-bottom: 10px;
+	border: 1px solid transparent;
+}
+.cptt-step__badge--done{
+	background: rgba(34,197,94,0.12);
+	color: #065f46;
+	border-color: rgba(34,197,94,0.22);
+}
+.cptt-step__badge--current{
+	background: rgba(245,158,11,0.12);
+	color: #92400e;
+	border-color: rgba(245,158,11,0.22);
+}
+.cptt-step__badge--todo{
+	background: rgba(148,163,184,0.18);
+	color: #475569;
+	border-color: rgba(148,163,184,0.25);
+}
+
+/* =========================
+   Desktop (>=641px): Horizontal (unchanged)
+   ========================= */
+@media (min-width: 641px){
+	.cptt-wrap ol.cptt-stepper{
+		display: flex;
+		gap: 0;
+		overflow-x: auto;
+		-webkit-overflow-scrolling: touch;
+		scroll-snap-type: x mandatory;
+		padding: 10px 6px !important;
+	}
+
+	.cptt-wrap li.cptt-step{
+		position: relative;
+		flex: 0 0 230px;
+		scroll-snap-align: start;
+		padding: 8px 12px;
+	}
+
+	/* icon row */
+	.cptt-wrap .cptt-tl{
+		position: relative;
+		height: 52px;
+		display:flex;
+		align-items:center;
+		justify-content:center;
+	}
+
+	/* connector to next */
+	.cptt-wrap li.cptt-step:not(:last-child) .cptt-tl::after{
+		content:"";
+		position:absolute;
+		top: 50%;
+		transform: translateY(-50%);
+		height: 4px;
+		border-radius: 999px;
+		background: var(--todo);
+		inset-inline-start: 50%;
+		inset-inline-end: -50%;
+		z-index: 0;
+	}
+	.cptt-wrap li.cptt-step--done:not(:last-child) .cptt-tl::after{ background: var(--done); }
+
+	.cptt-wrap .cptt-tl__icon{
+		position: relative;
+		width: 38px;
+		height: 38px;
+		border-radius: 999px;
+		display:flex;
+		align-items:center;
+		justify-content:center;
+		font-weight: 900;
+		background: #fff;
+		border: 2px solid var(--todo);
+		color: #94a3b8;
+		z-index: 1;
+	}
+
+	.cptt-wrap li.cptt-step--done .cptt-tl__icon{
+		border-color: var(--done);
+		background: rgba(34,197,94,0.12);
+		color: #065f46;
+	}
+
+	.cptt-wrap li.cptt-step--current .cptt-tl__icon{
+		border-color: var(--current);
+		background: rgba(245,158,11,0.12);
+		color: #92400e;
+		box-shadow: 0 0 0 6px rgba(245,158,11,0.14);
+	}
+	.cptt-wrap li.cptt-step--current .cptt-tl__icon::before{
+		content:"";
+		position:absolute;
+		inset: 6px;
+		border-radius: 999px;
+		border: 3px solid rgba(245,158,11,0.30);
+		border-top-color: rgba(245,158,11,0.95);
+		animation: cptt-spin 1s linear infinite;
+	}
+
+	.cptt-wrap .cptt-step__btn{
+		width: 100%;
+		border: 0;
+		background: transparent;
+		padding: 6px 4px;
+		cursor: pointer;
+		display:flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.cptt-wrap .cptt-step__label{
+		font-size: 13px;
+		font-weight: 900;
+		text-align: center;
+		color: #111827;
+		line-height: 1.7;
+		overflow-wrap: anywhere;
+	}
+	.cptt-wrap .cptt-step__time{
+		font-size: 12px;
+		color: #6b7280;
+		text-align: center;
+	}
+}
+
+/* =========================
+   Mobile (<=640px): Big cards + icon inside + continuous timeline
+   ========================= */
+@media (max-width: 640px){
+
+	/* line X = icon center: right(16) + (44/2=22) => 38px */
+	.cptt-wrap ol.cptt-stepper{
+		position: relative;
+		padding-top: 14px !important; /* برای اینکه خط/آیکون اول بیرون نزنه */
+	}
+
+	/* خط ممتد (سبز/خاکستری) */
+	.cptt-wrap ol.cptt-stepper::before{
+		content:"";
+		position:absolute;
+		right: 38px;
+		top: 18px;
+		bottom: 18px;
+		width: 4px;
+		border-radius: 999px;
+		background: linear-gradient(
+			to bottom,
+			var(--done) 0%,
+			var(--done) var(--cptt-progress),
+			#e5e7eb var(--cptt-progress),
+			#e5e7eb 100%
+		);
+		opacity: 0.95;
+		z-index: 2;         /* روی کارت‌ها (ولی داخل فضای padding-right کارت‌ها) */
+		pointer-events: none;
+	}
+
+	.cptt-wrap li.cptt-step{
+		position: relative;
+		padding-bottom: 14px;
+	}
+	.cptt-wrap li.cptt-step:last-of-type{ padding-bottom: 0; }
+
+	/* Card bigger */
+	.cptt-wrap .cptt-step__btn{
+		position: relative;
+		width: 100% !important;
+		max-width: none !important;
+
+		appearance: none !important;
+		-webkit-appearance: none !important;
+
+		border: 1px solid #eef2f7 !important;
+		border-radius: 18px !important;
+		background: #fff !important;
+		box-shadow: 0 10px 24px rgba(17,24,39,0.06) !important;
+
+		/* space for icon + line */
+		padding: 16px 88px 16px 16px !important;
+		min-height: 128px;
+
+		cursor: pointer;
+		text-align: right !important;
+
+		display:flex !important;
+		flex-direction: column !important;
+		align-items: flex-start !important;
+		gap: 6px !important;
+
+		z-index: 1;
+	}
+
+	.cptt-wrap .cptt-step__label{
+		font-size: 15px;
+		font-weight: 900;
+		line-height: 1.9;
+		color: #111827;
+		white-space: normal;
+		word-break: break-word;
+	}
+
+	.cptt-wrap .cptt-step__time{
+		font-size: 12px;
+		color: #6b7280;
+		line-height: 1.6;
+	}
+
+	/* icon INSIDE the card */
+	.cptt-wrap .cptt-tl{
+		position: absolute;
+		right: 16px;
+		top: 50%;
+		transform: translateY(-50%);
+		width: 44px;
+		height: 44px;
+		pointer-events: none;
+		z-index: 3;
+	}
+
+	.cptt-wrap .cptt-tl__icon{
+		position: absolute;
+		inset: 0;
+		border-radius: 999px;
+		display:flex;
+		align-items:center;
+		justify-content:center;
+		font-weight: 900;
+		background: #fff;
+		border: 2px solid var(--todo);
+		color: #94a3b8;
+	}
+
+	.cptt-wrap li.cptt-step--done .cptt-tl__icon{
+		border-color: var(--done);
+		background: rgba(34,197,94,0.12);
+		color: #065f46;
+	}
+
+	.cptt-wrap li.cptt-step--current .cptt-tl__icon{
+		border-color: var(--current);
+		background: rgba(245,158,11,0.10);
+		color: #92400e;
+		box-shadow: 0 0 0 7px rgba(245,158,11,0.12);
+	}
+	.cptt-wrap li.cptt-step--current .cptt-tl__icon::before{
+		content:"";
+		position:absolute;
+		inset: 8px;
+		border-radius: 999px;
+		border: 3px solid rgba(245,158,11,0.30);
+		border-top-color: rgba(245,158,11,0.95);
+		animation: cptt-spin 1s linear infinite;
+	}
+}
+
+/* =========================
+   Modal (as before)
+   ========================= */
+.cptt-modal{ position: fixed; inset: 0; display: none; z-index: 99999; }
+.cptt-modal.is-open{ display:block; }
+
+.cptt-modal__backdrop{
+	position:absolute;
+	inset:0;
+	background: rgba(17,24,39,0.55);
+	backdrop-filter: blur(6px);
+	animation: cptt-fadein 200ms ease;
+}
+@keyframes cptt-fadein{ from{opacity:0} to{opacity:1} }
+
+.cptt-modal__dialog{
+	position: relative;
+	max-width: 560px;
+	margin: 10vh auto;
+	background: #fff;
+	border-radius: 16px;
+	border: 1px solid #e5e7eb;
+	box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+	padding: 14px 14px 16px;
+	animation: cptt-pop 220ms cubic-bezier(.2,.8,.2,1);
+}
+@keyframes cptt-pop{
+	from{ transform: translateY(16px); opacity:0; }
+	to{ transform: translateY(0); opacity:1; }
+}
+
+.cptt-modal__close{
+	position:absolute;
+	top: 10px;
+	left: 10px;
+	width: 36px;
+	height: 36px;
+	border-radius: 12px;
+	border: 1px solid #e5e7eb;
+	background: #f9fafb;
+	cursor: pointer;
+	font-size: 20px;
+	line-height: 1;
+}
+
+.cptt-modal__title{
+	font-weight: 900;
+	font-size: 15px;
+	margin: 4px 0 6px;
+	padding-left: 40px;
+}
+
+.cptt-modal__meta{
+	font-size: 12px;
+	color: #6b7280;
+	margin: 0 0 10px;
+}
+
+.cptt-modal__content{
+	color: #374151;
+	font-size: 14px;
+	line-height: 1.9;
+	white-space: pre-line;
+}
+/* =========================
+   CPTT Timeline Patch
+   - line over card but under icon
+   - line starts/ends exactly at first/last icon
+   - desktop continuous line
+   ========================= */
+
+/* if only 1 step, hide line */
+.cptt-wrap ol.cptt-stepper.cptt-stepper--single::before{
+	display:none !important;
+}
+
+@media (max-width: 640px){
+	/* make sure stepper is reference for the line */
+	.cptt-wrap ol.cptt-stepper{
+		position: relative !important;
+	}
+
+	/* IMPORTANT: card should NOT create stacking context */
+	.cptt-wrap .cptt-step__btn{
+		z-index: auto !important;
+	}
+
+	/* icon must always be above the line */
+	.cptt-wrap .cptt-tl{
+		z-index: 3 !important;
+	}
+
+	/* continuous vertical line (position will be set by JS vars) */
+	.cptt-wrap ol.cptt-stepper::before{
+		/* override old right-based placement */
+		right: auto !important;
+
+		/* X of line exactly on icon center */
+		left: var(--cptt-vx, calc(100% - 38px)) !important;
+
+		/* start/end exactly at first/last icon centers */
+		top: var(--cptt-vtop, 40px) !important;
+		bottom: var(--cptt-vbottom, 40px) !important;
+
+		z-index: 2 !important;           /* over card */
+		pointer-events: none !important; /* no click issues */
+	}
+}
+
+@media (min-width: 641px){
+	/* desktop: draw ONE continuous line behind icons */
+	.cptt-wrap ol.cptt-stepper{
+		position: relative !important;
+	}
+
+	/* disable segmented connectors so it looks continuous */
+	.cptt-wrap li.cptt-step:not(:last-child) .cptt-tl::after{
+		display:none !important;
+	}
+
+	/* baseline line (green/gray by progress) */
+	.cptt-wrap ol.cptt-stepper::before{
+		content:"" !important;
+		position:absolute !important;
+		height: 4px !important;
+		border-radius: 999px !important;
+
+		/* exact start/end computed by JS */
+		left: var(--cptt-hl, 24px) !important;
+		right: var(--cptt-hr, 24px) !important;
+		top: var(--cptt-hy, 36px) !important;
+
+		background: linear-gradient(
+			to left, /* RTL: progress from right to left */
+			var(--done) 0%,
+			var(--done) var(--cptt-progress, 0%),
+			var(--todo) var(--cptt-progress, 0%),
+			var(--todo) 100%
+		) !important;
+
+		z-index: 0 !important;
+		pointer-events: none !important;
+	}
+
+	/* icons above the line */
+	.cptt-wrap .cptt-tl__icon{
+		z-index: 2 !important;
+	}
+}
+/* ===== Checklist modal UI ===== */
+.cptt-cl-head{
+	font-weight: 900;
+	margin: 10px 0 8px;
+	color: #111827;
+}
+.cptt-cl{
+	margin: 0;
+	padding: 0 18px 0 0;
+}
+.cptt-cl li{
+	margin: 6px 0;
+	color: #374151;
+	line-height: 1.8;
+}
+.cptt-cl li.is-done{
+	color: #065f46;
+	text-decoration: line-through;
+}
+
+/* ===== Ring progress around icon (uses --cptt-ring: 0..100) ===== */
+.cptt-tl__icon{
+	position: relative;
+}
+.cptt-tl__icon::after{
+	content:"";
+	position:absolute;
+	inset: -6px; /* ring thickness/space */
+	border-radius: 999px;
+	background: conic-gradient(
+		var(--done) calc(var(--cptt-ring, 0) * 1%),
+		#e5e7eb 0
+	);
+	/* ring mask */
+	-webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 0);
+	mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 0);
+	pointer-events:none;
+}
+
+/* ===== Make timeline line under icon but over card (mobile) ===== */
+@media (max-width: 640px){
+	.cptt-wrap ol.cptt-stepper::before{
+		z-index: 1 !important; /* over card */
+		left: var(--cptt-vx, calc(100% - 38px)) !important;
+		top: var(--cptt-vtop, 40px) !important;
+		bottom: var(--cptt-vbottom, 40px) !important;
+		right: auto !important;
+	}
+	.cptt-wrap .cptt-step__btn{ position: relative; z-index: 0; }
+	.cptt-wrap .cptt-tl{ z-index: 2 !important; }
+	.cptt-wrap .cptt-tl__icon{ z-index: 3 !important; }
+}
+
+/* ===== Desktop continuous line (1 line behind icons) ===== */
+@media (min-width: 641px){
+	.cptt-wrap ol.cptt-stepper{
+		position: relative;
+	}
+	/* hide segmented connectors */
+	.cptt-wrap li.cptt-step:not(:last-child) .cptt-tl::after{
+		display:none !important;
+	}
+	.cptt-wrap ol.cptt-stepper::before{
+		content:"";
+		position:absolute;
+		height: 4px;
+		border-radius: 999px;
+
+		left: var(--cptt-hl, 24px);
+		right: var(--cptt-hr, 24px);
+		top: var(--cptt-hy, 26px);
+
+		background: linear-gradient(
+			to left,
+			var(--done) 0%,
+			var(--done) var(--cptt-progress, 0%),
+			var(--todo) var(--cptt-progress, 0%),
+			var(--todo) 100%
+		);
+		z-index: 0;
+		pointer-events:none;
+	}
+	.cptt-wrap .cptt-tl__icon{ z-index: 2; }
+}
+/* checklist in modal */
+.cptt-cl-head{ font-weight: 900; margin: 12px 0 8px; color:#111827; }
+.cptt-cl{ margin:0; padding: 0 18px 0 0; }
+.cptt-cl li{ margin: 6px 0; line-height: 1.9; color:#374151; }
+.cptt-cl li.is-done .cptt-cl-text{ text-decoration: line-through; color:#065f46; }
+.cptt-cl-time{
+	display:inline-block;
+	margin-right: 10px;
+	font-size: 11px;
+	color:#6b7280;
+	white-space: nowrap;
+}
+/* =========================
+   Timeline line fix (mobile + desktop)
+   - start: first icon center
+   - end: last icon center
+   - green: reaches last done/current step
+   ========================= */
+
+@media (max-width: 640px){
+  /* پایه: خط ممتد با رنگ سبز تا --cptt-vfill */
+  .cptt-wrap ol.cptt-stepper::before{
+    left: var(--cptt-vx, calc(100% - 38px)) !important;
+    right: auto !important;
+
+    top: var(--cptt-vtop, 60px) !important;
+    bottom: var(--cptt-vbottom, 60px) !important;
+
+    background: linear-gradient(
+      to bottom,
+      var(--done) 0%,
+      var(--done) var(--cptt-vfill, 0%),
+      #e5e7eb var(--cptt-vfill, 0%),
+      #e5e7eb 100%
+    ) !important;
+
+    z-index: 2 !important; /* روی باکس */
+  }
+
+  /* آیکون روی خط */
+  .cptt-wrap .cptt-step__btn{ position: relative; z-index: 1; }
+  .cptt-wrap .cptt-tl{ z-index: 3 !important; }
+  .cptt-wrap .cptt-tl__icon{ z-index: 4 !important; }
+}
+
+@media (min-width: 641px){
+  /* کانکتورهای تکه‌ای را خاموش کن تا فقط خط ممتد دیده شود */
+  .cptt-wrap li.cptt-step:not(:last-child) .cptt-tl::after{
+    display:none !important;
+  }
+
+  .cptt-wrap ol.cptt-stepper{
+    position: relative !important;
+  }
+
+  .cptt-wrap ol.cptt-stepper::before{
+    content:"" !important;
+    position:absolute !important;
+    height: 4px !important;
+    border-radius: 999px !important;
+
+    left: var(--cptt-hl, 24px) !important;
+    right: var(--cptt-hr, 24px) !important;
+    top: var(--cptt-hy, 26px) !important;
+
+    background: linear-gradient(
+      to right,
+      var(--done) 0%,
+      var(--done) var(--cptt-hfill, 0%),
+      var(--todo) var(--cptt-hfill, 0%),
+      var(--todo) 100%
+    ) !important;
+
+    z-index: 0 !important;
+    pointer-events:none !important;
+  }
+
+  .cptt-wrap .cptt-tl__icon{ position: relative; z-index: 2 !important; }
+}
+@media (min-width: 641px){
+
+  /* hide segmented connectors (so only ONE line exists) */
+  .cptt-wrap li.cptt-step:not(:last-child) .cptt-tl::after{
+    display:none !important;
+  }
+
+  /* full grey line */
+  .cptt-wrap ol.cptt-stepper::before{
+    content:"";
+    position:absolute;
+    height:4px !important;
+    border-radius:999px !important;
+
+    left: var(--cptt-hl, 24px) !important;
+    right: var(--cptt-hr, 24px) !important;
+    top: var(--cptt-hy, 26px) !important;
+
+    background: var(--todo) !important;
+    z-index: 0 !important;
+    pointer-events:none !important;
+  }
+
+  /* green overlay until last DONE */
+  .cptt-wrap ol.cptt-stepper::after{
+    content:"";
+    position:absolute;
+    height:4px !important;
+    border-radius:999px !important;
+
+    left: var(--cptt-hgreenLeft, 0px) !important;
+    width: var(--cptt-hgreenWidth, 0px) !important;
+    top: var(--cptt-hy, 26px) !important;
+
+    background: var(--done) !important;
+    z-index: 1 !important;
+    pointer-events:none !important;
+  }
+
+  /* icons above */
+  .cptt-wrap .cptt-tl__icon{
+    position: relative !important;
+    z-index: 2 !important;
+  }
+}
+/* Filled icons */
+.cptt-step--done .cptt-tl__icon{
+	background: var(--done) !important;
+	color: #fff !important;
+}
+.cptt-step--todo .cptt-tl__icon{
+	background: #e2e8f0 !important;
+	border-color: #e2e8f0 !important;
+	color: #475569 !important;
+}
+.cptt-step--current .cptt-tl__icon{
+	background: var(--current) !important;
+	color: #fff !important;
+}
+.cptt-cl-link{
+	display:inline-block;
+	margin-right: 10px;
+	font-size: 12px;
+	text-decoration: underline;
+	color: #2563eb;
+}
+.cptt-cl-link:hover{ color:#1d4ed8; }
+/* Make current spinner visible on filled icon */
+.cptt-step--current .cptt-tl__icon::before{
+	border: 3px solid rgba(255,255,255,0.35) !important;
+	border-top-color: rgba(255,255,255,0.95) !important;
+}
