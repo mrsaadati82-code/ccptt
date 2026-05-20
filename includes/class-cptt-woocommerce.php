@@ -292,26 +292,21 @@ class CPTT_WooCommerce {
 	private function sync_project_categories_from_product($project_id, $product_id) {
 		$project_id = (int)$project_id;
 		$product_id = (int)$product_id;
-		if (!$project_id || !$product_id || !taxonomy_exists('product_cat') || !taxonomy_exists('cptt_project_cat')) return;
+		if (!$project_id || !$product_id || !taxonomy_exists('product_cat')) return;
 
 		$product_terms = get_the_terms($product_id, 'product_cat');
 		if (is_wp_error($product_terms) || empty($product_terms)) return;
 
 		$target_ids = [];
 		foreach ($product_terms as $pt) {
-			$existing = term_exists($pt->slug, 'cptt_project_cat');
-			if (!$existing) {
-				$existing = wp_insert_term($pt->name, 'cptt_project_cat', [
-					'slug' => $pt->slug,
-					'description' => $pt->description,
-				]);
-			}
-			if (!is_wp_error($existing)) {
-				$target_ids[] = is_array($existing) ? (int)$existing['term_id'] : (int)$existing;
-			}
+			$target_ids[] = (int)$pt->term_id;
 		}
+		$target_ids = array_values(array_filter(array_unique($target_ids)));
 
-		if (!empty($target_ids)) wp_set_object_terms($project_id, $target_ids, 'cptt_project_cat', false);
+		if (!empty($target_ids)) {
+			update_post_meta($project_id, '_cptt_wc_cat_ids', $target_ids);
+			update_post_meta($project_id, '_cptt_wc_cats_csv', ',' . implode(',', $target_ids) . ',');
+		}
 	}
 
 	private function prepare_template_steps_for_project($steps) {

@@ -2,14 +2,14 @@
 /**
  * Plugin Name: Client Project Tracker (CPTT)
  * Description: مدیریت پروژه‌های مشتری و نمایش مراحل پیشرفت داخل پنل کاربری (Stepper + Popup).
- * Version: 1.3.2
+ * Version: 1.3.4
  * Author: Your Name
  * Text Domain: cptt
  */
 
 if ( ! defined('ABSPATH') ) exit;
 
-define('CPTT_VERSION', '1.3.2');
+define('CPTT_VERSION', '1.3.4');
 define('CPTT_PATH', plugin_dir_path(__FILE__));
 define('CPTT_URL', plugin_dir_url(__FILE__));
 
