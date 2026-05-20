@@ -22,10 +22,13 @@ class CPTT_Core {
 		self::add_expert_role();
 		$core = self::instance();
 		$core->register_cpt();
+		if (function_exists('add_rewrite_endpoint')) add_rewrite_endpoint('cptt-projects', EP_ROOT | EP_PAGES);
+		if (class_exists('CPTT_SMS')) CPTT_SMS::activate();
 		flush_rewrite_rules();
 	}
 
 	public static function deactivate() {
+		if (class_exists('CPTT_SMS')) CPTT_SMS::deactivate();
 		flush_rewrite_rules();
 	}
 
@@ -96,6 +99,23 @@ class CPTT_Core {
 			'exclude_from_search' => true,
 		]);
 
+		register_taxonomy('cptt_project_cat', ['cptt_project'], [
+			'labels' => [
+				'name' => 'دسته‌بندی پروژه‌ها',
+				'singular_name' => 'دسته‌بندی پروژه',
+				'menu_name' => 'دسته‌بندی پروژه‌ها',
+				'add_new_item' => 'افزودن دسته‌بندی پروژه',
+				'edit_item' => 'ویرایش دسته‌بندی پروژه',
+			],
+			'public' => false,
+			'show_ui' => true,
+			'show_admin_column' => true,
+			'show_in_quick_edit' => true,
+			'hierarchical' => true,
+			'show_in_rest' => false,
+			'rewrite' => false,
+		]);
+
 		// تمپلیت مراحل
 		register_post_type('cptt_template', [
 			'labels' => [
@@ -140,6 +160,20 @@ class CPTT_Core {
 	public function register_meta() {
 		// client
 		register_post_meta('cptt_project', '_cptt_client_user_id', [
+			'type' => 'integer',
+			'single' => true,
+			'show_in_rest' => false,
+			'auth_callback' => function() { return current_user_can('edit_cptt_projects'); },
+		]);
+
+		register_post_meta('cptt_project', '_cptt_product_id', [
+			'type' => 'integer',
+			'single' => true,
+			'show_in_rest' => false,
+			'auth_callback' => function() { return current_user_can('edit_cptt_projects'); },
+		]);
+
+		register_post_meta('cptt_project', '_cptt_is_settled', [
 			'type' => 'integer',
 			'single' => true,
 			'show_in_rest' => false,
@@ -266,6 +300,12 @@ class CPTT_Core {
 
 	/* ========= Jalali helpers ========= */
 
+	public static function to_english_digits($str) {
+		$fa = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹','٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
+		$en = ['0','1','2','3','4','5','6','7','8','9','0','1','2','3','4','5','6','7','8','9'];
+		return str_replace($fa, $en, (string)$str);
+	}
+
 	public static function to_persian_digits($str) {
 		$en = ['0','1','2','3','4','5','6','7','8','9'];
 		$fa = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
@@ -287,6 +327,67 @@ class CPTT_Core {
 		$out = sprintf('%04d/%02d/%02d %s', $jy, $jm, $jd, $time);
 
 		return self::to_persian_digits($out);
+	}
+
+	public static function parse_jalali_datetime($value) {
+		$value = trim(self::to_english_digits((string)$value));
+		if ($value === '') return 0;
+
+		// Accept: 1403/01/31 14:30, 1403-01-31 14:30, with optional time.
+		if (!preg_match('/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})(?:\s+(\d{1,2})\:(\d{1,2}))?$/', $value, $m)) {
+			return 0;
+		}
+
+		$jy = (int)$m[1];
+		$jm = (int)$m[2];
+		$jd = (int)$m[3];
+		$hh = isset($m[4]) ? (int)$m[4] : 0;
+		$ii = isset($m[5]) ? (int)$m[5] : 0;
+
+		if ($jm < 1 || $jm > 12 || $jd < 1 || $jd > 31 || $hh < 0 || $hh > 23 || $ii < 0 || $ii > 59) return 0;
+
+		[$gy, $gm, $gd] = self::jalali_to_gregorian($jy, $jm, $jd);
+		try {
+			$dt = new DateTime('now', new DateTimeZone('Asia/Tehran'));
+			$dt->setDate($gy, $gm, $gd);
+			$dt->setTime($hh, $ii, 0);
+			return (int)$dt->getTimestamp();
+		} catch (Exception $e) {
+			return 0;
+		}
+	}
+
+	public static function jalali_to_gregorian($jy, $jm, $jd) {
+		$jy = (int)$jy + 1595;
+		$days = -355668 + (365 * $jy) + ((int)($jy / 33) * 8) + (int)((($jy % 33) + 3) / 4) + (int)$jd;
+		if ($jm < 7) $days += ($jm - 1) * 31;
+		else $days += (($jm - 7) * 30) + 186;
+
+		$gy = 400 * (int)($days / 146097);
+		$days %= 146097;
+
+		if ($days > 36524) {
+			$gy += 100 * (int)(--$days / 36524);
+			$days %= 36524;
+			if ($days >= 365) $days++;
+		}
+
+		$gy += 4 * (int)($days / 1461);
+		$days %= 1461;
+
+		if ($days > 365) {
+			$gy += (int)(($days - 1) / 365);
+			$days = ($days - 1) % 365;
+		}
+
+		$gd = $days + 1;
+		$sal_a = [0,31,((($gy % 4 == 0) && ($gy % 100 != 0)) || ($gy % 400 == 0)) ? 29 : 28,31,30,31,30,31,31,30,31,30,31];
+		$gm = 0;
+		for ($i = 1; $i <= 12; $i++) {
+			if ($gd <= $sal_a[$i]) { $gm = $i; break; }
+			$gd -= $sal_a[$i];
+		}
+		return [$gy, $gm, (int)$gd];
 	}
 
 	public static function gregorian_to_jalali($gy, $gm, $gd) {

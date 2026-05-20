@@ -511,10 +511,12 @@ class CPTT_Report {
 				$badgeText  = $st === 'done' ? 'انجام‌شده' : ($st === 'current' ? 'در حال انجام' : 'انجام‌نشده');
 
 				$updated_at_fa = (string)($s['updated_at_fa'] ?? '');
+				$step_due_fa = (string)($s['due_at_fa'] ?? '');
 				$updated_by = !empty($s['updated_by']) ? $this->user_name((int)$s['updated_by']) : '';
 				$desc = trim(wp_strip_all_tags((string)($s['desc'] ?? '')));
 
 				$cl = isset($s['checklist']) && is_array($s['checklist']) ? $s['checklist'] : [];
+				$uts = isset($s['user_tasks']) && is_array($s['user_tasks']) ? $s['user_tasks'] : [];
 			?>
 				<div class="step">
 					<div class="stepHead">
@@ -526,6 +528,10 @@ class CPTT_Report {
 						<?php echo esc_html($badgeText); ?>
 						</span>
 					</div>
+
+					<?php if ($step_due_fa): ?>
+						<div class="small"><b>مهلت مرحله:</b> <?php echo esc_html($step_due_fa); ?></div>
+					<?php endif; ?>
 
 					<?php if ($desc !== ''): ?>
 						<div class="stepDesc"><?php echo esc_html($desc); ?></div>
@@ -548,7 +554,7 @@ class CPTT_Report {
 							<li class="<?php echo $done ? 'done' : ''; ?>">
 							<?php echo esc_html($text); ?>
 
-							<?php if ($done && $url && (str_starts_with($url,'http://') || str_starts_with($url,'https://'))): ?>
+							<?php if ($done && $url && (strpos($url, 'http://') === 0 || strpos($url, 'https://') === 0)): ?>
 								<a href="<?php echo esc_url($url); ?>" target="_blank" rel="noopener noreferrer">مشاهده نتیجه</a>
 							<?php endif; ?>
 
@@ -558,6 +564,32 @@ class CPTT_Report {
 								<?php echo $done_by ? esc_html(' — توسط: ' . $done_by) : ''; ?>
 								</div>
 							<?php endif; ?>
+							</li>
+						<?php endforeach; ?>
+						</ul>
+					<?php endif; ?>
+
+					<?php if (!empty($uts)): ?>
+						<div class="hr"></div>
+						<div style="font-weight:900;">تسک‌های مشتری</div>
+						<ul class="cl">
+						<?php foreach ($uts as $ut):
+							$ut_title = (string)($ut['title'] ?? '');
+							if ($ut_title === '') continue;
+							$ut_done = !empty($ut['done']);
+							$ut_resp = (string)($ut['response'] ?? '');
+							$ut_url = trim((string)($ut['response_url'] ?? ''));
+							$ut_file_url = trim((string)($ut['response_file_url'] ?? ''));
+							$ut_files = isset($ut['response_files']) && is_array($ut['response_files']) ? $ut['response_files'] : [];
+							$ut_completed = (string)($ut['completed_at_fa'] ?? '');
+						?>
+							<li class="<?php echo $ut_done ? 'done' : ''; ?>">
+								<?php echo esc_html($ut_title); ?>
+								<div class="small"><?php echo esc_html($ut_done ? 'تکمیل شده' : 'در انتظار مشتری'); ?><?php echo $ut_completed ? esc_html(' — ' . $ut_completed) : ''; ?></div>
+								<?php if ($ut_resp): ?><div class="small"><?php echo esc_html($ut_resp); ?></div><?php endif; ?>
+								<?php if ($ut_url && (strpos($ut_url, 'http://') === 0 || strpos($ut_url, 'https://') === 0)): ?><a href="<?php echo esc_url($ut_url); ?>" target="_blank" rel="noopener noreferrer">لینک ارسالی مشتری</a><?php endif; ?>
+								<?php if ($ut_file_url && (strpos($ut_file_url, 'http://') === 0 || strpos($ut_file_url, 'https://') === 0)): ?><a href="<?php echo esc_url($ut_file_url); ?>" target="_blank" rel="noopener noreferrer">فایل ارسالی مشتری</a><?php endif; ?>
+								<?php if (!empty($ut_files)): foreach ($ut_files as $rf): if (empty($rf['url'])) continue; ?><a href="<?php echo esc_url($rf['url']); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html(!empty($rf['name']) ? ('فایل: ' . $rf['name']) : 'فایل ارسالی مشتری'); ?></a><?php endforeach; endif; ?>
 							</li>
 						<?php endforeach; ?>
 						</ul>

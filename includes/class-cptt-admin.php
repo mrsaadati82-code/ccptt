@@ -11,6 +11,7 @@ class CPTT_Admin {
 
 	private function __construct() {
 		add_action('add_meta_boxes', [$this, 'add_metaboxes']);
+		add_action('admin_menu', [$this, 'dashboard_menu']);
 
 		add_action('save_post_cptt_project', [$this, 'save_project_meta'], 10, 2);
 		add_action('save_post_cptt_template', [$this, 'save_template_meta'], 10, 2);
@@ -27,7 +28,8 @@ class CPTT_Admin {
 
 	public function enqueue_admin_assets($hook) {
 		global $post_type;
-		if ( ! in_array($post_type, ['cptt_project','cptt_template','cptt_checklist_tpl'], true) ) return;
+		$is_dashboard = ($hook === 'cptt_project_page_cptt-project-dashboard');
+		if ( ! $is_dashboard && ! in_array($post_type, ['cptt_project','cptt_template','cptt_checklist_tpl'], true) ) return;
 
 		wp_enqueue_style('cptt-admin', CPTT_URL . 'assets/css/admin.css', [], CPTT_VERSION);
 
@@ -38,6 +40,17 @@ class CPTT_Admin {
 			'ajax'  => admin_url('admin-ajax.php'),
 			'nonce' => wp_create_nonce('cptt_admin_nonce'),
 		]);
+	}
+
+	public function dashboard_menu() {
+		add_submenu_page(
+			'edit.php?post_type=cptt_project',
+			'داشبورد پروژه‌ها',
+			'داشبورد پروژه‌ها',
+			'edit_cptt_projects',
+			'cptt-project-dashboard',
+			[$this, 'render_dashboard_page']
+		);
 	}
 
 	public function add_metaboxes() {
@@ -78,6 +91,190 @@ class CPTT_Admin {
 		);
 	}
 
+	private function product_select_html($name, $selected = 0, $class = 'cptt-select') {
+		$selected = (int)$selected;
+		if (!post_type_exists('product')) {
+			return '<select class="' . esc_attr($class) . '" disabled><option>ووکامرس/محصولی یافت نشد</option></select>';
+		}
+
+		$products = get_posts([
+			'post_type' => 'product',
+			'post_status' => ['publish','draft','private'],
+			'numberposts' => 500,
+			'orderby' => 'title',
+			'order' => 'ASC',
+		]);
+
+		$html = '<select id="' . esc_attr($name) . '" name="' . esc_attr($name) . '" class="' . esc_attr($class) . '">';
+		$html .= '<option value="">— بدون محصول —</option>';
+		foreach ($products as $product) {
+			$html .= sprintf('<option value="%d" %s>%s</option>', (int)$product->ID, selected($selected, (int)$product->ID, false), esc_html(get_the_title($product)));
+		}
+		$html .= '</select>';
+		return $html;
+	}
+
+	private function product_title($product_id) {
+		$product_id = (int)$product_id;
+		if (!$product_id) return '—';
+		$title = get_the_title($product_id);
+		return $title ? $title : ('#' . $product_id);
+	}
+
+	private function project_progress_data($project_id) {
+		$steps = get_post_meta($project_id, '_cptt_steps', true);
+		if (!is_array($steps) || empty($steps)) return ['percent'=>0, 'done'=>0, 'total'=>0, 'status'=>'in_progress', 'label'=>'در حال انجام'];
+		$total = count($steps);
+		$done = 0;
+		foreach ($steps as $s) if (($s['status'] ?? '') === 'done') $done++;
+		$percent = $total ? (int)round(($done / $total) * 100) : 0;
+		$status = ($total > 0 && $done >= $total) ? 'completed' : 'in_progress';
+		return ['percent'=>$percent, 'done'=>$done, 'total'=>$total, 'status'=>$status, 'label'=>$status === 'completed' ? 'تکمیل شده' : 'در حال انجام'];
+	}
+
+	public function render_dashboard_page() {
+		if (!current_user_can('edit_cptt_projects')) return;
+
+		$query_args = [
+			'post_type' => 'cptt_project',
+			'post_status' => 'any',
+			'numberposts' => -1,
+			'orderby' => 'date',
+			'order' => 'DESC',
+		];
+		$user = wp_get_current_user();
+		if (!in_array('administrator', (array)$user->roles, true) && in_array('cptt_expert', (array)$user->roles, true)) {
+			$query_args['meta_query'] = [[
+				'key' => '_cptt_experts_csv',
+				'value' => ',' . get_current_user_id() . ',',
+				'compare' => 'LIKE',
+			]];
+		}
+		$projects = get_posts($query_args);
+
+		$clients = [];
+		$experts_map = [];
+		$products_map = [];
+		$cats_map = [];
+		$cards = [];
+
+		foreach ($projects as $p) {
+			$client_id = (int)get_post_meta($p->ID, '_cptt_client_user_id', true);
+			$client = $client_id ? get_user_by('id', $client_id) : null;
+			if ($client) $clients[$client_id] = $client->display_name;
+
+			$expert_ids = class_exists('CPTT_Core') ? CPTT_Core::get_project_expert_ids($p->ID) : [];
+			$expert_names = [];
+			foreach ($expert_ids as $eid) {
+				$u = get_user_by('id', (int)$eid);
+				if ($u) { $experts_map[(int)$eid] = $u->display_name; $expert_names[] = $u->display_name; }
+			}
+
+			$product_id = (int)get_post_meta($p->ID, '_cptt_product_id', true);
+			if (!$product_id) $product_id = (int)get_post_meta($p->ID, '_cptt_wc_product_id', true);
+			if ($product_id) $products_map[$product_id] = $this->product_title($product_id);
+
+			$terms = get_the_terms($p->ID, 'cptt_project_cat');
+			$term_ids = [];
+			$term_names = [];
+			if (!is_wp_error($terms) && !empty($terms)) {
+				foreach ($terms as $term) {
+					$term_ids[] = (int)$term->term_id;
+					$term_names[] = $term->name;
+					$cats_map[(int)$term->term_id] = $term->name;
+				}
+			}
+
+			$progress = $this->project_progress_data($p->ID);
+			$settled = (int)get_post_meta($p->ID, '_cptt_is_settled', true);
+			$deadline = (string)get_post_meta($p->ID, '_cptt_deadline_at_fa', true);
+			$last_update = (string)get_post_meta($p->ID, '_cptt_last_update_fa', true);
+
+			$cards[] = [
+				'post' => $p,
+				'client_id' => $client_id,
+				'client_name' => $client ? $client->display_name : '—',
+				'expert_ids' => $expert_ids,
+				'expert_names' => $expert_names,
+				'product_id' => $product_id,
+				'product_title' => $product_id ? $this->product_title($product_id) : '—',
+				'term_ids' => $term_ids,
+				'term_names' => $term_names,
+				'progress' => $progress,
+				'settled' => $settled,
+				'deadline' => $deadline,
+				'last_update' => $last_update,
+			];
+		}
+
+		asort($clients); asort($experts_map); asort($products_map); asort($cats_map);
+		?>
+		<div class="wrap cptt-dashboard" dir="rtl">
+			<div class="cptt-dashboard__hero">
+				<div>
+					<h1>داشبورد پروژه‌ها</h1>
+					<p>نمای اختصاصی پروژه‌ها با فیلتر سریع، بدون بارگذاری مجدد صفحه.</p>
+				</div>
+				<a class="button button-primary" href="<?php echo esc_url(admin_url('post-new.php?post_type=cptt_project')); ?>">+ پروژه جدید</a>
+			</div>
+
+			<div class="cptt-dashboard__filters">
+				<label>جستجو<input type="search" id="cptt-dash-search" placeholder="عنوان، مشتری، کارشناس، محصول..."></label>
+				<label>کارشناس<select id="cptt-dash-expert"><option value="">همه</option><?php foreach ($experts_map as $id=>$name): ?><option value="<?php echo esc_attr($id); ?>"><?php echo esc_html($name); ?></option><?php endforeach; ?></select></label>
+				<label>وضعیت<select id="cptt-dash-status"><option value="">همه</option><option value="completed">تکمیل شده</option><option value="in_progress">در حال انجام</option></select></label>
+				<label>مشتری<select id="cptt-dash-client"><option value="">همه</option><?php foreach ($clients as $id=>$name): ?><option value="<?php echo esc_attr($id); ?>"><?php echo esc_html($name); ?></option><?php endforeach; ?></select></label>
+				<label>تسویه<select id="cptt-dash-settled"><option value="">همه</option><option value="1">تسویه شده</option><option value="0">تسویه نشده</option></select></label>
+				<label>دسته‌بندی<select id="cptt-dash-cat"><option value="">همه</option><?php foreach ($cats_map as $id=>$name): ?><option value="<?php echo esc_attr($id); ?>"><?php echo esc_html($name); ?></option><?php endforeach; ?></select></label>
+				<label>محصول<select id="cptt-dash-product"><option value="">همه</option><?php foreach ($products_map as $id=>$name): ?><option value="<?php echo esc_attr($id); ?>"><?php echo esc_html($name); ?></option><?php endforeach; ?></select></label>
+				<button type="button" class="button" id="cptt-dash-reset">پاک کردن فیلترها</button>
+			</div>
+
+			<div class="cptt-dashboard__summary">
+				<span><b id="cptt-dash-count"><?php echo esc_html(count($cards)); ?></b> پروژه نمایش داده می‌شود</span>
+				<span>برای افزودن دسته‌بندی جدید از منوی «دسته‌بندی پروژه‌ها» استفاده کنید.</span>
+			</div>
+
+			<div class="cptt-dashboard__grid" id="cptt-dash-grid">
+				<?php foreach ($cards as $c):
+					$p = $c['post'];
+					$search = strtolower(get_the_title($p) . ' ' . $c['client_name'] . ' ' . implode(' ', $c['expert_names']) . ' ' . $c['product_title'] . ' ' . implode(' ', $c['term_names']));
+				?>
+					<article class="cptt-project-card"
+						data-search="<?php echo esc_attr($search); ?>"
+						data-client="<?php echo esc_attr($c['client_id']); ?>"
+						data-experts=",<?php echo esc_attr(implode(',', array_map('intval', $c['expert_ids']))); ?>,"
+						data-status="<?php echo esc_attr($c['progress']['status']); ?>"
+						data-settled="<?php echo esc_attr($c['settled']); ?>"
+						data-cats=",<?php echo esc_attr(implode(',', array_map('intval', $c['term_ids']))); ?>,"
+						data-product="<?php echo esc_attr($c['product_id']); ?>">
+						<div class="cptt-project-card__top">
+							<h2><?php echo esc_html(get_the_title($p)); ?></h2>
+							<span class="cptt-chip cptt-chip--<?php echo esc_attr($c['progress']['status']); ?>"><?php echo esc_html($c['progress']['label']); ?></span>
+						</div>
+						<div class="cptt-project-card__bar"><span style="width:<?php echo esc_attr($c['progress']['percent']); ?>%"></span></div>
+						<div class="cptt-project-card__percent"><?php echo esc_html($c['progress']['percent'] . '% (' . $c['progress']['done'] . '/' . $c['progress']['total'] . ')'); ?></div>
+						<div class="cptt-project-card__meta">
+							<div><b>مشتری:</b> <?php echo esc_html($c['client_name']); ?></div>
+							<div><b>کارشناسان:</b> <?php echo esc_html($c['expert_names'] ? implode('، ', $c['expert_names']) : '—'); ?></div>
+							<div><b>محصول:</b> <?php echo esc_html($c['product_title']); ?></div>
+							<div><b>دسته‌بندی:</b> <?php echo esc_html($c['term_names'] ? implode('، ', $c['term_names']) : '—'); ?></div>
+							<div><b>تسویه:</b> <?php echo $c['settled'] ? 'تسویه شده' : 'تسویه نشده'; ?></div>
+							<?php if ($c['deadline']): ?><div><b>مهلت:</b> <?php echo esc_html($c['deadline']); ?></div><?php endif; ?>
+							<?php if ($c['last_update']): ?><div><b>آخرین بروزرسانی:</b> <?php echo esc_html($c['last_update']); ?></div><?php endif; ?>
+						</div>
+						<div class="cptt-project-card__actions">
+							<a class="button button-primary" href="<?php echo esc_url(get_edit_post_link($p->ID)); ?>">ویرایش پروژه</a>
+							<a class="button" href="<?php echo esc_url(admin_url('edit.php?post_type=cptt_project')); ?>">لیست کلاسیک</a>
+						</div>
+					</article>
+				<?php endforeach; ?>
+			</div>
+
+			<div class="cptt-dashboard__empty" id="cptt-dash-empty" style="display:none;">هیچ پروژه‌ای با این فیلترها پیدا نشد.</div>
+		</div>
+		<?php
+	}
+
 	/* =========================
 	   DETAILS: Multi experts (checkbox list)
 	   Fix: checked state always correct + not wiped accidentally
@@ -86,6 +283,9 @@ class CPTT_Admin {
 		wp_nonce_field('cptt_save_project', 'cptt_nonce');
 
 		$client_id = (int) get_post_meta($post->ID, '_cptt_client_user_id', true);
+		$product_id = (int) get_post_meta($post->ID, '_cptt_product_id', true);
+		if (!$product_id) $product_id = (int) get_post_meta($post->ID, '_cptt_wc_product_id', true);
+		$is_settled = (int) get_post_meta($post->ID, '_cptt_is_settled', true);
 
 		$expert_ids = get_post_meta($post->ID, '_cptt_expert_user_ids', true);
 		if (!is_array($expert_ids)) $expert_ids = [];
@@ -123,6 +323,9 @@ class CPTT_Admin {
 			}
 		}
 
+		$deadline_at = (int) get_post_meta($post->ID, '_cptt_deadline_at', true);
+		$deadline_local = $deadline_at ? $this->datetime_local_value($deadline_at) : '';
+
 		// sort by display_name
 		usort($experts, function($a, $b){
 			return strcmp($a->display_name, $b->display_name);
@@ -140,6 +343,22 @@ class CPTT_Admin {
 					<?php endforeach; ?>
 				</select>
 				<span class="cptt-help">این کاربر در فرانت «پروژه‌های من» را می‌بیند.</span>
+			</p>
+
+			<p class="cptt-row">
+				<label class="cptt-label" for="cptt_product_id">محصول مرتبط</label>
+				<span>
+					<?php echo $this->product_select_html('cptt_product_id', $product_id); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+					<span class="cptt-help">اگر پروژه از سفارش آنلاین ساخته شده باشد، محصول به صورت خودکار انتخاب می‌شود.</span>
+				</span>
+			</p>
+
+			<p class="cptt-row">
+				<label class="cptt-label" for="cptt_is_settled">وضعیت تسویه</label>
+				<label style="display:inline-flex;align-items:center;gap:8px;">
+					<input type="checkbox" id="cptt_is_settled" name="cptt_is_settled" value="1" <?php checked($is_settled, 1); ?> />
+					تسویه شده
+				</label>
 			</p>
 
 			<input type="hidden" name="cptt_experts_present" value="1" />
@@ -161,6 +380,14 @@ class CPTT_Admin {
 				</div>
 				<span class="cptt-help">برای انتخاب چند کارشناس تیک بزنید. گزینه‌های انتخاب‌شده هایلایت می‌شوند.</span>
 			</div>
+
+			<p class="cptt-row">
+				<label class="cptt-label" for="cptt_deadline_local">مهلت پروژه</label>
+				<span>
+					<input type="text" class="cptt-jalali-datetime" id="cptt_deadline_local" name="cptt_deadline_local" value="<?php echo esc_attr($deadline_local); ?>" placeholder="۱۴۰۳/۰۱/۳۱ ۱۴:۳۰" />
+					<span class="cptt-help">اگر پروژه تا این زمان تکمیل نشود، پیامک هشدار برای مسئول پروژه ارسال می‌شود.</span>
+				</span>
+			</p>
 		</div>
 		<?php
 	}
@@ -231,6 +458,7 @@ class CPTT_Admin {
 					$title   = isset($step['title']) ? $step['title'] : '';
 					$status  = isset($step['status']) ? $step['status'] : 'todo';
 					$desc    = isset($step['desc']) ? $step['desc'] : '';
+					$due_local = !empty($step['due_at']) ? $this->datetime_local_value((int)$step['due_at']) : '';
 
 					$updated = isset($step['updated_at_fa']) ? (string)$step['updated_at_fa'] : '—';
 					$updated_by_name = '—';
@@ -240,6 +468,7 @@ class CPTT_Admin {
 					}
 
 					$checklist = isset($step['checklist']) && is_array($step['checklist']) ? $step['checklist'] : [];
+					$user_tasks = isset($step['user_tasks']) && is_array($step['user_tasks']) ? $step['user_tasks'] : [];
 				?>
 					<div class="cptt-step-row" data-step-id="<?php echo esc_attr($step_id); ?>">
 
@@ -282,6 +511,9 @@ class CPTT_Admin {
 								<div class="cptt-stepCard__desc">
 									<label class="cptt-fieldLabel">توضیحات پاپ‌آپ</label>
 									<textarea name="cptt_steps[<?php echo esc_attr($i); ?>][desc]" rows="3" placeholder="توضیحات..."><?php echo esc_textarea($desc); ?></textarea>
+					<label class="cptt-fieldLabel" style="margin-top:10px;">مهلت مرحله</label>
+					<input type="text" class="cptt-jalali-datetime" name="cptt_steps[<?php echo esc_attr($i); ?>][due_at_local]" value="<?php echo esc_attr($due_local); ?>" placeholder="۱۴۰۳/۰۱/۳۱ ۱۴:۳۰" />
+					<span class="cptt-help">اگر این مرحله تا این زمان انجام نشود، به مسئول پروژه پیامک هشدار ارسال می‌شود.</span>
 								</div>
 
 								<div class="cptt-stepCard__checklist">
@@ -352,6 +584,8 @@ class CPTT_Admin {
 										اگر همه آیتم‌های چک‌لیست تیک بخورند، مرحله خودکار «انجام‌شده» می‌شود.
 									</p>
 								</div>
+
+								<?php $this->render_user_tasks_editor($i, $user_tasks); ?>
 							</div>
 						</div><!-- card -->
 					</div><!-- row -->
@@ -401,6 +635,9 @@ class CPTT_Admin {
 							<div class="cptt-stepCard__desc">
 								<label class="cptt-fieldLabel">توضیحات پاپ‌آپ</label>
 								<textarea name="cptt_steps[{{i}}][desc]" rows="3" placeholder="توضیحات..."></textarea>
+				<label class="cptt-fieldLabel" style="margin-top:10px;">مهلت مرحله</label>
+				<input type="text" class="cptt-jalali-datetime" name="cptt_steps[{{i}}][due_at_local]" value="" placeholder="۱۴۰۳/۰۱/۳۱ ۱۴:۳۰" />
+				<span class="cptt-help">تاریخ و ساعت شمسی به زمان تهران.</span>
 							</div>
 
 							<div class="cptt-stepCard__checklist">
@@ -424,6 +661,15 @@ class CPTT_Admin {
 									اگر همه آیتم‌های چک‌لیست تیک بخورند، مرحله خودکار «انجام‌شده» می‌شود.
 								</p>
 							</div>
+
+							<div class="cptt-stepCard__userTasks">
+								<div class="cptt-userTasks-head">
+									<div class="cptt-userTasks-title">تسک‌های سمت مشتری</div>
+									<button type="button" class="button button-primary cptt-add-usertask">+ تسک مشتری</button>
+								</div>
+								<div class="cptt-usertasks" data-step-index="{{i}}"></div>
+								<p class="cptt-help">برای دریافت اطلاعات از مشتری، تسک تعریف کنید. مشتری از پنل خود پاسخ را ثبت می‌کند.</p>
+							</div>
 						</div>
 					</div>
 				</div>
@@ -442,6 +688,67 @@ class CPTT_Admin {
 					<button type="button" class="button cptt-remove-checkitem">×</button>
 				</div>
 			</script>
+
+			<script type="text/template" id="cptt-usertask-template">
+				<div class="cptt-usertask-row" data-task-id="{{tid}}">
+					<input type="hidden" name="cptt_steps[{{i}}][user_tasks][{{k}}][id]" value="{{tid}}" />
+					<input type="text" name="cptt_steps[{{i}}][user_tasks][{{k}}][title]" value="" placeholder="عنوان تسک برای مشتری..." />
+					<textarea name="cptt_steps[{{i}}][user_tasks][{{k}}][desc]" rows="2" placeholder="توضیح یا اطلاعات موردنیاز..."></textarea>
+					<label class="cptt-usertask-date">مهلت: <input type="text" class="cptt-jalali-datetime" name="cptt_steps[{{i}}][user_tasks][{{k}}][due_at_local]" value="" placeholder="۱۴۰۳/۰۱/۳۱ ۱۴:۳۰" /></label>
+					<label class="cptt-usertask-remind"><input type="checkbox" name="cptt_steps[{{i}}][user_tasks][{{k}}][sms_remind]" value="1" checked /> یادآوری پیامکی</label>
+					<button type="button" class="button cptt-remove-usertask">×</button>
+				</div>
+			</script>
+		</div>
+		<?php
+	}
+
+	private function render_user_tasks_editor($step_index, $tasks) {
+		if (!is_array($tasks)) $tasks = [];
+		?>
+		<div class="cptt-stepCard__userTasks">
+			<div class="cptt-userTasks-head">
+				<div class="cptt-userTasks-title">تسک‌های سمت مشتری</div>
+				<button type="button" class="button button-primary cptt-add-usertask">+ تسک مشتری</button>
+			</div>
+
+			<div class="cptt-usertasks" data-step-index="<?php echo esc_attr($step_index); ?>">
+				<?php foreach ($tasks as $k => $task):
+					$tid = isset($task['id']) ? (string)$task['id'] : (function_exists('wp_generate_uuid4') ? wp_generate_uuid4() : ('ut_' . wp_rand(1000,9999)));
+					$title = isset($task['title']) ? (string)$task['title'] : '';
+					$desc = isset($task['desc']) ? (string)$task['desc'] : '';
+					$due_local = !empty($task['due_at']) ? $this->datetime_local_value((int)$task['due_at']) : '';
+					$sms_remind = !isset($task['sms_remind']) || !empty($task['sms_remind']);
+					$done = !empty($task['done']);
+					$response = isset($task['response']) ? (string)$task['response'] : '';
+					$response_url = isset($task['response_url']) ? (string)$task['response_url'] : '';
+					$completed_at_fa = isset($task['completed_at_fa']) ? (string)$task['completed_at_fa'] : '';
+				?>
+					<div class="cptt-usertask-row <?php echo $done ? 'is-done' : ''; ?>" data-task-id="<?php echo esc_attr($tid); ?>">
+						<input type="hidden" name="cptt_steps[<?php echo esc_attr($step_index); ?>][user_tasks][<?php echo esc_attr($k); ?>][id]" value="<?php echo esc_attr($tid); ?>" />
+						<input type="text" name="cptt_steps[<?php echo esc_attr($step_index); ?>][user_tasks][<?php echo esc_attr($k); ?>][title]" value="<?php echo esc_attr($title); ?>" placeholder="عنوان تسک برای مشتری..." />
+						<textarea name="cptt_steps[<?php echo esc_attr($step_index); ?>][user_tasks][<?php echo esc_attr($k); ?>][desc]" rows="2" placeholder="توضیح یا اطلاعات موردنیاز..."><?php echo esc_textarea($desc); ?></textarea>
+						<label class="cptt-usertask-date">مهلت: <input type="text" class="cptt-jalali-datetime" name="cptt_steps[<?php echo esc_attr($step_index); ?>][user_tasks][<?php echo esc_attr($k); ?>][due_at_local]" value="<?php echo esc_attr($due_local); ?>" placeholder="۱۴۰۳/۰۱/۳۱ ۱۴:۳۰" /></label>
+						<label class="cptt-usertask-remind"><input type="checkbox" name="cptt_steps[<?php echo esc_attr($step_index); ?>][user_tasks][<?php echo esc_attr($k); ?>][sms_remind]" value="1" <?php checked($sms_remind); ?> /> یادآوری پیامکی</label>
+						<?php if ($done): ?>
+							<div class="cptt-usertask-response">
+								<strong>تکمیل‌شده توسط مشتری</strong>
+								<?php if ($completed_at_fa): ?><small><?php echo esc_html($completed_at_fa); ?></small><?php endif; ?>
+								<?php if ($response): ?><div><?php echo nl2br(esc_html($response)); ?></div><?php endif; ?>
+								<?php if ($response_url): ?><a href="<?php echo esc_url($response_url); ?>" target="_blank" rel="noopener noreferrer">لینک ارسالی مشتری</a><?php endif; ?>
+								<?php if (!empty($task['response_file_url'])): ?><a href="<?php echo esc_url($task['response_file_url']); ?>" target="_blank" rel="noopener noreferrer">فایل ارسالی مشتری</a><?php endif; ?>
+								<?php if (!empty($task['response_files']) && is_array($task['response_files'])): ?>
+									<?php foreach ($task['response_files'] as $rf): if (empty($rf['url'])) continue; ?>
+										<a href="<?php echo esc_url($rf['url']); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html(!empty($rf['name']) ? ('فایل: ' . $rf['name']) : 'فایل ارسالی مشتری'); ?></a>
+									<?php endforeach; ?>
+								<?php endif; ?>
+							</div>
+						<?php endif; ?>
+						<button type="button" class="button cptt-remove-usertask">×</button>
+					</div>
+				<?php endforeach; ?>
+			</div>
+			<p class="cptt-help">برای دریافت اطلاعات از مشتری، تسک تعریف کنید. مشتری از پنل خود پاسخ را ثبت می‌کند.</p>
 		</div>
 		<?php
 	}
@@ -494,6 +801,21 @@ class CPTT_Admin {
 
 	/* ===== Normalize + Save + AJAX + Columns ===== */
 
+	private function datetime_local_value($timestamp) {
+		$timestamp = (int)$timestamp;
+		if (!$timestamp) return '';
+		return class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime($timestamp) : date('Y/m/d H:i', $timestamp);
+	}
+
+	private function parse_datetime_local($value) {
+		$value = trim((string)$value);
+		if ($value === '') return 0;
+		if (class_exists('CPTT_Core') && method_exists('CPTT_Core', 'parse_jalali_datetime')) {
+			return (int) CPTT_Core::parse_jalali_datetime($value);
+		}
+		return 0;
+	}
+
 	private function normalize_checklist($arr) {
 		if (!is_array($arr)) return [];
 		$out = [];
@@ -511,6 +833,70 @@ class CPTT_Admin {
 		return $out;
 	}
 
+	private function normalize_user_tasks($arr) {
+		if (!is_array($arr)) return [];
+		$out = [];
+		foreach ($arr as $task) {
+			if (!is_array($task)) continue;
+			$id = isset($task['id']) ? sanitize_text_field($task['id']) : '';
+			if ($id === '') $id = function_exists('wp_generate_uuid4') ? wp_generate_uuid4() : ('ut_' . wp_rand(1000,9999));
+
+			$title = isset($task['title']) ? sanitize_text_field($task['title']) : '';
+			$desc = isset($task['desc']) ? wp_kses_post($task['desc']) : '';
+			$due_at = isset($task['due_at_local']) ? $this->parse_datetime_local($task['due_at_local']) : 0;
+			$sms_remind = !empty($task['sms_remind']) ? 1 : 0;
+
+			if ($title === '' && $desc === '') continue;
+
+			$row = [
+				'id' => $id,
+				'title' => $title,
+				'desc' => $desc,
+				'due_at' => $due_at,
+				'sms_remind' => $sms_remind,
+				'done' => 0,
+			];
+			if ($due_at && class_exists('CPTT_Core')) $row['due_at_fa'] = CPTT_Core::jalali_datetime($due_at);
+			$out[] = $row;
+		}
+		return $out;
+	}
+
+	private function preserve_user_task_state($new_steps, $old_steps) {
+		if (!is_array($old_steps)) $old_steps = [];
+		$old_by_step = [];
+		foreach ($old_steps as $os) if (is_array($os) && !empty($os['id'])) $old_by_step[(string)$os['id']] = $os;
+
+		foreach ($new_steps as &$step) {
+			$sid = (string)($step['id'] ?? '');
+			$old_step = ($sid && isset($old_by_step[$sid])) ? $old_by_step[$sid] : null;
+			if (is_array($old_step) && !empty($old_step['deadline_sms_sent']) && !empty($old_step['due_at']) && !empty($step['due_at']) && (int)$old_step['due_at'] === (int)$step['due_at']) {
+				$step['deadline_sms_sent'] = $old_step['deadline_sms_sent'];
+			}
+
+			$old_tasks = [];
+			if (is_array($old_step) && !empty($old_step['user_tasks']) && is_array($old_step['user_tasks'])) {
+				foreach ($old_step['user_tasks'] as $ot) {
+					if (is_array($ot) && !empty($ot['id'])) $old_tasks[(string)$ot['id']] = $ot;
+				}
+			}
+
+			if (empty($step['user_tasks']) || !is_array($step['user_tasks'])) continue;
+			foreach ($step['user_tasks'] as &$task) {
+				$tid = (string)($task['id'] ?? '');
+				$old = ($tid && isset($old_tasks[$tid])) ? $old_tasks[$tid] : null;
+				if (!$old || !is_array($old)) continue;
+
+				foreach (['done','response','response_url','response_file_url','response_file_name','response_file_type','response_files','completed_at','completed_at_fa','completed_by','last_reminder_at','last_reminder_at_fa'] as $key) {
+					if (array_key_exists($key, $old)) $task[$key] = $old[$key];
+				}
+			}
+			unset($task);
+		}
+		unset($step);
+		return $new_steps;
+	}
+
 	private function normalize_steps($steps) {
 		if (!is_array($steps)) return [];
 		$out = [];
@@ -525,18 +911,23 @@ class CPTT_Admin {
 			$status = isset($s['status']) ? sanitize_key($s['status']) : 'todo';
 			if (!in_array($status, ['todo','current','done'], true)) $status = 'todo';
 
+			$due_at = isset($s['due_at_local']) ? $this->parse_datetime_local($s['due_at_local']) : 0;
 			$checklist = isset($s['checklist']) ? $this->normalize_checklist($s['checklist']) : [];
+			$user_tasks = isset($s['user_tasks']) ? $this->normalize_user_tasks($s['user_tasks']) : [];
 
-			if ($title === '' && $desc === '' && empty($checklist)) continue;
+			if ($title === '' && $desc === '' && empty($checklist) && empty($user_tasks)) continue;
 
 			if ($status === 'current') {
 				if ($current_found) $status = 'todo';
 				$current_found = true;
 			}
 
-			$out[] = [
-				'id'=>$id,'title'=>$title,'desc'=>$desc,'status'=>$status,'checklist'=>$checklist
-			];
+			$row = ['id'=>$id,'title'=>$title,'desc'=>$desc,'status'=>$status,'checklist'=>$checklist,'user_tasks'=>$user_tasks];
+			if ($due_at) {
+				$row['due_at'] = $due_at;
+				$row['due_at_fa'] = class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime($due_at) : date('Y/m/d H:i', $due_at);
+			}
+			$out[] = $row;
 		}
 
 		if (!$current_found) {
@@ -694,6 +1085,10 @@ class CPTT_Admin {
 		$client_id = isset($_POST['cptt_client_user_id']) ? absint($_POST['cptt_client_user_id']) : 0;
 		update_post_meta($post_id, '_cptt_client_user_id', $client_id);
 
+		$product_id = isset($_POST['cptt_product_id']) ? absint($_POST['cptt_product_id']) : 0;
+		update_post_meta($post_id, '_cptt_product_id', $product_id);
+		update_post_meta($post_id, '_cptt_is_settled', !empty($_POST['cptt_is_settled']) ? 1 : 0);
+
 		if (isset($_POST['cptt_experts_present'])) {
 			$expert_ids = isset($_POST['cptt_expert_user_ids']) && is_array($_POST['cptt_expert_user_ids'])
 				? array_map('absint', $_POST['cptt_expert_user_ids'])
@@ -705,10 +1100,22 @@ class CPTT_Admin {
 			update_post_meta($post_id, '_cptt_experts_csv', ',' . implode(',', $expert_ids) . ',');
 		}
 
+		$old_deadline = (int) get_post_meta($post_id, '_cptt_deadline_at', true);
+		$deadline_at = isset($_POST['cptt_deadline_local']) ? $this->parse_datetime_local($_POST['cptt_deadline_local']) : 0;
+		if ($deadline_at) {
+			update_post_meta($post_id, '_cptt_deadline_at', $deadline_at);
+			update_post_meta($post_id, '_cptt_deadline_at_fa', CPTT_Core::jalali_datetime($deadline_at));
+		} else {
+			delete_post_meta($post_id, '_cptt_deadline_at');
+			delete_post_meta($post_id, '_cptt_deadline_at_fa');
+		}
+		if ($old_deadline !== $deadline_at) delete_post_meta($post_id, '_cptt_deadline_sms_sent');
+
 		$old_steps = get_post_meta($post_id, '_cptt_steps', true);
 
 		$steps = isset($_POST['cptt_steps']) && is_array($_POST['cptt_steps']) ? $_POST['cptt_steps'] : [];
 		$steps = $this->normalize_steps($steps);
+		$steps = $this->preserve_user_task_state($steps, $old_steps);
 
 		$steps = $this->apply_checklist_done_timestamps($steps, $old_steps);
 		$steps = $this->apply_step_status_from_checklist($steps);
@@ -722,6 +1129,10 @@ class CPTT_Admin {
 			$now = (int) current_time('timestamp', true);
 			update_post_meta($post_id, '_cptt_last_update', $now);
 			update_post_meta($post_id, '_cptt_last_update_fa', CPTT_Core::jalali_datetime($now));
+		}
+
+		if (class_exists('CPTT_SMS') && method_exists('CPTT_SMS', 'maybe_notify_project_completed')) {
+			CPTT_SMS::maybe_notify_project_completed($post_id);
 		}
 	}
 
@@ -742,6 +1153,13 @@ class CPTT_Admin {
 					unset($ci['done_at'], $ci['done_at_fa'], $ci['done_by']);
 				}
 				unset($ci);
+			}
+			if (isset($s['user_tasks']) && is_array($s['user_tasks'])) {
+				foreach ($s['user_tasks'] as &$ut) {
+					$ut['done'] = 0;
+					unset($ut['response'], $ut['response_url'], $ut['response_file_url'], $ut['response_file_name'], $ut['response_file_type'], $ut['response_files'], $ut['completed_at'], $ut['completed_at_fa'], $ut['completed_by'], $ut['last_reminder_at'], $ut['last_reminder_at_fa']);
+				}
+				unset($ut);
 			}
 		}
 		unset($s);
@@ -776,12 +1194,21 @@ class CPTT_Admin {
 		foreach ($steps as &$s) {
 			unset($s['updated_at'], $s['updated_at_fa'], $s['updated_by']);
 			$s['status'] = 'todo';
+			$s['due_at_local'] = !empty($s['due_at']) ? $this->datetime_local_value((int)$s['due_at']) : '';
 			if (isset($s['checklist']) && is_array($s['checklist'])) {
 				foreach ($s['checklist'] as &$ci) {
 					$ci['done'] = 0;
 					unset($ci['done_at'], $ci['done_at_fa'], $ci['done_by']);
 				}
 				unset($ci);
+			}
+			if (isset($s['user_tasks']) && is_array($s['user_tasks'])) {
+				foreach ($s['user_tasks'] as &$ut) {
+					$ut['done'] = 0;
+					$ut['due_at_local'] = !empty($ut['due_at']) ? $this->datetime_local_value((int)$ut['due_at']) : '';
+					unset($ut['response'], $ut['response_url'], $ut['response_file_url'], $ut['response_file_name'], $ut['response_file_type'], $ut['response_files'], $ut['completed_at'], $ut['completed_at_fa'], $ut['completed_by'], $ut['last_reminder_at'], $ut['last_reminder_at_fa']);
+				}
+				unset($ut);
 			}
 		}
 		unset($s);
@@ -814,6 +1241,8 @@ class CPTT_Admin {
 		$new['title'] = 'عنوان پروژه';
 		$new['cptt_client'] = 'مشتری';
 		$new['cptt_expert'] = 'کارشناسان';
+		$new['cptt_product'] = 'محصول';
+		$new['cptt_settled'] = 'تسویه';
 		$new['cptt_progress'] = 'پیشرفت';
 		$new['cptt_last_update'] = 'آخرین بروزرسانی';
 		$new['date'] = $cols['date'];
@@ -840,6 +1269,16 @@ class CPTT_Admin {
 				if ($u) $names[] = $u->display_name;
 			}
 			echo $names ? esc_html(implode('، ', $names)) : '—';
+		}
+
+		if ( $col === 'cptt_product' ) {
+			$pid = (int) get_post_meta($post_id, '_cptt_product_id', true);
+			if (!$pid) $pid = (int) get_post_meta($post_id, '_cptt_wc_product_id', true);
+			echo $pid ? esc_html($this->product_title($pid)) : '—';
+		}
+
+		if ( $col === 'cptt_settled' ) {
+			echo get_post_meta($post_id, '_cptt_is_settled', true) ? 'تسویه شده' : '—';
 		}
 
 		if ( $col === 'cptt_progress' ) {

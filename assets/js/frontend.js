@@ -149,6 +149,7 @@
   const metaEl = modal ? modal.querySelector('#cptt-modal-meta') : null;
   const contentEl = modal ? modal.querySelector('#cptt-modal-content') : null;
   const checklistEl = modal ? modal.querySelector('#cptt-modal-checklist') : null;
+  const userTasksEl = modal ? modal.querySelector('#cptt-modal-user-tasks') : null;
 
   let lastFocus = null;
 
@@ -215,7 +216,119 @@
     checklistEl.appendChild(ul);
   }
 
-  function openModal(title, updatedFa, htmlDesc, checklistData) {
+  function renderUserTasks(data) {
+    if (!userTasksEl) return;
+    userTasksEl.innerHTML = '';
+    if (!data || !Array.isArray(data.items) || data.items.length === 0) return;
+
+    const head = document.createElement('div');
+    head.className = 'cptt-ut-head';
+    head.textContent = 'تسک‌های شما';
+    userTasksEl.appendChild(head);
+
+    data.items.forEach(task => {
+      if (!task || !task.title) return;
+
+      const box = document.createElement('div');
+      box.className = 'cptt-ut-item' + (task.done ? ' is-done' : '');
+      box.setAttribute('data-task-id', task.id || '');
+
+      const title = document.createElement('div');
+      title.className = 'cptt-ut-title';
+      title.textContent = task.title;
+      box.appendChild(title);
+
+      if (task.desc) {
+        const desc = document.createElement('div');
+        desc.className = 'cptt-ut-desc';
+        desc.textContent = task.desc;
+        box.appendChild(desc);
+      }
+
+      if (task.due_at_fa) {
+        const due = document.createElement('div');
+        due.className = 'cptt-ut-meta';
+        due.textContent = 'مهلت: ' + task.due_at_fa;
+        box.appendChild(due);
+      }
+
+      if (task.done) {
+        const done = document.createElement('div');
+        done.className = 'cptt-ut-done';
+        done.textContent = 'ارسال شده' + (task.completed_at_fa ? (' — ' + task.completed_at_fa) : '');
+        box.appendChild(done);
+
+        if (task.response) {
+          const resp = document.createElement('div');
+          resp.className = 'cptt-ut-response';
+          resp.textContent = task.response;
+          box.appendChild(resp);
+        }
+        if (task.response_url) {
+          const a = document.createElement('a');
+          a.className = 'cptt-ut-link';
+          a.href = task.response_url;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.textContent = 'لینک ارسالی';
+          box.appendChild(a);
+        }
+        const files = Array.isArray(task.response_files) && task.response_files.length
+          ? task.response_files
+          : (task.response_file_url ? [{url: task.response_file_url, name: task.response_file_name || ''}] : []);
+        files.forEach((f, idx) => {
+          if (!f || !f.url) return;
+          const fa = document.createElement('a');
+          fa.className = 'cptt-ut-link';
+          fa.href = f.url;
+          fa.target = '_blank';
+          fa.rel = 'noopener noreferrer';
+          fa.textContent = f.name ? ('فایل: ' + f.name) : ('فایل ارسالی ' + (idx + 1));
+          box.appendChild(fa);
+        });
+      } else {
+        const form = document.createElement('form');
+        form.className = 'cptt-ut-form';
+        form.setAttribute('data-project-id', data.project_id || '');
+        form.setAttribute('data-step-id', data.step_id || '');
+        form.setAttribute('data-task-id', task.id || '');
+
+        const ta = document.createElement('textarea');
+        ta.name = 'response';
+        ta.rows = 3;
+        ta.placeholder = 'پاسخ یا اطلاعات موردنیاز را وارد کنید...';
+        form.appendChild(ta);
+
+        const url = document.createElement('input');
+        url.type = 'url';
+        url.name = 'response_url';
+        url.placeholder = 'لینک فایل/نتیجه (اختیاری)';
+        form.appendChild(url);
+
+        const file = document.createElement('input');
+        file.type = 'file';
+        file.name = 'cptt_files[]';
+        file.className = 'cptt-ut-file';
+        form.appendChild(file);
+
+        const btn = document.createElement('button');
+        btn.type = 'submit';
+        btn.className = 'cptt-btn cptt-btn--primary';
+        btn.textContent = 'ارسال و تکمیل تسک';
+        form.appendChild(btn);
+
+        const msg = document.createElement('div');
+        msg.className = 'cptt-ut-msg';
+        form.appendChild(msg);
+
+        box.appendChild(form);
+      }
+
+      userTasksEl.appendChild(box);
+    });
+  }
+
+  function openModal(title, updatedFa, htmlDesc, checklistData, userTasksData) {
     if (!modal) return;
     lastFocus = document.activeElement;
 
@@ -228,6 +341,7 @@
     }
 
     renderChecklist(checklistData);
+    renderUserTasks(userTasksData);
 
     modal.classList.add('is-open');
     modal.setAttribute('aria-hidden', 'false');
@@ -256,11 +370,83 @@
       const clJson = b64cl ? b64ToUtf8(b64cl) : '';
       const clData = clJson ? safeJsonParse(clJson) : null;
 
-      openModal(t, updated, html, clData);
+      const b64ut = btn.getAttribute('data-cptt-user-tasks-b64') || '';
+      const utJson = b64ut ? b64ToUtf8(b64ut) : '';
+      const utData = utJson ? safeJsonParse(utJson) : null;
+
+      openModal(t, updated, html, clData, utData);
       return;
     }
 
     if (e.target.closest('[data-cptt-close]')) closeModal();
+  });
+
+  document.addEventListener('change', function(e){
+    const input = e.target.closest('.cptt-ut-file');
+    if (!input || !input.files || !input.files.length) return;
+    const form = input.closest('.cptt-ut-form');
+    if (!form) return;
+    const files = Array.from(form.querySelectorAll('.cptt-ut-file'));
+    if (files[files.length - 1] !== input) return;
+
+    const next = document.createElement('input');
+    next.type = 'file';
+    next.name = 'cptt_files[]';
+    next.className = 'cptt-ut-file';
+    next.setAttribute('aria-label', 'انتخاب فایل دیگر');
+    input.insertAdjacentElement('afterend', next);
+  });
+
+  document.addEventListener('submit', function(e){
+    const form = e.target.closest('.cptt-ut-form');
+    if (!form) return;
+    e.preventDefault();
+
+    const msg = form.querySelector('.cptt-ut-msg');
+    const btn = form.querySelector('button[type="submit"]');
+    const response = (form.querySelector('[name="response"]') || {}).value || '';
+    const responseUrl = (form.querySelector('[name="response_url"]') || {}).value || '';
+    const fileInputs = Array.from(form.querySelectorAll('.cptt-ut-file'));
+    const selectedFiles = [];
+    fileInputs.forEach(inp => { if (inp.files && inp.files.length) Array.from(inp.files).forEach(f => selectedFiles.push(f)); });
+    const hasFile = selectedFiles.length > 0;
+
+    if (!response.trim() && !responseUrl.trim() && !hasFile) {
+      if (msg) msg.textContent = 'لطفاً متن پاسخ، لینک یا فایل را وارد کنید.';
+      return;
+    }
+
+    const fd = new FormData();
+    fd.append('action', 'cptt_complete_user_task');
+    fd.append('nonce', (window.CPTT_FRONTEND && CPTT_FRONTEND.nonce) ? CPTT_FRONTEND.nonce : '');
+    fd.append('project_id', form.getAttribute('data-project-id') || '');
+    fd.append('step_id', form.getAttribute('data-step-id') || '');
+    fd.append('task_id', form.getAttribute('data-task-id') || '');
+    fd.append('response', response);
+    fd.append('response_url', responseUrl);
+    selectedFiles.forEach(file => fd.append('cptt_files[]', file));
+
+    if (btn) { btn.disabled = true; btn.textContent = 'در حال ارسال...'; }
+    if (msg) msg.textContent = '';
+
+    fetch((window.CPTT_FRONTEND && CPTT_FRONTEND.ajax) ? CPTT_FRONTEND.ajax : '', {
+      method: 'POST',
+      credentials: 'same-origin',
+      body: fd
+    }).then(r => r.json()).then(res => {
+      if (!res || !res.success) throw new Error('خطا در ثبت اطلاعات');
+      const box = form.closest('.cptt-ut-item');
+      if (box) {
+        box.classList.add('is-done');
+        const done = document.createElement('div');
+        done.className = 'cptt-ut-done';
+        done.textContent = 'ارسال شد' + (res.data && res.data.completed_at_fa ? (' — ' + res.data.completed_at_fa) : '');
+        form.replaceWith(done);
+      }
+    }).catch(err => {
+      if (msg) msg.textContent = err.message || 'خطا در ارسال اطلاعات';
+      if (btn) { btn.disabled = false; btn.textContent = 'ارسال و تکمیل تسک'; }
+    });
   });
 
   document.addEventListener('keydown', function (e) {
