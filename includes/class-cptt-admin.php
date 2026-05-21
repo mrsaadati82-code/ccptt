@@ -160,7 +160,7 @@ class CPTT_Admin {
 					<div class="cptt-insight__count"><?php echo count($insight_today); ?></div>
 					<?php if ($insight_today): ?>
 					<ul class="cptt-insight__list">
-						<?php foreach (array_slice($insight_today,0,5) as $it): ?>
+						<?php foreach (array_slice($insight_today,0,3) as $it): ?>
 						<li><a href="<?php echo esc_url(get_edit_post_link($it['project_id'])); ?>"><?php echo esc_html($it['project_title']); ?></a> — <?php echo esc_html($it['step_title']); ?></li>
 						<?php endforeach; ?>
 					</ul><?php endif; ?>
@@ -170,7 +170,7 @@ class CPTT_Admin {
 					<div class="cptt-insight__count"><?php echo count($insight_overdue); ?></div>
 					<?php if ($insight_overdue): ?>
 					<ul class="cptt-insight__list">
-						<?php foreach (array_slice($insight_overdue,0,5) as $it): ?>
+						<?php foreach (array_slice($insight_overdue,0,3) as $it): ?>
 						<li><a href="<?php echo esc_url(get_edit_post_link($it['project_id'])); ?>"><?php echo esc_html($it['project_title']); ?></a> — <?php echo esc_html($it['step_title']); ?><?php if ($it['due_fa']){ ?> <small>(<?php echo esc_html($it['due_fa']); ?>)</small><?php } ?></li>
 						<?php endforeach; ?>
 					</ul><?php endif; ?>
@@ -180,7 +180,7 @@ class CPTT_Admin {
 					<div class="cptt-insight__count"><?php echo count($insight_follow); ?></div>
 					<?php if ($insight_follow): ?>
 					<ul class="cptt-insight__list">
-						<?php foreach (array_slice($insight_follow,0,5) as $it): ?>
+						<?php foreach (array_slice($insight_follow,0,3) as $it): ?>
 						<li><a href="<?php echo esc_url(get_edit_post_link($it['project_id'])); ?>"><?php echo esc_html($it['project_title']); ?></a> — <?php echo esc_html($it['step_title']); ?></li>
 						<?php endforeach; ?>
 					</ul><?php endif; ?>

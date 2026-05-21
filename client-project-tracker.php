@@ -2,14 +2,14 @@
 /**
  * Plugin Name: Client Project Tracker (CPTT)
  * Description: مدیریت پروژه‌های مشتری و نمایش مراحل پیشرفت داخل پنل کاربری (Stepper + Popup).
- * Version: 1.3.4
+ * Version: 1.4.3
  * Author: Your Name
  * Text Domain: cptt
  */
 
 if ( ! defined('ABSPATH') ) exit;
 
-define('CPTT_VERSION', '1.3.4');
+define('CPTT_VERSION', '1.4.3');
 define('CPTT_PATH', plugin_dir_path(__FILE__));
 define('CPTT_URL', plugin_dir_url(__FILE__));
 
@@ -21,6 +21,7 @@ if (file_exists(CPTT_PATH . 'vendor/autoload.php')) {
 require_once CPTT_PATH . 'includes/class-cptt-core.php';
 require_once CPTT_PATH . 'includes/class-cptt-admin.php';
 require_once CPTT_PATH . 'includes/class-cptt-frontend.php';
+require_once CPTT_PATH . 'includes/class-cptt-expert.php';
 require_once CPTT_PATH . 'includes/class-cptt-settings.php';
 require_once CPTT_PATH . 'includes/class-cptt-report.php';
 require_once CPTT_PATH . 'includes/class-cptt-sms.php';
@@ -33,6 +34,7 @@ add_action('plugins_loaded', function () {
 	CPTT_Core::instance();
 	CPTT_Admin::instance();
 	CPTT_Frontend::instance();
+	CPTT_Expert::instance();
 	CPTT_Settings::instance();
 	CPTT_Report::instance();
 	CPTT_SMS::instance();

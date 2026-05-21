@@ -49,12 +49,12 @@ jQuery(function ($) {
     const id = uuid();
     const html = stepTpl.replaceAll('{{i}}', i).replaceAll('{{uuid}}', id);
     $rows.append(html);
-    reindexAll();
+    reindexAll(); $(document).trigger('cptt:stepsChanged');
   });
 
   $rows.on('click', '.cptt-remove-step', function () {
     $(this).closest('.cptt-step-row').remove();
-    reindexAll();
+    reindexAll(); $(document).trigger('cptt:stepsChanged');
   });
 
   $rows.sortable({
@@ -62,7 +62,7 @@ jQuery(function ($) {
     handle: '.cptt-drag-handle',
     axis: 'y',
     tolerance: 'pointer',
-    update: function () { reindexAll(); }
+    update: function () { reindexAll(); $(document).trigger('cptt:stepsChanged'); }
   });
 
   $rows.on('click', '.cptt-toggle-checklist', function () {
@@ -86,16 +86,16 @@ jQuery(function ($) {
         items: '.cptt-checkitem-row',
         handle: '.cptt-checkitem-handle',
         axis: 'y',
-        update: function () { reindexAll(); }
+        update: function () { reindexAll(); $(document).trigger('cptt:stepsChanged'); }
       });
       $list.data('sortable', true);
     }
-    reindexAll();
+    reindexAll(); $(document).trigger('cptt:stepsChanged');
   });
 
   $rows.on('click', '.cptt-remove-checkitem', function () {
     $(this).closest('.cptt-checkitem-row').remove();
-    reindexAll();
+    reindexAll(); $(document).trigger('cptt:stepsChanged');
   });
 
   $rows.find('.cptt-checkitems').each(function () {
@@ -104,7 +104,7 @@ jQuery(function ($) {
       items: '.cptt-checkitem-row',
       handle: '.cptt-checkitem-handle',
       axis: 'y',
-      update: function () { reindexAll(); }
+      update: function () { reindexAll(); $(document).trigger('cptt:stepsChanged'); }
     });
     $list.data('sortable', true);
   });
@@ -162,7 +162,7 @@ jQuery(function ($) {
         });
         $rows.append($row);
       });
-      reindexAll();
+      reindexAll(); $(document).trigger('cptt:stepsChanged');
       $rows.sortable('refresh');
       $rows.find('.cptt-checkitems').each(function () {
         const $list = $(this);
@@ -171,7 +171,7 @@ jQuery(function ($) {
           items: '.cptt-checkitem-row',
           handle: '.cptt-checkitem-handle',
           axis: 'y',
-          update: function () { reindexAll(); }
+          update: function () { reindexAll(); $(document).trigger('cptt:stepsChanged'); }
         });
         $list.data('sortable', true);
       });
@@ -204,7 +204,7 @@ jQuery(function ($) {
         $itRow.find('input[type="checkbox"]').prop('checked', false);
         $list.append($itRow);
       });
-      reindexAll();
+      reindexAll(); $(document).trigger('cptt:stepsChanged');
     });
   });
 
@@ -220,12 +220,12 @@ jQuery(function ($) {
       .replaceAll('{{k}}', k)
       .replaceAll('{{tid}}', tid);
     $list.append(html);
-    reindexAll();
+    reindexAll(); $(document).trigger('cptt:stepsChanged');
   });
 
   $rows.on('click', '.cptt-remove-usertask', function () {
     $(this).closest('.cptt-usertask-row').remove();
-    reindexAll();
+    reindexAll(); $(document).trigger('cptt:stepsChanged');
   });
 
   $('#cptt-add-checktpl-row').on('click', function () {
@@ -284,10 +284,16 @@ jQuery(function ($) {
     const g=j2g(viewJ.jy, viewJ.jm, 1);
     const first=new Date(g[0], g[1]-1, g[2]).getDay();
     const start=(first+1)%7;
+    const n=new Date(); const tj=g2j(n.getFullYear(),n.getMonth()+1,n.getDate());
     let html='<div class="cptt-jdp__head"><button type="button" data-nav="prev">‹</button><strong>'+monthNames[viewJ.jm-1]+' '+cpttToFa(viewJ.jy)+'</strong><button type="button" data-nav="next">›</button></div>';
     html+='<div class="cptt-jdp__week"><span>ش</span><span>ی</span><span>د</span><span>س</span><span>چ</span><span>پ</span><span>ج</span></div><div class="cptt-jdp__days">';
     for(let i=0;i<start;i++) html+='<span></span>';
-    for(let d=1; d<=ml; d++) html+='<button type="button" data-day="'+d+'">'+cpttToFa(d)+'</button>';
+    for(let d=1; d<=ml; d++) {
+      let cls='';
+      if (viewJ.jd===d) cls+=' is-selected';
+      if (tj[0]===viewJ.jy && tj[1]===viewJ.jm && tj[2]===d) cls+=' is-today';
+      html+='<button type="button" class="'+cls.trim()+'" data-day="'+d+'">'+cpttToFa(d)+'</button>';
+    }
     html+='</div><div class="cptt-jdp__time"><input type="number" min="0" max="23" value="'+String(viewJ.hh||12).padStart(2,'0')+'"><span>:</span><input type="number" min="0" max="59" value="'+String(viewJ.ii||0).padStart(2,'0')+'"></div><div class="cptt-jdp__foot"><button type="button" data-today="1">امروز</button><button type="button" data-close="1">بستن</button></div>';
     $cal.html(html);
   }
@@ -389,4 +395,113 @@ jQuery(function ($) {
     $card.find('.cptt-step-remain').text('مانده: ' + remain.toLocaleString('fa-IR'));
   });
 
+});
+
+/* ===== Pro UI enhancements: dashboard KPIs + step accordions ===== */
+jQuery(function($){
+  function buildDashboardKpis(){
+    var $dash = $('.cptt-dashboard').first();
+    if (!$dash.length || !$dash.find('#cptt-dash-grid').length) return;
+    var total = $dash.find('.cptt-project-card').length;
+    var completed = $dash.find('.cptt-project-card[data-status="completed"]').length;
+    var inProgress = $dash.find('.cptt-project-card[data-status="in_progress"]').length;
+    var unsettled = $dash.find('.cptt-project-card[data-settled="0"]').length;
+    var html = ''+
+      '<div class="cptt-proKpis">'+
+        '<div class="cptt-proKpi"><span>کل پروژه‌ها</span><strong>'+ total +'</strong></div>'+
+        '<div class="cptt-proKpi"><span>در حال انجام</span><strong>'+ inProgress +'</strong></div>'+
+        '<div class="cptt-proKpi"><span>تکمیل‌شده</span><strong>'+ completed +'</strong></div>'+
+        '<div class="cptt-proKpi"><span>تسویه‌نشده</span><strong>'+ unsettled +'</strong></div>'+
+      '</div>';
+    $dash.find('.cptt-proKpis').remove();
+    $dash.find('.cptt-dashboard__insights').first().before(html);
+  }
+
+  function stepSummaryHtml($row){
+    var $titleInput = $row.find('.cptt-stepCard__title input[type="text"]').first();
+    var title = $.trim($titleInput.val() || '') || 'مرحله بدون عنوان';
+    var statusText = $row.find('.cptt-stepCard__status select option:selected').text() || 'انجام‌نشده';
+    var due = $.trim($row.find('input[name*="[due_at_local]"]').first().val() || '');
+    var checkTotal = $row.find('.cptt-checkitem-row').length;
+    var checkDone = $row.find('.cptt-checkitem-row input[type="checkbox"]:checked').length;
+    var tasks = $row.find('.cptt-usertask-row').length;
+    var meta = [];
+    meta.push(statusText);
+    if (checkTotal) meta.push('چک‌لیست ' + checkDone + '/' + checkTotal);
+    if (tasks) meta.push('تسک مشتری ' + tasks);
+    if (due) meta.push('مهلت ' + due);
+    return ''+
+      '<span class="cptt-stepCard__summaryMain">'+
+        '<strong>'+ $('<div/>').text(title).html() +'</strong>'+
+        '<small>'+ $('<div/>').text(meta.join(' • ')).html() +'</small>'+
+      '</span>'+
+      '<span class="cptt-stepCard__summarySide">'+
+        '<span class="cptt-stepCard__summaryArrow">⌄</span>'+
+      '</span>';
+  }
+
+  function ensureStepAccordion($row){
+    if (!$row || !$row.length) return;
+    var $card = $row.find('.cptt-stepCard').first();
+    if (!$card.length) return;
+    if (!$card.children('.cptt-stepCard__content').length) {
+      var $head = $card.children('.cptt-stepCard__head');
+      var $body = $card.children('.cptt-stepCard__body');
+      $head.add($body).wrapAll('<div class="cptt-stepCard__content"></div>');
+    }
+    if (!$card.children('.cptt-stepCard__summary').length) {
+      $card.prepend('<button type="button" class="cptt-stepCard__summary" aria-expanded="false"></button>');
+    }
+    $card.children('.cptt-stepCard__summary').html(stepSummaryHtml($row));
+  }
+
+  function refreshStepAccordions(){
+    var $stepRows = $('#cptt-steps-rows .cptt-step-row');
+    if (!$stepRows.length) return;
+    $stepRows.each(function(){ ensureStepAccordion($(this)); });
+    if (!$stepRows.filter('.is-open').length) {
+      $stepRows.first().addClass('is-open');
+    }
+    $stepRows.each(function(){
+      var $row = $(this);
+      var $content = $row.find('.cptt-stepCard__content').first();
+      var $summary = $row.find('.cptt-stepCard__summary').first();
+      var open = $row.hasClass('is-open');
+      $content.toggle(open);
+      $summary.attr('aria-expanded', open ? 'true' : 'false');
+    });
+  }
+
+  $(document).on('click', '.cptt-stepCard__summary', function(){
+    var $row = $(this).closest('.cptt-step-row');
+    var isOpen = $row.hasClass('is-open');
+    $('#cptt-steps-rows .cptt-step-row').removeClass('is-open').find('.cptt-stepCard__content').slideUp(140);
+    $('#cptt-steps-rows .cptt-stepCard__summary').attr('aria-expanded', 'false');
+    if (!isOpen) {
+      $row.addClass('is-open');
+      $row.find('.cptt-stepCard__content').first().slideDown(140);
+      $(this).attr('aria-expanded', 'true');
+    }
+  });
+
+  $(document).on('input change', '#cptt-steps-rows .cptt-stepCard input, #cptt-steps-rows .cptt-stepCard select, #cptt-steps-rows .cptt-stepCard textarea', function(){
+    var $row = $(this).closest('.cptt-step-row');
+    var $summary = $row.find('.cptt-stepCard__summary').first();
+    if ($summary.length) $summary.html(stepSummaryHtml($row));
+  });
+
+  var refreshTimer = null;
+  function scheduleRefresh(){
+    window.clearTimeout(refreshTimer);
+    refreshTimer = window.setTimeout(function(){
+      buildDashboardKpis();
+      refreshStepAccordions();
+    }, 80);
+  }
+
+  $(document).on('click', '#cptt-add-step, .cptt-remove-step, .cptt-add-checkitem, .cptt-remove-checkitem, .cptt-add-usertask, .cptt-remove-usertask, .cptt-apply-checktpl, #cptt_apply_template_btn', scheduleRefresh);
+  $(document).on('cptt:stepsChanged', scheduleRefresh);
+
+  buildDashboardKpis();
+  refreshStepAccordions();
 });
