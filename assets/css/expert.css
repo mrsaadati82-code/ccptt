@@ -79,6 +79,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	top: 50px;
 	display: grid;
 	gap: 14px;
+    z-index: 1000;
 }
 
 @media (max-width: 980px) {
@@ -1667,10 +1668,10 @@ body.cptt-expert-dashboard-page #wpadminbar {
 .cptt-newProjectModal__close {
 	background: #f1f5f9;
 	border: 0;
-	width: 44px;
-	height: 44px;
+	width: 48px;
+	height: 48px;
 	border-radius: 50%;
-	font-size: 24px;
+	font-size: 28px;
 	color: #64748b;
 	cursor: pointer;
 	transition: all 0.15s ease;
@@ -1983,11 +1984,11 @@ body.cptt-expert-dashboard-page #wpadminbar {
 .cptt-expert-card-item img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; }
 .cptt-expert-card-item span { font-size: 13px; color: #1d2327; }
 
-.cptt-notification-bell { position: relative; margin-bottom: 20px; z-index: 100; }
+.cptt-notification-bell { position: relative; margin-bottom: 20px; z-index: 1000000 !important; }
 .cptt-bell-btn { background: #fff; border: 1px solid #ddd; border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; color: #555; transition: 0.2s; }
 .cptt-bell-btn:hover { border-color: #2271b1; color: #2271b1; }
 .cptt-bell-badge { position: absolute; top: -5px; right: -5px; background: #d63638; color: #fff; font-size: 11px; font-weight: bold; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
-.cptt-notifications-dropdown { position: absolute; top: 54px; right: 0; width: 320px; background: #fff; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); max-height: 400px; display: flex; flex-direction: column; overflow: hidden; }
+.cptt-notifications-dropdown { position: absolute; top: 54px; right: 0; width: 320px; background: #fff; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); max-height: 400px; display: flex; flex-direction: column; overflow: hidden; z-index: 100000000 !important; }
 .cptt-notifications-dropdown[hidden] { display: none !important; }
 .cptt-notifications-header { padding: 12px 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; background: #fafafa; }
 .cptt-notifications-list { overflow-y: auto; flex: 1; }
@@ -2094,6 +2095,16 @@ body.cptt-dark .cptt-hubModal__dialog,
 body.cptt-dark .cptt-expertBadge,
 body.cptt-dark .cptt-kanban__col,
 body.cptt-dark .cptt-kanban__card { background: #1e293b; border-color: #334155; color: #e2e8f0; }
+
+/* Improved separation in Dark Mode */
+body.cptt-dark .cptt-expertCard,
+body.cptt-dark .cptt-sideBox,
+body.cptt-dark .cptt-kpiCard,
+body.cptt-dark .cptt-insightBox {
+    background: #242f42 !important;
+    border-color: #3d4b61 !important;
+}
+
 body.cptt-dark .cptt-proHero--expert { background: linear-gradient(135deg,#312e81,#4c1d95,#be185d); }
 body.cptt-dark .cptt-expertProfile strong,
 body.cptt-dark .cptt-expertCard__top h3,
@@ -2143,7 +2154,7 @@ body.cptt-dark .cptt-dashboard__empty,
 body.cptt-dark .cptt-expert-emptyMini { background: #1e293b; border-color: #334155; color: #94a3b8; }
 body.cptt-dark .cptt-chat-bubble { background: #1e293b; border-color: #334155; color: #e2e8f0; }
 body.cptt-dark .cptt-chat-bubble__body { color: #e2e8f0; }
-body.cptt-dark .cptt-newProjectModal__header { background: #1e293b; border-bottom: 1px solid #334155; color: #f8fafc; }
+body.cptt-dark .cptt-newProjectModal__header { background: #0f172a; border-bottom: 1px solid #334155; color: #f8fafc; }
 body.cptt-dark .cptt-hubChecklist li { background: #1e293b; border-color: #334155; }
 body.cptt-dark .cptt-hubChecklist li.is-done { background: #064e3b; border-color: #065f46; }
 body.cptt-dark .cptt-hubModal__stats div,
@@ -2244,7 +2255,7 @@ body.cptt-dark .cptt-sideList li {
 
 /* Fix Bell Index */
 .cptt-notification-bell {
-    z-index: 999999;
+    z-index: 10000000 !important;
 }
 
 /* File UI for Chat input */
@@ -2368,7 +2379,7 @@ body.cptt-dark .cptt-mobile-menu__dialog {
     color: #e2e8f0;
 }
 body.cptt-dark .cptt-mobile-menu__header {
-    background: #1e293b;
+    background: transparent !important;
     border-bottom: 1px solid #334155;
 }
 body.cptt-dark .cptt-newProjectModal__subtitle {
@@ -2770,13 +2781,13 @@ body.cptt-dark .cptt-sideBox__title span { color: #f8fafc !important; }
 }
 
 .cptt-all-notifs-modal {
-    z-index: 9999999 !important;
+    z-index: 1000000000 !important;
 }
 .cptt-all-notifs-modal__backdrop {
-    z-index: 9999998 !important;
+    z-index: 999999998 !important;
 }
 .cptt-all-notifs-modal__dialog {
-    z-index: 9999999 !important;
+    z-index: 999999999 !important;
 }
 
 /* Dark mode fixes for mobile form fields and borders */
@@ -2801,8 +2812,153 @@ body.cptt-dark .cptt-createProjectCheck label {
 
 /* Fix mobile modal layering */
 .cptt-experts-mobile-modal {
-    z-index: 9999999 !important;
+    z-index: 99999999 !important;
 }
 .cptt-direct-chat-modal {
+    z-index: 99999999 !important;
+}
+
+/* ---------------------------------------------------------------------
+   Additional specific fixes for mobile fields & dark mode (Items 3 & 4)
+   --------------------------------------------------------------------- */
+
+/* Mobile Field Widths & Responsiveness */
+@media (max-width: 600px) {
+    .cptt-createProjectGrid input, 
+    .cptt-createProjectGrid select, 
+    .cptt-createProjectGrid textarea,
+    .cptt-expert-step__metaGrid input,
+    .cptt-expert-step__metaGrid select {
+        font-size: 14px !important;
+        padding: 10px !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    
+    .cptt-expert-checklist, .cptt-expert-userTasks {
+        padding: 10px !important;
+        margin: 5px 0 !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    .cptt-expert-step__body {
+        padding: 10px !important;
+        overflow-x: hidden !important;
+    }
+
+    .cptt-expert-step__metaGrid {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 8px !important;
+    }
+
+    .cptt-expert-checkRow {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 6px !important;
+    }
+    
+    .cptt-expert-checkRow input {
+        width: 100% !important;
+    }
+
+    .cptt-expert-userTaskRow__fields {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 8px !important;
+    }
+    
+    .cptt-expert-userTask {
+        padding: 8px !important;
+    }
+}
+
+/* Settled Box Dark Mode Improvement */
+body.cptt-dark .cptt-createProjectCheck {
+    background: #4a5568 !important;
+    border-color: #718096 !important;
+}
+body.cptt-dark .cptt-createProjectCheck label, 
+body.cptt-dark .cptt-createProjectCheck span {
+    color: #ffffff !important;
+}
+
+/* Checklist and User Tasks Dark Mode */
+body.cptt-dark .cptt-expert-checklist {
+    background: linear-gradient(180deg, #1a365d, #171923) !important;
+    border-color: #2b6cb0 !important;
+}
+body.cptt-dark .cptt-expert-userTasks {
+    background: linear-gradient(180deg, #744210, #171923) !important;
+    border-color: #975a16 !important;
+}
+
+/* Reordering Handle Icon */
+.cptt-step-reorder-handle {
+    cursor: grab;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 5px;
+    color: #a0aec0;
+    font-size: 18px;
+    margin-left: 8px;
+}
+.cptt-step-reorder-handle:active { cursor: grabbing; }
+
+body.cptt-dark .cptt-step-reorder-handle {
+    color: #f7fafc !important;
+}
+
+/* Profile Image Sizes */
+.cptt-expertProfile img {
+    width: 65px !important;
+    height: 65px !important;
+}
+
+.cptt-mobile-menu .cptt-expertProfile img {
+    width: 60px !important;
+    height: 60px !important;
+}
+
+/* Force dropdown visibility */
+.cptt-notification-bell {
+    position: relative !important;
     z-index: 9999999 !important;
+}
+.cptt-notifications-dropdown {
+    z-index: 100000000 !important;
+}
+
+/* FIX: Ensure manage form inputs don't overflow */
+.cptt-expert-project-form input, 
+.cptt-expert-project-form select, 
+.cptt-expert-project-form textarea {
+    max-width: 100% !important;
+}
+
+/* Fix stages overflow on small devices */
+.cptt-expert-steps {
+    overflow-x: hidden;
+}
+
+.cptt-expert-step__toggle {
+    width: 100% !important;
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    box-sizing: border-box !important;
+}
+
+@media (max-width: 480px) {
+    .cptt-expert-step__toggleMain strong {
+        font-size: 12px !important;
+    }
+    .cptt-expert-status {
+        padding: 4px 6px !important;
+        font-size: 9px !important;
+    }
 }

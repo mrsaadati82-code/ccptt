@@ -31,12 +31,9 @@
       }
       if (list && data.html) {
         list.innerHTML = data.html;
-        
       }
     }).catch(function(e){ /* silently ignore polling errors */ });
   }
-
-  
 
   /* =========================================================
      DARK MODE
@@ -63,7 +60,7 @@
   }
 
   /* =========================================================
-     JALALI DATE PICKER (FIXED)
+     JALALI DATE PICKER
      ========================================================= */
   function initJalaliPicker() {
     function toFa(str) { return String(str || '').replace(/[0-9]/g, function (d) { return '۰۱۲۳۴۵۶۷۸۹'[d]; }); }
@@ -146,7 +143,6 @@
     });
     cal.addEventListener('click', function (e) {
       e.stopPropagation();
-      // FIX: e.target may be a text node inside button (e.g., ‹ ›)
       var target = (e.target.nodeType === 3) ? e.target.parentElement : e.target;
       var nav = target.closest ? target.closest('[data-nav]') : null;
       if (nav) { 
@@ -167,7 +163,7 @@
   }
 
   /* =========================================================
-     1. FILTERS - main project grid
+     UTILITIES & UI
      ========================================================= */
 
   function initRealtimeClock() {
@@ -181,7 +177,6 @@
   }
 
   function initMobileUI() {
-
       var mobileBell = qs('.cptt-mobile-bell-btn');
       if (mobileBell) {
           mobileBell.addEventListener('click', function(e) {
@@ -226,18 +221,123 @@
       }
   }
 
+  /* =========================================================
+     STAGE NUMBERING & REORDERING
+     ========================================================= */
+  function refreshStepNumbers(container) {
+    if (!container) return;
+    var steps = qsa('.cptt-expert-step', container);
+    steps.forEach(function (step, index) {
+      var num = index + 1;
+      var titleStrong = qs('.cptt-expert-step__toggleMain strong', step);
+      if (titleStrong) {
+        var currentTitle = titleStrong.textContent.replace(/^\d+\.\s*/, '');
+        titleStrong.textContent = num + '. ' + currentTitle;
+      }
+    });
+  }
+
+  function initStepReordering() {
+    document.addEventListener('dragstart', function(e) {
+      var handle = e.target.closest('.cptt-step-reorder-handle');
+      if (!handle) return;
+      var step = handle.closest('.cptt-expert-step');
+      if (step) {
+        step.classList.add('is-dragging-step');
+        e.dataTransfer.setData('text/plain', '');
+      } else {
+          e.preventDefault();
+      }
+    });
+    document.addEventListener('dragend', function(e) {
+      var step = e.target.closest('.cptt-expert-step');
+      if (step) step.classList.remove('is-dragging-step');
+    });
+    document.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      var container = e.target.closest('.cptt-expert-steps');
+      if (!container) return;
+      var dragging = qs('.is-dragging-step');
+      if (!dragging) return;
+      var afterElement = getDragAfterElement(container, e.clientY);
+      if (afterElement == null) {
+        container.appendChild(dragging);
+      } else {
+        container.insertBefore(dragging, afterElement);
+      }
+    });
+    document.addEventListener('drop', function(e) {
+      var container = e.target.closest('.cptt-expert-steps');
+      if (container) refreshStepNumbers(container);
+    });
+
+    function getDragAfterElement(container, y) {
+      var draggableElements = qsa('.cptt-expert-step:not(.is-dragging-step)', container);
+      return draggableElements.reduce(function(closest, child) {
+        var box = child.getBoundingClientRect();
+        var offset = y - box.top - box.height / 2;
+        if (offset < 0 && offset > closest.offset) {
+          return { offset: offset, element: child };
+        } else {
+          return closest;
+        }
+      }, { offset: Number.NEGATIVE_INFINITY }).element;
+    }
+  }
+
+  /* =========================================================
+     HASH ACTION HANDLER
+     ========================================================= */
   function parseHashAction() {
       var hash = window.location.hash;
-      if (hash.startsWith('#chat-')) {
-          var pid = hash.replace('#chat-', '');
-          var btn = qs('.cptt-expertCard[data-project-id="'+pid+'"] .cptt-expert-chat-launch');
-          if (btn) setTimeout(function(){ btn.click(); }, 500);
+      if (!hash) return;
+      
+      var pid = '';
+      var openChat = false;
+      var openDirect = false;
+      var expertId = '';
+
+      if (hash.startsWith('#project-')) {
+          pid = hash.replace('#project-', '').split('#')[0];
+          if (hash.indexOf('#chat-') > -1) openChat = true;
+      } else if (hash.startsWith('#chat-')) {
+          pid = hash.replace('#chat-', '');
+          openChat = true;
       } else if (hash.startsWith('#directchat-')) {
-          var uid = hash.replace('#directchat-', '');
-          var expertItem = qs('.cptt-expert-list-item[data-expert-id="'+uid+'"]');
+          expertId = hash.replace('#directchat-', '');
+          openDirect = true;
+      }
+
+      if (pid) {
+          var card = null;
+          qsa('.cptt-expertCard').forEach(function(c) {
+             var f = qs('form[data-project-id="'+pid+'"]', c);
+             if (f || c.getAttribute('data-project-id') === pid) card = c;
+          });
+          
+          if (card) {
+              var btn = qs('.cptt-expert-toggleProject', card);
+              if (btn) {
+                  setTimeout(function(){ 
+                      btn.click(); 
+                      if (openChat) {
+                          setTimeout(function() {
+                              var chatBtn = qs('.cptt-expert-chat-launch', card);
+                              if (chatBtn) chatBtn.click();
+                          }, 600);
+                      }
+                  }, 500);
+              }
+          }
+      } else if (openDirect && expertId) {
+          var expertItem = qs('.cptt-expert-list-item[data-expert-id="'+expertId+'"]');
           if (expertItem) setTimeout(function(){ expertItem.click(); }, 500);
       }
   }
+
+  /* =========================================================
+     FILTERS
+     ========================================================= */
 
   function updateVisibility() {
     var search = (qs('#cptt-expert-search') || {}).value ? qs('#cptt-expert-search').value.toLowerCase().trim() : '';
@@ -269,9 +369,6 @@
     if (empty) empty.hidden = visible !== 0;
   }
 
-  /* =========================================================
-     2. PROJECT MANAGEMENT TOGGLE
-     ========================================================= */
   function bindProjectToggles() {
     qsa('.cptt-expert-toggleProject').forEach(function (btn) {
       if (btn.dataset.bound) return;
@@ -295,14 +392,12 @@
           btn.textContent = 'بستن مدیریت';
           setTimeout(function () { card.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
           bindStepAccordions(card);
+          refreshStepNumbers(qs('.cptt-expert-steps', card));
         }
       });
     });
   }
 
-  /* =========================================================
-     3. STEPS ACCORDION
-     ========================================================= */
   function bindStepAccordions(scope) {
     qsa('.cptt-expert-step', scope || document).forEach(function (step) {
       var toggle = qs('.cptt-expert-step__toggle', step);
@@ -314,6 +409,7 @@
       if (isExpanded) { step.classList.add('is-open'); body.hidden = false; }
       else { step.classList.remove('is-open'); body.hidden = true; }
       toggle.addEventListener('click', function (e) {
+        if (e.target.closest('.cptt-step-reorder-handle')) return;
         e.preventDefault(); e.stopPropagation();
         var stepsContainer = step.parentElement;
         var willOpen = body.hidden;
@@ -333,9 +429,6 @@
     });
   }
 
-  /* =========================================================
-     4. SUMMARY APPLY after save
-     ========================================================= */
   function applySummary(card, data) {
     if (!card || !data || !data.progress) return;
     var bar = qs('.cptt-expertCard__progress span', card);
@@ -351,9 +444,6 @@
     if (stat[0]) stat[0].textContent = (data.progress.percent || 0) + '%';
   }
 
-  /* =========================================================
-     5. CREATE PROJECT FORM
-     ========================================================= */
   function bindCreateForm() {
     qsa('.cptt-expert-create-form').forEach(function (form) {
       if (form.dataset.bound) return;
@@ -385,9 +475,6 @@
     });
   }
 
-  /* =========================================================
-     6. SAVE PROJECT FORM
-     ========================================================= */
   function bindSaveForms() {
     qsa('.cptt-expert-project-form').forEach(function (form) {
       if (form.dataset.bound) return;
@@ -423,9 +510,6 @@
     });
   }
 
-  /* =========================================================
-     7. CHAT BETWEEN EXPERTS (PROJECT) — BUBBLES + FILE VIEW
-     ========================================================= */
   function renderMessages(items, container, myUserId) {
     if (!Array.isArray(items) || !items.length) {
       container.innerHTML = '<div class="cptt-expert-emptyMini">پیامی ثبت نشده است.</div>';
@@ -453,7 +537,6 @@
     container.scrollTop = container.scrollHeight;
   }
 
-  
   const emojis = ['👍','✅','😊','🙏','👏','❤️','💡','🚀','👀','⚠️'];
   
   function bindChatEnhancements(form) {
@@ -496,7 +579,6 @@
         }
       });
       
-      // Clean up on form reset manually handled by send function
       form.addEventListener('cptt-chat-sent', function() {
         fileInput.value = '';
         previewWrap.innerHTML = '';
@@ -525,7 +607,7 @@
           if (msg) msg.textContent = 'پیام ارسال شد.';
           var ta = qs('textarea[name="content"]', form); if (ta) ta.value = ''; form.dispatchEvent(new Event('cptt-chat-sent'));
           var wrap = form.parentElement.querySelector('.cptt-expert-messagesWrap');
-          var myId = (window.CPTT_EXPERT && CPTT_EXPERT.wpUserId) ? CPTT_EXPERT.wpUserId : 0; // try to infer; fallback works with CSS
+          var myId = (window.CPTT_EXPERT && CPTT_EXPERT.wpUserId) ? CPTT_EXPERT.wpUserId : 0;
           if (wrap) renderMessages((json.data && json.data.messages) || [], wrap, myId);
         } catch (err) {
           if (msg) msg.textContent = err.message || 'خطا در ارسال پیام';
@@ -568,9 +650,6 @@
     });
   }
 
-  /* =========================================================
-     8. DIRECT CHAT — BUBBLES + FILE VIEW
-     ========================================================= */
   function renderDirectMessages(items, myUserId) {
     var wrap = qs('#direct-chat-messages-container');
     if (!wrap) return;
@@ -599,9 +678,6 @@
     wrap.scrollTop = wrap.scrollHeight;
   }
 
-  /* =========================================================
-     9. NEW PROJECT MODAL
-     ========================================================= */
   function bindNewProjectModal() {
     var modal = qs('#cptt-new-project-modal');
     if (!modal) return;
@@ -624,9 +700,6 @@
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && modal.classList.contains('is-open')) close(); });
   }
 
-  /* =========================================================
-     10. DELETE PROJECT / DELETE STEP
-     ========================================================= */
   function bindDeleteActions() {
     document.addEventListener('click', async function (e) {
       var btn = e.target.closest('.cptt-expert-delete-project');
@@ -656,8 +729,9 @@
         if (!stepEl) return;
         var stepId = stepEl.getAttribute('data-step-id');
         var form = sbtn.closest('.cptt-expert-project-form');
+        var container = stepEl.parentElement;
         var projectId = form ? form.getAttribute('data-project-id') : '';
-        if (projectId && stepId && confirm('این مرحله حذف شود؟')) {
+        if (projectId && stepId && stepId.indexOf('step_') === -1 && confirm('این مرحله حذف شود؟')) {
           try {
             var fd2 = new FormData();
             fd2.append('action', 'cptt_expert_delete_step');
@@ -666,19 +740,17 @@
             fd2.append('step_id', stepId);
             var res2 = await fetch((window.CPTT_EXPERT && CPTT_EXPERT.ajax) ? CPTT_EXPERT.ajax : '', { method: 'POST', credentials: 'same-origin', body: fd2 });
             var json2 = await res2.json();
-            if (json2 && json2.success) { stepEl.remove(); }
+            if (json2 && json2.success) { stepEl.remove(); if (container) refreshStepNumbers(container); }
             else { alert((json2 && json2.data) ? json2.data : 'خطا در حذف مرحله'); }
           } catch (err) { alert('خطا در ارتباط'); }
         } else {
           stepEl.remove();
+          if (container) refreshStepNumbers(container);
         }
       }
     });
   }
 
-  /* =========================================================
-     11. KANBAN BOARD
-     ========================================================= */
   function initKanban() {
     var dataEl = qs('#cptt-kanban-data');
     if (!dataEl) return;
@@ -730,9 +802,7 @@
           var newStatus = zone.closest('.cptt-kanban__col').getAttribute('data-status');
           var stepId = dragCard.getAttribute('data-step-id');
           var projectId = dragCard.getAttribute('data-project-id');
-          // update data model
           steps.forEach(function (s) { if (s.step_id === stepId) s.status = newStatus; });
-          // persist via quick AJAX
           try {
             var fd = new FormData();
             fd.append('action', 'cptt_expert_save_project');
@@ -759,175 +829,7 @@
   }
 
   /* =========================================================
-     12. HUB (public showcase)
-     ========================================================= */
-  function decodeB64Json(b64) {
-    try {
-      var bin = atob(String(b64 || ''));
-      var bytes = Uint8Array.from(bin, function (c) { return c.charCodeAt(0); });
-      var txt = window.TextDecoder ? new TextDecoder('utf-8').decode(bytes) : decodeURIComponent(escape(bin));
-      return JSON.parse(txt);
-    } catch (e) { return null; }
-  }
-
-  function hubModal() { return qs('#cptt-hub-modal'); }
-  function closeHubModal() { var modal = hubModal(); if (!modal) return; modal.hidden = true; }
-  function openHubModal(title, metaHtml, bodyHtml) {
-    var modal = hubModal();
-    if (!modal) return;
-    var titleEl = qs('#cptt-hub-modal-title', modal);
-    var metaEl = qs('#cptt-hub-modal-meta', modal);
-    var bodyEl = qs('#cptt-hub-modal-body', modal);
-    if (titleEl) titleEl.textContent = title || '';
-    if (metaEl) metaEl.innerHTML = metaHtml || '';
-    if (bodyEl) bodyEl.innerHTML = bodyHtml || '';
-    modal.hidden = false;
-  }
-
-  function renderHubProject(project) {
-    if (!project) return;
-    var chips = [];
-    if (project.start_fa) chips.push('<span class="cptt-hubMetaChip">تاریخ شروع: ' + escapeHtml(project.start_fa) + '</span>');
-    if (project.last_update) chips.push('<span class="cptt-hubMetaChip">آخرین بروزرسانی: ' + escapeHtml(project.last_update) + '</span>');
-    if (project.deadline) chips.push('<span class="cptt-hubMetaChip">مهلت: ' + escapeHtml(project.deadline) + '</span>');
-    if (Array.isArray(project.experts) && project.experts.length) chips.push('<span class="cptt-hubMetaChip">کارشناسان: ' + escapeHtml(project.experts.join('، ')) + '</span>');
-    if (project.full_details && project.customer) chips.push('<span class="cptt-hubMetaChip">مشتری: ' + escapeHtml(project.customer) + '</span>');
-    var body = '<div class="cptt-hubModal__stats">' +
-      '<div><strong>' + escapeHtml(String((project.progress && project.progress.percent) || 0)) + '%</strong><span>پیشرفت پروژه</span></div>' +
-      '<div><strong>' + escapeHtml(String((project.progress && project.progress.done) || 0)) + '/' + escapeHtml(String((project.progress && project.progress.total) || 0)) + '</strong><span>مراحل تکمیل‌شده</span></div>' +
-      '<div><strong>' + escapeHtml(String(project.checklist_done || 0)) + '/' + escapeHtml(String(project.checklist_total || 0)) + '</strong><span>چک‌لیست</span></div>' +
-      '<div><strong>' + escapeHtml(String(project.user_tasks_done || 0)) + '/' + escapeHtml(String(project.user_tasks_total || 0)) + '</strong><span>تسک مشتری</span></div>' +
-      '</div>';
-    if (project.full_details) {
-      body += '<div class="cptt-hubModal__detailsGrid">' +
-        '<div><span>وضعیت پروژه</span><strong>' + escapeHtml((project.progress && project.progress.label) || '—') + '</strong></div>' +
-        '<div><span>تعداد مراحل</span><strong>' + escapeHtml(String((project.progress && project.progress.total) || 0)) + '</strong></div>' +
-        '<div><span>محصول</span><strong>' + escapeHtml(project.product || '—') + '</strong></div>' +
-        '<div><span>دسته‌بندی</span><strong>' + escapeHtml(Array.isArray(project.categories) && project.categories.length ? project.categories.join('، ') : '—') + '</strong></div>' +
-        '<div><span>وضعیت مالی</span><strong>' + escapeHtml(project.settled ? 'تسویه شده' : 'تسویه نشده') + '</strong></div>' +
-        '<div><span>هزینه کل</span><strong>' + escapeHtml(String((project.financial && project.financial.cost) || 0)) + '</strong></div>' +
-        '<div><span>دریافتی</span><strong>' + escapeHtml(String((project.financial && project.financial.paid) || 0)) + '</strong></div>' +
-        '<div><span>مانده</span><strong>' + escapeHtml(String((project.financial && project.financial.remain) || 0)) + '</strong></div>' +
-        '</div>';
-    }
-    if (Array.isArray(project.steps) && project.steps.length) {
-      body += '<div class="cptt-hubSteps">';
-      project.steps.forEach(function (step) {
-        if (!step) return;
-        body += '<section class="cptt-hubStep cptt-hubStep--' + escapeHtml(step.status || 'todo') + '">';
-        body += '<div class="cptt-hubStep__head"><strong>' + escapeHtml((step.index || '') + '. ' + (step.title || '')) + '</strong><span class="cptt-step__badge cptt-step__badge--' + escapeHtml(step.status || 'todo') + '">' + escapeHtml(step.label || '') + '</span></div>';
-        if (step.due_fa) body += '<div class="cptt-hubStep__meta">مهلت مرحله: ' + escapeHtml(step.due_fa) + '</div>';
-        if (step.desc) body += '<div class="cptt-hubStep__desc">' + escapeHtml(step.desc) + '</div>';
-        body += '<div class="cptt-hubStep__summary">' +
-          '<span>چک‌لیست: ' + escapeHtml(String(step.checklist_done || 0)) + '/' + escapeHtml(String(step.checklist_total || 0)) + '</span>' +
-          '<span>تسک مشتری: ' + escapeHtml(String(step.user_tasks_done || 0)) + '/' + escapeHtml(String(step.user_tasks_total || 0)) + '</span>' +
-          '</div>';
-        if (Array.isArray(step.checklist_items) && step.checklist_items.length) {
-          body += '<ul class="cptt-hubChecklist">';
-          step.checklist_items.forEach(function (item) {
-            if (!item) return;
-            body += '<li class="' + (item.done ? 'is-done' : '') + '"><span>' + escapeHtml(item.text || '') + '</span>';
-            if (item.done && item.url) body += '<a href="' + escapeHtml(item.url) + '" target="_blank" rel="noopener noreferrer">لینک</a>';
-            body += '</li>';
-          });
-          body += '</ul>';
-        }
-        body += '</section>';
-      });
-      body += '</div>';
-    } else { body += '<div class="cptt-empty">برای این پروژه مرحله‌ای ثبت نشده است.</div>'; }
-    openHubModal(project.title || '', chips.join(''), body);
-  }
-
-  function renderHubExpert(expert) {
-    if (!expert) return;
-    var chips = [];
-    if (expert.title) chips.push('<span class="cptt-hubMetaChip">' + escapeHtml(expert.title) + '</span>');
-    chips.push('<span class="cptt-hubMetaChip">پروژه فعال: ' + escapeHtml(String(expert.active_projects || 0)) + '</span>');
-    chips.push('<span class="cptt-hubMetaChip">پروژه تکمیل‌شده: ' + escapeHtml(String(expert.completed_projects || 0)) + '</span>');
-    var body = '<div class="cptt-expertModalProfile">';
-    if (expert.avatar) body += '<img src="' + escapeHtml(expert.avatar) + '" alt="' + escapeHtml(expert.name || '') + '">';
-    body += '<div class="cptt-expertModalProfile__info"><h3>' + escapeHtml(expert.name || '') + '</h3>';
-    if (expert.bio) body += '<p>' + escapeHtml(expert.bio) + '</p>';
-    body += '</div></div>';
-    if (Array.isArray(expert.specialties) && expert.specialties.length) {
-      body += '<div class="cptt-hubSectionTitle">تخصص‌ها</div><div class="cptt-expertModalTags">';
-      expert.specialties.forEach(function (tag) { body += '<span>' + escapeHtml(tag) + '</span>'; });
-      body += '</div>';
-    }
-    openHubModal(expert.name || '', chips.join(''), body);
-  }
-
-  function bindHubModals() {
-    qsa('.cptt-publicProject__open').forEach(function (btn) {
-      if (btn.dataset.bound) return;
-      btn.dataset.bound = '1';
-      btn.addEventListener('click', function () { renderHubProject(decodeB64Json(btn.getAttribute('data-project'))); });
-    });
-    qsa('.cptt-expertBadge').forEach(function (btn) {
-      if (btn.dataset.bound) return;
-      btn.dataset.bound = '1';
-      btn.addEventListener('click', function () { renderHubExpert(decodeB64Json(btn.getAttribute('data-expert'))); });
-    });
-    var modal = hubModal();
-    if (!modal || modal.dataset.bound) return;
-    modal.dataset.bound = '1';
-    var closeBtn = qs('.cptt-hubModal__close', modal);
-    var backdrop = qs('.cptt-hubModal__backdrop', modal);
-    if (closeBtn) closeBtn.addEventListener('click', closeHubModal);
-    if (backdrop) backdrop.addEventListener('click', closeHubModal);
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeHubModal(); });
-  }
-
-  function updateHubVisibility() {
-    var search = ((qs('#cptt-hub-search') || {}).value || '').toLowerCase().trim();
-    var expert = ((qs('#cptt-hub-expert') || {}).value || '');
-    var product = ((qs('#cptt-hub-product') || {}).value || '');
-    var cat = ((qs('#cptt-hub-cat') || {}).value || '');
-    var deadline = ((qs('#cptt-hub-deadline') || {}).value || '');
-    var visible = 0;
-    qsa('.cptt-publicProject').forEach(function (card) {
-      var ok = true;
-      var dataSearch = String(card.getAttribute('data-search') || '').toLowerCase();
-      var dataExperts = String(card.getAttribute('data-experts') || '');
-      var dataProduct = String(card.getAttribute('data-product') || '');
-      var dataCats = String(card.getAttribute('data-cats') || '');
-      var dataDeadline = String(card.getAttribute('data-deadline') || '');
-      if (search && dataSearch.indexOf(search) === -1) ok = false;
-      if (expert && dataExperts.indexOf(',' + expert + ',') === -1) ok = false;
-      if (product && dataProduct !== product) ok = false;
-      if (cat && dataCats.indexOf(',' + cat + ',') === -1) ok = false;
-      if (deadline && dataDeadline !== deadline) ok = false;
-      card.hidden = !ok;
-      card.style.display = ok ? '' : 'none';
-      if (ok) visible++;
-    });
-    var count = qs('#cptt-hub-count');
-    if (count) count.textContent = String(visible);
-    var empty = qs('#cptt-hub-empty');
-    if (empty) empty.hidden = visible !== 0;
-  }
-
-  function bindHubFilters() {
-    var fields = ['#cptt-hub-search', '#cptt-hub-expert', '#cptt-hub-product', '#cptt-hub-cat', '#cptt-hub-deadline'];
-    fields.forEach(function (sel) {
-      var el = qs(sel);
-      if (!el) return;
-      el.addEventListener('input', updateHubVisibility);
-      el.addEventListener('change', updateHubVisibility);
-    });
-    var reset = qs('#cptt-hub-reset');
-    if (reset && !reset.dataset.bound) {
-      reset.dataset.bound = '1';
-      reset.addEventListener('click', function () {
-        fields.forEach(function (sel) { var el = qs(sel); if (el) el.value = ''; });
-        updateHubVisibility();
-      });
-    }
-  }
-
-  /* =========================================================
-     13. INITIALIZE
+     INITIALIZE
      ========================================================= */
   document.addEventListener('DOMContentLoaded', function () {
     var search = qs('#cptt-expert-search');
@@ -960,9 +862,8 @@
     bindMessageForms();
     bindChatModals();
     bindNewProjectModal();
-    bindHubModals();
-    bindHubFilters();
     bindDeleteActions();
+    initStepReordering();
     
     initJalaliPicker();
     initRealtimeClock();
@@ -971,13 +872,9 @@
     initDarkMode();
     initKanban();
     updateVisibility();
-    updateHubVisibility();
     setInterval(pollNotifications, 30000);
   });
 
-  /* =========================================================
-     14. MOBILE + DIRECT CHAT (second DOMContentLoaded block merged)
-     ========================================================= */
   document.addEventListener('DOMContentLoaded', function() {
     var qs2 = function(s, ctx) { return (ctx || document).querySelector(s); };
     var qsa2 = function(s, ctx) { return Array.from((ctx || document).querySelectorAll(s)); };
@@ -985,7 +882,6 @@
     var openExpertsBtn = qs2('.cptt-open-experts-modal-btn');
     var expertsModal = qs2('.cptt-experts-mobile-modal');
     if (openExpertsBtn && expertsModal) {
-      
       qsa2('.cptt-open-experts-modal-btn').forEach(btn => btn.addEventListener('click', function() { 
           expertsModal.removeAttribute('hidden'); 
           var menu = document.querySelector('.cptt-mobile-menu');
@@ -1070,7 +966,6 @@
     }
   });
 
-  // Currency formatter
   document.addEventListener('keyup', function(e) {
     if (e.target && e.target.classList.contains('cptt-currency-input')) {
       var val = e.target.value.replace(/[^\d]/g, '');
@@ -1135,14 +1030,15 @@
     function randId(prefix) { return prefix + '_' + Math.floor(Math.random()*10000); }
     document.addEventListener('click', function(e) {
       if (e.target.classList.contains('cptt-expert-add-step')) {
+        var card = e.target.closest('.cptt-expertCard');
+        var container = qs('.cptt-expert-steps', card);
+        if (!container) return;
         var stepId = randId('step');
-        var idx = document.querySelectorAll('.cptt-expert-step').length + 1;
-        var html = '<div class="cptt-expert-step is-open" data-step-id="'+stepId+'"><button type="button" class="cptt-expert-step__toggle" aria-expanded="true"><div class="cptt-expert-step__toggleMain"><strong>' + idx + '. مرحله جدید</strong><span>چک‌لیست: 0/0</span></div><div class="cptt-expert-step__toggleSide"><span class="cptt-expert-status cptt-expert-status--todo">انجام‌نشده</span><span class="cptt-expert-step__chevron">⌄</span></div></button><div class="cptt-expert-step__body"><div class="cptt-expert-step__metaGrid"><label><span>عنوان مرحله</span><input type="text" name="steps['+stepId+'][title]" value="مرحله جدید"></label><label><span>وضعیت مرحله</span><select name="steps['+stepId+'][status]"><option value="todo">انجام‌نشده</option><option value="current">در حال انجام</option><option value="done">انجام‌شده</option></select></label><label><span>مهلت مرحله</span><input type="text" class="cptt-jalali-datetime" name="steps['+stepId+'][due_at_local]" value=""></label></div><div class="cptt-expert-step__metaGrid"><label><span>توضیحات (اختیاری)</span><textarea name="steps['+stepId+'][desc]" rows="2"></textarea></label></div><div class="cptt-expert-step__metaGrid"><label><span>هزینه مرحله</span><input type="text" class="cptt-currency-input" name="steps['+stepId+'][cost]" value="0"></label><label><span>دریافتی مرحله</span><input type="text" class="cptt-currency-input" name="steps['+stepId+'][paid]" value="0"></label></div><div class="cptt-expert-checklist"><div class="cptt-expert-sectionTitle">چک‌لیست مرحله</div><div class="cptt-expert-checklist-items"></div><button type="button" class="button button-small cptt-expert-add-checkitem" style="margin-top:10px;">+ افزودن آیتم چک‌لیست</button></div><div class="cptt-expert-userTasks"><div class="cptt-expert-sectionTitle">تسک‌های سمت مشتری</div><div class="cptt-expert-usertasks-items"></div><button type="button" class="button button-small cptt-expert-add-usertask" style="margin-top:10px;">+ افزودن تسک مشتری</button></div><div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;"><button type="button" class="button button-small cptt-expert-add-checkitem" style="flex:1;">+ افزودن چک‌لیست</button><button type="button" class="button button-link-delete cptt-expert-remove-step" style="flex:1;color:#b91c1c;">× حذف مرحله</button></div></div></div>';
-        var wrap = document.querySelector('.cptt-expert-stepsWrap') || document.querySelector('.cptt-expert-steps');
-        if (wrap) {
-          wrap.insertAdjacentHTML('beforeend', html);
-          bindStepAccordions(wrap);
-        }
+        var idx = container.querySelectorAll('.cptt-expert-step').length + 1;
+        var html = '<div class="cptt-expert-step is-open" draggable="true" data-step-id="'+stepId+'"><button type="button" class="cptt-expert-step__toggle" aria-expanded="true"><span class="cptt-step-reorder-handle" title="تغییر ترتیب">⠿</span><div class="cptt-expert-step__toggleMain"><strong>' + idx + '. مرحله جدید</strong><span>چک‌لیست: 0/0</span></div><div class="cptt-expert-step__toggleSide"><span class="cptt-expert-status cptt-expert-status--todo">انجام‌نشده</span><span class="cptt-expert-step__chevron">⌄</span></div></button><div class="cptt-expert-step__body"><div class="cptt-expert-step__metaGrid"><label><span>عنوان مرحله</span><input type="text" name="steps['+stepId+'][title]" value="مرحله جدید"></label><label><span>وضعیت مرحله</span><select name="steps['+stepId+'][status]"><option value="todo">انجام‌نشده</option><option value="current">در حال انجام</option><option value="done">انجام‌شده</option></select></label><label><span>مهلت مرحله</span><input type="text" class="cptt-jalali-datetime" name="steps['+stepId+'][due_at_local]" value=""></label></div><div class="cptt-expert-step__metaGrid"><label><span>هزینه مرحله</span><input type="text" class="cptt-currency-input" name="steps['+stepId+'][cost]" value="0"></label><label><span>دریافتی مرحله</span><input type="text" class="cptt-currency-input" name="steps['+stepId+'][paid]" value="0"></label></div><label class="cptt-expert-noteField"><span>توضیحات (اختیاری)</span><textarea name="steps['+stepId+'][desc]" rows="2"></textarea></label><div class="cptt-expert-checklist"><div class="cptt-expert-sectionTitle">چک‌لیست مرحله</div><div class="cptt-expert-checklist-items"></div><button type="button" class="button button-small cptt-expert-add-checkitem" style="margin-top:10px;">+ افزودن آیتم چک‌لیست</button></div><div class="cptt-expert-userTasks"><div class="cptt-expert-sectionTitle">تسک‌های سمت مشتری</div><div class="cptt-expert-usertasks-items"></div><button type="button" class="button button-small cptt-expert-add-usertask" style="margin-top:10px;">+ افزودن تسک مشتری</button></div><div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;"><button type="button" class="button button-small cptt-expert-add-checkitem" style="flex:1;">+ افزودن چک‌لیست</button><button type="button" class="button button-link-delete cptt-expert-remove-step" style="flex:1;color:#b91c1c;">× حذف مرحله</button></div></div></div>';
+        container.insertAdjacentHTML('beforeend', html);
+        bindStepAccordions(container);
+        refreshStepNumbers(container);
       }
       if (e.target.classList.contains('cptt-expert-add-checkitem')) {
         var btn = e.target;
@@ -1151,17 +1047,13 @@
         var stepId = step.getAttribute('data-step-id');
         var checkId = randId('chk');
         var html = '<div class="cptt-expert-checkRow"><label class="cptt-expert-checkItem"><input type="checkbox" name="steps['+stepId+'][checklist]['+checkId+'][done]" value="1"><span>انجام شد</span></label><input type="text" name="steps['+stepId+'][checklist]['+checkId+'][text]" value="" placeholder="متن آیتم"><input type="url" name="steps['+stepId+'][checklist]['+checkId+'][url]" value="" placeholder="لینک نتیجه (اختیاری)"><button type="button" class="button button-small cptt-expert-remove-checkitem">×</button></div>';
-        var chkWrap = step.querySelector('.cptt-expert-checklist');
+        var chkWrap = step.querySelector('.cptt-expert-checklist-items');
         if (!chkWrap) {
-            chkWrap = document.createElement('div');
-            chkWrap.className = 'cptt-expert-checklist';
-            chkWrap.innerHTML = '<div class="cptt-expert-sectionTitle">چک‌لیست داخلی کارشناس</div>';
-            var utWrap = step.querySelector('.cptt-expert-userTasks');
-            if (utWrap) {
-                utWrap.parentNode.insertBefore(chkWrap, utWrap);
-            } else {
-                btn.parentNode.parentNode.insertBefore(chkWrap, btn.parentNode);
-            }
+            var itemsDiv = document.createElement('div');
+            itemsDiv.className = 'cptt-expert-checklist-items';
+            var sectionTitle = step.querySelector('.cptt-expert-checklist .cptt-expert-sectionTitle');
+            if (sectionTitle) sectionTitle.parentNode.insertBefore(itemsDiv, btn);
+            chkWrap = itemsDiv;
         }
         chkWrap.insertAdjacentHTML('beforeend', html);
       }
@@ -1172,24 +1064,20 @@
         var stepId = step.getAttribute('data-step-id');
         var taskId = randId('ut');
         var html = '<div class="cptt-expert-userTask"><div class="cptt-expert-userTask__fields"><input type="text" name="steps['+stepId+'][user_tasks]['+taskId+'][title]" value="" placeholder="عنوان تسک"><textarea name="steps['+stepId+'][user_tasks]['+taskId+'][desc]" rows="2" placeholder="توضیحات تسک"></textarea><input type="text" class="cptt-jalali-datetime" name="steps['+stepId+'][user_tasks]['+taskId+'][due_at_local]" value="" placeholder="مهلت"><button type="button" class="button button-small cptt-expert-remove-usertask">×</button></div></div>';
-        var itemsWrap = step.querySelector('.cptt-expert-usertasks-items') || (btn.previousElementSibling && btn.previousElementSibling.classList.contains('cptt-expert-usertasks-items') ? btn.previousElementSibling : null);
-        if (!itemsWrap) { itemsWrap = document.createElement('div'); itemsWrap.className='cptt-expert-usertasks-items'; btn.parentNode.insertBefore(itemsWrap, btn); }
+        var itemsWrap = step.querySelector('.cptt-expert-usertasks-items');
+        if (!itemsWrap) {
+            itemsWrap = document.createElement('div');
+            itemsWrap.className = 'cptt-expert-usertasks-items';
+            btn.parentNode.insertBefore(itemsWrap, btn);
+        }
         itemsWrap.insertAdjacentHTML('beforeend', html);
       }
-      if (e.target.classList.contains('cptt-expert-remove-step')) {
-        e.target.closest('.cptt-expert-step').remove();
-      }
-      if (e.target.classList.contains('cptt-expert-remove-checkitem')) {
-        e.target.closest('.cptt-expert-checkRow').remove();
-      }
-      if (e.target.classList.contains('cptt-expert-remove-usertask')) {
-        e.target.closest('.cptt-expert-userTask').remove();
-      }
+      if (e.target.classList.contains('cptt-expert-remove-checkitem')) e.target.closest('.cptt-expert-checkRow').remove();
+      if (e.target.classList.contains('cptt-expert-remove-usertask')) e.target.closest('.cptt-expert-userTask').remove();
     });
   });
 
   document.addEventListener('click', function(e) {
-      
       var notifLink = e.target.closest('.cptt-notification-item');
       if (notifLink) {
           if (!notifLink.classList.contains('is-read')) {
@@ -1203,7 +1091,6 @@
                   fetch(window.CPTT_EXPERT ? CPTT_EXPERT.ajax : window.CPTT_ADMIN.ajax, { method: 'POST', body: fd, keepalive: true });
               }
           }
-          // Let native navigation happen
       }
 
       if (e.target.classList.contains('cptt-delete-notif-btn')) {
