@@ -524,12 +524,6 @@ class CPTT_Admin {
 			</div>
 			<div class="cptt-notes__add">
 				<label class="cptt-label">یادداشت جدید</label>
-				<textarea name="cptt_new_note" rows="3" placeholder="متن یادداشت داخلی برای کارشناسان..."></textarea>
-			</div>
-		</div>
-		<?php
-	}
-	public function render_accounting_metabox($post) {
 		$fin=$this->project_financial_data($post->ID);
 		$steps=get_post_meta($post->ID,'_cptt_steps',true);
 		if (!is_array($steps)) $steps=[];

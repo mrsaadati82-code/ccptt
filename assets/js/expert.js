@@ -31,21 +31,12 @@
       }
       if (list && data.html) {
         list.innerHTML = data.html;
-        bindNotificationItems();
+        
       }
-    }).catch(function(e){ console.error(e); });
+    }).catch(function(e){ /* silently ignore polling errors */ });
   }
 
-  function bindNotificationItems() {
-    qsa('.cptt-notification-item').forEach(function(el){
-      if (el.dataset.bound) return;
-      el.dataset.bound = '1';
-      el.addEventListener('click', function(e){
-        if (el.classList.contains('is-read')) return;
-        el.classList.add('is-read');
-      });
-    });
-  }
+  
 
   /* =========================================================
      DARK MODE
@@ -53,20 +44,22 @@
   function initDarkMode() {
     var saved = localStorage.getItem('cptt_dark_mode');
     if (saved === '1') document.body.classList.add('cptt-dark');
-    var container = qs('.cptt-expertSidebar');
-    if (!container) return;
-    var btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'cptt-btn cptt-btn--secondary cptt-dark-toggle';
-    btn.style.cssText = 'width:100%;margin-top:8px;';
-    btn.textContent = document.body.classList.contains('cptt-dark') ? '☀️ حالت روشن' : '🌙 حالت تاریک';
-    btn.addEventListener('click', function(){
-      document.body.classList.toggle('cptt-dark');
-      var on = document.body.classList.contains('cptt-dark');
-      localStorage.setItem('cptt_dark_mode', on ? '1' : '0');
-      btn.textContent = on ? '☀️ حالت روشن' : '🌙 حالت تاریک';
+    
+    qsa('.cptt-dark-toggle-icon').forEach(function(btn) {
+        if (document.body.classList.contains('cptt-dark')) {
+            btn.innerHTML = '☀️';
+            if (btn.textContent.indexOf('حالت') > -1) btn.innerHTML = '☀️ حالت روشن';
+        }
+        btn.addEventListener('click', function() {
+            document.body.classList.toggle('cptt-dark');
+            var on = document.body.classList.contains('cptt-dark');
+            localStorage.setItem('cptt_dark_mode', on ? '1' : '0');
+            qsa('.cptt-dark-toggle-icon').forEach(function(b) {
+                b.innerHTML = on ? '☀️' : '🌙';
+                if (b.textContent.indexOf('حالت') > -1) b.innerHTML = on ? '☀️ حالت روشن' : '🌙 حالت تاریک';
+            });
+        });
     });
-    container.appendChild(btn);
   }
 
   /* =========================================================
@@ -152,6 +145,7 @@
       if (!cal.contains(e.target)) { cal.style.display = 'none'; }
     });
     cal.addEventListener('click', function (e) {
+      e.stopPropagation();
       // FIX: e.target may be a text node inside button (e.g., ‹ ›)
       var target = (e.target.nodeType === 3) ? e.target.parentElement : e.target;
       var nav = target.closest ? target.closest('[data-nav]') : null;
@@ -175,6 +169,76 @@
   /* =========================================================
      1. FILTERS - main project grid
      ========================================================= */
+
+  function initRealtimeClock() {
+      function update() {
+          var now = new Date();
+          var faTime = now.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+          qsa('.cptt-realtime-clock').forEach(function(el) { el.textContent = faTime; });
+      }
+      setInterval(update, 10000);
+      update();
+  }
+
+  function initMobileUI() {
+
+      var mobileBell = qs('.cptt-mobile-bell-btn');
+      if (mobileBell) {
+          mobileBell.addEventListener('click', function(e) {
+              e.preventDefault();
+              var menu = qs('.cptt-mobile-menu');
+              if (menu) { menu.setAttribute('hidden', ''); document.body.style.overflow = ''; }
+              
+              var notifModal = qs('.cptt-all-notifs-modal');
+              if (notifModal) {
+                  notifModal.removeAttribute('hidden');
+                  var list = qs('.cptt-all-notifs-list', notifModal);
+                  var fd = new FormData();
+                  fd.append('action', 'cptt_expert_fetch_all_notifications');
+                  fd.append('nonce', window.CPTT_EXPERT ? CPTT_EXPERT.nonce : window.CPTT_ADMIN.nonce);
+                  fetch(window.CPTT_EXPERT ? CPTT_EXPERT.ajax : window.CPTT_ADMIN.ajax, { method: 'POST', body: fd })
+                  .then(r => r.json()).then(data => {
+                      if (data.success && list) {
+                          list.innerHTML = data.data.html;
+                      }
+                  });
+              }
+          });
+      }
+
+      var fab = qs('.cptt-mobile-fab');
+      var menu = qs('.cptt-mobile-menu');
+      if (fab && menu) {
+          fab.addEventListener('click', function() { menu.removeAttribute('hidden'); document.body.style.overflow = 'hidden'; });
+          var close = qs('.cptt-mobile-menu__close', menu);
+          var backdrop = qs('.cptt-mobile-menu__backdrop', menu);
+          function closeMenu() { menu.setAttribute('hidden', ''); document.body.style.overflow = ''; }
+          if (close) close.addEventListener('click', closeMenu);
+          if (backdrop) backdrop.addEventListener('click', closeMenu);
+      }
+      
+      var filterBtn = qs('#cptt-mobile-filter-btn');
+      var filterWrap = qs('#cptt-expert-filters-wrap');
+      if (filterBtn && filterWrap) {
+          filterBtn.addEventListener('click', function() {
+              filterWrap.classList.toggle('is-open');
+          });
+      }
+  }
+
+  function parseHashAction() {
+      var hash = window.location.hash;
+      if (hash.startsWith('#chat-')) {
+          var pid = hash.replace('#chat-', '');
+          var btn = qs('.cptt-expertCard[data-project-id="'+pid+'"] .cptt-expert-chat-launch');
+          if (btn) setTimeout(function(){ btn.click(); }, 500);
+      } else if (hash.startsWith('#directchat-')) {
+          var uid = hash.replace('#directchat-', '');
+          var expertItem = qs('.cptt-expert-list-item[data-expert-id="'+uid+'"]');
+          if (expertItem) setTimeout(function(){ expertItem.click(); }, 500);
+      }
+  }
+
   function updateVisibility() {
     var search = (qs('#cptt-expert-search') || {}).value ? qs('#cptt-expert-search').value.toLowerCase().trim() : '';
     var status = (qs('#cptt-expert-status') || {}).value || '';
@@ -294,6 +358,7 @@
     qsa('.cptt-expert-create-form').forEach(function (form) {
       if (form.dataset.bound) return;
       form.dataset.bound = '1';
+      bindChatEnhancements(form);
       form.addEventListener('submit', async function (e) {
         e.preventDefault();
         var msg = qs('.cptt-expert-formMsg', form);
@@ -327,6 +392,7 @@
     qsa('.cptt-expert-project-form').forEach(function (form) {
       if (form.dataset.bound) return;
       form.dataset.bound = '1';
+      bindChatEnhancements(form);
       form.addEventListener('submit', async function (e) {
         e.preventDefault();
         var msg = qs('.cptt-expert-formMsg', form);
@@ -369,9 +435,17 @@
       var isMe = parseInt(message.sender_id, 10) === parseInt(myUserId || 0, 10);
       var head = escapeHtml((message.sender_name || 'کاربر') + (message.recipient_name && message.recipient_name !== 'همه' ? ' → ' + message.recipient_name : ''));
       var time = escapeHtml(message.time_fa || '');
-      var body = escapeHtml(message.content || '').replace(/\n/g, '<br>');
-      // Convert file links to view buttons
-      body = body.replace(/<a href="([^"]+)"[^>]*class="cptt-chat-file-link"[^>]*>[^<]*<\/a>/g, '<a href="$1" target="_blank" class="cptt-chat-file-btn">👁 مشاهده فایل</a>');
+      
+      var rawBody = message.content || '';
+      var linkMatch = rawBody.match(/href=(?:&quot;|"|')?([^"'>\s&]+)(?:&quot;|"|')?[^>]*class=(?:&quot;|"|')?cptt-chat-file-link/i);
+      var fileUrl = linkMatch ? linkMatch[1] : '';
+      var cleanText = rawBody.replace(/<a[^>]*cptt-chat-file-link.*?<\/a>/gi, '').replace(/&lt;a[^&]*cptt-chat-file-link.*?&lt;\/a&gt;/gi, '');
+      
+      var body = escapeHtml(cleanText.trim()).replace(/\n/g, '<br>');
+      if (fileUrl) {
+          body += '<br><a href="' + escapeHtml(fileUrl) + '" target="_blank" class="cptt-chat-file-btn">👁 مشاهده فایل ضمیمه</a>';
+      }
+
       var cls = isMe ? 'cptt-chat-bubble--me' : 'cptt-chat-bubble--other';
       return '<div class="cptt-chat-bubble ' + cls + '"><div class="cptt-chat-bubble__head"><strong>' + head + '</strong><span>' + time + '</span></div><div class="cptt-chat-bubble__body">' + body + '</div></div>';
     }).join('');
@@ -379,10 +453,62 @@
     container.scrollTop = container.scrollHeight;
   }
 
+  
+  const emojis = ['👍','✅','😊','🙏','👏','❤️','💡','🚀','👀','⚠️'];
+  
+  function bindChatEnhancements(form) {
+    if (form.dataset.enhanced) return;
+    form.dataset.enhanced = '1';
+    
+    var ta = form.querySelector('textarea');
+    if (!ta) return;
+    
+    var emojiWrap = document.createElement('div');
+    emojiWrap.className = 'cptt-emoji-picker';
+    emojis.forEach(function(emoji) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'cptt-emoji-btn';
+      btn.textContent = emoji;
+      btn.addEventListener('click', function() {
+        ta.value += emoji;
+        ta.focus();
+      });
+      emojiWrap.appendChild(btn);
+    });
+    ta.parentNode.insertBefore(emojiWrap, ta);
+    
+    var fileInput = form.querySelector('input[type="file"]');
+    if (fileInput) {
+      var previewWrap = document.createElement('div');
+      previewWrap.className = 'cptt-chat-file-preview-wrap';
+      ta.parentNode.insertBefore(previewWrap, ta.nextSibling);
+      
+      fileInput.addEventListener('change', function() {
+        if (this.files && this.files.length > 0) {
+          previewWrap.innerHTML = '<div class="cptt-chat-file-preview">' + escapeHtml(this.files[0].name) + ' <button type="button" title="حذف">×</button></div>';
+          previewWrap.querySelector('button').addEventListener('click', function() {
+            fileInput.value = '';
+            previewWrap.innerHTML = '';
+          });
+        } else {
+          previewWrap.innerHTML = '';
+        }
+      });
+      
+      // Clean up on form reset manually handled by send function
+      form.addEventListener('cptt-chat-sent', function() {
+        fileInput.value = '';
+        previewWrap.innerHTML = '';
+      });
+    }
+  }
+
   function bindMessageForms() {
     qsa('.cptt-expert-message-form').forEach(function (form) {
       if (form.dataset.bound) return;
       form.dataset.bound = '1';
+      bindChatEnhancements(form);
       form.addEventListener('submit', async function (e) {
         e.preventDefault();
         var msg = qs('.cptt-expert-formMsg', form);
@@ -397,9 +523,9 @@
           var json = await res.json();
           if (!json || !json.success) throw new Error((json && json.data) ? json.data : 'خطا در ارسال پیام');
           if (msg) msg.textContent = 'پیام ارسال شد.';
-          var ta = qs('textarea[name="content"]', form); if (ta) ta.value = '';
+          var ta = qs('textarea[name="content"]', form); if (ta) ta.value = ''; form.dispatchEvent(new Event('cptt-chat-sent'));
           var wrap = form.parentElement.querySelector('.cptt-expert-messagesWrap');
-          var myId = (window.wp_user_id || 0); // try to infer; fallback works with CSS
+          var myId = (window.CPTT_EXPERT && CPTT_EXPERT.wpUserId) ? CPTT_EXPERT.wpUserId : 0; // try to infer; fallback works with CSS
           if (wrap) renderMessages((json.data && json.data.messages) || [], wrap, myId);
         } catch (err) {
           if (msg) msg.textContent = err.message || 'خطا در ارسال پیام';
@@ -455,8 +581,17 @@
     var html = items.map(function (m) {
       var isMe = parseInt(m.sender_id, 10) === parseInt(myUserId || 0, 10);
       var time = escapeHtml(m.time_fa || '');
-      var body = escapeHtml(m.content || '').replace(/\n/g, '<br>');
-      body = body.replace(/<a href="([^"]+)"[^>]*class="cptt-chat-file-link"[^>]*>[^<]*<\/a>/g, '<a href="$1" target="_blank" class="cptt-chat-file-btn">👁 مشاهده فایل</a>');
+      
+      var rawBody = m.content || '';
+      var linkMatch = rawBody.match(/href=(?:&quot;|"|')?([^"'>\s&]+)(?:&quot;|"|')?[^>]*class=(?:&quot;|"|')?cptt-chat-file-link/i);
+      var fileUrl = linkMatch ? linkMatch[1] : '';
+      var cleanText = rawBody.replace(/<a[^>]*cptt-chat-file-link.*?<\/a>/gi, '').replace(/&lt;a[^&]*cptt-chat-file-link.*?&lt;\/a&gt;/gi, '');
+      
+      var body = escapeHtml(cleanText.trim()).replace(/\n/g, '<br>');
+      if (fileUrl) {
+          body += '<br><a href="' + escapeHtml(fileUrl) + '" target="_blank" class="cptt-chat-file-btn">👁 مشاهده فایل ضمیمه</a>';
+      }
+
       var cls = isMe ? 'cptt-chat-bubble--me' : 'cptt-chat-bubble--other';
       return '<div class="cptt-chat-bubble ' + cls + '"><div class="cptt-chat-bubble__head"><strong>' + escapeHtml(m.sender_name || 'کاربر') + '</strong><span>' + time + '</span></div><div class="cptt-chat-bubble__body">' + body + '</div></div>';
     }).join('');
@@ -473,8 +608,8 @@
     var openers = qsa('.cptt-newProjectCta, [data-cptt-open-newproject]');
     var closeBtns = qsa('.cptt-newProjectModal__close, [data-cptt-close-newproject]', modal);
     var backdrop = qs('.cptt-newProjectModal__backdrop', modal);
-    function open() { modal.classList.add('is-open'); document.body.style.overflow = 'hidden'; }
-    function close() { modal.classList.remove('is-open'); document.body.style.overflow = ''; }
+    function open() { modal.classList.add('is-open'); document.body.style.overflow = 'hidden'; modal.removeAttribute('aria-hidden'); }
+    function close() { modal.classList.remove('is-open'); document.body.style.overflow = ''; modal.setAttribute('aria-hidden', 'true'); }
     openers.forEach(function (btn) {
       if (btn.dataset.npmBound) return;
       btn.dataset.npmBound = '1';
@@ -828,8 +963,11 @@
     bindHubModals();
     bindHubFilters();
     bindDeleteActions();
-    bindNotificationItems();
+    
     initJalaliPicker();
+    initRealtimeClock();
+    initMobileUI();
+    parseHashAction();
     initDarkMode();
     initKanban();
     updateVisibility();
@@ -847,7 +985,13 @@
     var openExpertsBtn = qs2('.cptt-open-experts-modal-btn');
     var expertsModal = qs2('.cptt-experts-mobile-modal');
     if (openExpertsBtn && expertsModal) {
-      openExpertsBtn.addEventListener('click', function() { expertsModal.removeAttribute('hidden'); });
+      
+      qsa2('.cptt-open-experts-modal-btn').forEach(btn => btn.addEventListener('click', function() { 
+          expertsModal.removeAttribute('hidden'); 
+          var menu = document.querySelector('.cptt-mobile-menu');
+          if (menu) { menu.setAttribute('hidden', ''); document.body.style.overflow = ''; }
+      }));
+
       var closeMod = qs2('.cptt-experts-mobile-modal__close', expertsModal);
       var backMod = qs2('.cptt-experts-mobile-modal__backdrop', expertsModal);
       if (closeMod) closeMod.addEventListener('click', function() { expertsModal.setAttribute('hidden', ''); });
@@ -888,7 +1032,7 @@
             fd2.append('receiver_id', expertId);
             var res2 = await fetch(CPTT_EXPERT.ajax, { method: 'POST', body: fd2 });
             var json2 = await res2.json();
-            if (json2.success) renderDirectMessages(json2.data, window.wp_user_id || 0);
+            if (json2.success) renderDirectMessages(json2.data, (window.CPTT_EXPERT && CPTT_EXPERT.wpUserId) ? CPTT_EXPERT.wpUserId : 0);
           } catch(e) { console.error(e); }
         });
       });
@@ -901,6 +1045,7 @@
             qs2('#direct-chat-file-name', dcForm).textContent = this.files.length > 0 ? this.files[0].name : '';
           });
         }
+        bindChatEnhancements(dcForm);
         dcForm.addEventListener('submit', async function(e) {
           e.preventDefault();
           var msg = qs2('#direct-chat-form-msg', dcForm);
@@ -914,8 +1059,8 @@
             var res = await fetch(CPTT_EXPERT.ajax, { method: 'POST', body: fd });
             var json = await res.json();
             if (json.success) {
-              renderDirectMessages(json.data, window.wp_user_id || 0);
-              dcForm.reset();
+              renderDirectMessages(json.data, (window.CPTT_EXPERT && CPTT_EXPERT.wpUserId) ? CPTT_EXPERT.wpUserId : 0);
+              dcForm.reset(); dcForm.dispatchEvent(new Event('cptt-chat-sent'));
               qs2('#direct-chat-file-name', dcForm).textContent = '';
             } else { msg.textContent = json.data || 'خطا در ارسال'; }
           } catch(e) { msg.textContent = 'خطا در ارتباط'; }
@@ -1005,10 +1150,20 @@
         if (!step) return;
         var stepId = step.getAttribute('data-step-id');
         var checkId = randId('chk');
-        var html = '<div class="cptt-expert-checklistRow"><label class="cptt-expert-checkItem"><input type="checkbox" name="steps['+stepId+'][checklist]['+checkId+'][done]" value="1"><span>انجام شد</span></label><input type="text" name="steps['+stepId+'][checklist]['+checkId+'][text]" value="" placeholder="متن آیتم"><input type="url" name="steps['+stepId+'][checklist]['+checkId+'][url]" value="" placeholder="لینک نتیجه (اختیاری)"><button type="button" class="button button-small cptt-expert-remove-checkitem">×</button></div>';
-        var itemsWrap = step.querySelector('.cptt-expert-checklist-items') || (btn.previousElementSibling && btn.previousElementSibling.classList.contains('cptt-expert-checklist-items') ? btn.previousElementSibling : null);
-        if (!itemsWrap) { itemsWrap = document.createElement('div'); itemsWrap.className='cptt-expert-checklist-items'; btn.parentNode.insertBefore(itemsWrap, btn); }
-        itemsWrap.insertAdjacentHTML('beforeend', html);
+        var html = '<div class="cptt-expert-checkRow"><label class="cptt-expert-checkItem"><input type="checkbox" name="steps['+stepId+'][checklist]['+checkId+'][done]" value="1"><span>انجام شد</span></label><input type="text" name="steps['+stepId+'][checklist]['+checkId+'][text]" value="" placeholder="متن آیتم"><input type="url" name="steps['+stepId+'][checklist]['+checkId+'][url]" value="" placeholder="لینک نتیجه (اختیاری)"><button type="button" class="button button-small cptt-expert-remove-checkitem">×</button></div>';
+        var chkWrap = step.querySelector('.cptt-expert-checklist');
+        if (!chkWrap) {
+            chkWrap = document.createElement('div');
+            chkWrap.className = 'cptt-expert-checklist';
+            chkWrap.innerHTML = '<div class="cptt-expert-sectionTitle">چک‌لیست داخلی کارشناس</div>';
+            var utWrap = step.querySelector('.cptt-expert-userTasks');
+            if (utWrap) {
+                utWrap.parentNode.insertBefore(chkWrap, utWrap);
+            } else {
+                btn.parentNode.parentNode.insertBefore(chkWrap, btn.parentNode);
+            }
+        }
+        chkWrap.insertAdjacentHTML('beforeend', html);
       }
       if (e.target.classList.contains('cptt-expert-add-usertask')) {
         var btn = e.target;
@@ -1016,7 +1171,7 @@
         if (!step) return;
         var stepId = step.getAttribute('data-step-id');
         var taskId = randId('ut');
-        var html = '<div class="cptt-expert-userTaskRow"><div class="cptt-expert-userTaskRow__fields"><input type="text" name="steps['+stepId+'][user_tasks]['+taskId+'][title]" value="" placeholder="عنوان تسک"><textarea name="steps['+stepId+'][user_tasks]['+taskId+'][desc]" rows="2" placeholder="توضیحات تسک"></textarea><input type="text" class="cptt-jalali-datetime" name="steps['+stepId+'][user_tasks]['+taskId+'][due_at_local]" value="" placeholder="مهلت"><button type="button" class="button button-small cptt-expert-remove-usertask">×</button></div></div>';
+        var html = '<div class="cptt-expert-userTask"><div class="cptt-expert-userTask__fields"><input type="text" name="steps['+stepId+'][user_tasks]['+taskId+'][title]" value="" placeholder="عنوان تسک"><textarea name="steps['+stepId+'][user_tasks]['+taskId+'][desc]" rows="2" placeholder="توضیحات تسک"></textarea><input type="text" class="cptt-jalali-datetime" name="steps['+stepId+'][user_tasks]['+taskId+'][due_at_local]" value="" placeholder="مهلت"><button type="button" class="button button-small cptt-expert-remove-usertask">×</button></div></div>';
         var itemsWrap = step.querySelector('.cptt-expert-usertasks-items') || (btn.previousElementSibling && btn.previousElementSibling.classList.contains('cptt-expert-usertasks-items') ? btn.previousElementSibling : null);
         if (!itemsWrap) { itemsWrap = document.createElement('div'); itemsWrap.className='cptt-expert-usertasks-items'; btn.parentNode.insertBefore(itemsWrap, btn); }
         itemsWrap.insertAdjacentHTML('beforeend', html);
@@ -1025,11 +1180,64 @@
         e.target.closest('.cptt-expert-step').remove();
       }
       if (e.target.classList.contains('cptt-expert-remove-checkitem')) {
-        e.target.closest('.cptt-expert-checklistRow').remove();
+        e.target.closest('.cptt-expert-checkRow').remove();
       }
       if (e.target.classList.contains('cptt-expert-remove-usertask')) {
-        e.target.closest('.cptt-expert-userTaskRow').remove();
+        e.target.closest('.cptt-expert-userTask').remove();
       }
     });
   });
+
+  document.addEventListener('click', function(e) {
+      
+      var notifLink = e.target.closest('.cptt-notification-item');
+      if (notifLink) {
+          if (!notifLink.classList.contains('is-read')) {
+              notifLink.classList.add('is-read');
+              var id = notifLink.getAttribute('data-id');
+              if (id) {
+                  var fd = new FormData();
+                  fd.append('action', 'cptt_expert_mark_single_notification_read');
+                  fd.append('nonce', window.CPTT_EXPERT ? CPTT_EXPERT.nonce : window.CPTT_ADMIN.nonce);
+                  fd.append('id', id);
+                  fetch(window.CPTT_EXPERT ? CPTT_EXPERT.ajax : window.CPTT_ADMIN.ajax, { method: 'POST', body: fd, keepalive: true });
+              }
+          }
+          // Let native navigation happen
+      }
+
+      if (e.target.classList.contains('cptt-delete-notif-btn')) {
+          e.preventDefault(); e.stopPropagation();
+          var id = e.target.getAttribute('data-id');
+          if (id) {
+              var fd = new FormData();
+              fd.append('action', 'cptt_expert_delete_notification');
+              fd.append('nonce', window.CPTT_EXPERT ? CPTT_EXPERT.nonce : window.CPTT_ADMIN.nonce);
+              fd.append('id', id);
+              fetch(window.CPTT_EXPERT ? CPTT_EXPERT.ajax : window.CPTT_ADMIN.ajax, { method: 'POST', body: fd });
+              e.target.closest('.cptt-notification-item-wrap').remove();
+          }
+      }
+      if (e.target.hasAttribute('data-cptt-open-all-notifs')) {
+          var modal = qs('.cptt-all-notifs-modal');
+          if (modal) {
+              modal.removeAttribute('hidden');
+              var list = qs('.cptt-all-notifs-list', modal);
+              var fd = new FormData();
+              fd.append('action', 'cptt_expert_fetch_all_notifications');
+              fd.append('nonce', window.CPTT_EXPERT ? CPTT_EXPERT.nonce : window.CPTT_ADMIN.nonce);
+              fetch(window.CPTT_EXPERT ? CPTT_EXPERT.ajax : window.CPTT_ADMIN.ajax, { method: 'POST', body: fd })
+              .then(r => r.json()).then(data => {
+                  if (data.success && list) {
+                      list.innerHTML = data.data.html;
+                  }
+              });
+          }
+      }
+      if (e.target.classList.contains('cptt-all-notifs-modal__close') || e.target.classList.contains('cptt-all-notifs-modal__backdrop')) {
+          var modal = qs('.cptt-all-notifs-modal');
+          if (modal) modal.setAttribute('hidden', '');
+      }
+  });
+
 })();

@@ -34,6 +34,10 @@ class CPTT_Expert {
 		add_action('wp_ajax_cptt_expert_fetch_messages', [$this, 'ajax_fetch_messages']);
 		add_action('wp_ajax_cptt_expert_fetch_notifications', [$this, 'ajax_fetch_notifications']);
 		add_action('wp_ajax_cptt_expert_mark_notifications_read', [$this, 'ajax_mark_notifications_read']);
+		add_action('wp_ajax_cptt_expert_mark_single_notification_read', [$this, 'ajax_mark_single_notification_read']);
+		add_action('wp_ajax_cptt_expert_delete_notification', [$this, 'ajax_delete_notification']);
+		add_action('wp_ajax_cptt_expert_fetch_all_notifications', [$this, 'ajax_fetch_all_notifications']);
+
 		add_action('wp_ajax_cptt_expert_send_direct_message', [$this, 'ajax_send_direct_message']);
 		add_action('wp_ajax_cptt_expert_fetch_direct_messages', [$this, 'ajax_fetch_direct_messages']);
 		add_action('wp_ajax_cptt_expert_get_expert_info', [$this, 'ajax_get_expert_info']);
@@ -438,6 +442,8 @@ class CPTT_Expert {
 	}
 
 	private function save_expert_project($project_id, $posted_steps, $note, $meta = []) {
+        $old_experts = self::get_existing_experts($project_id);
+
 		$project_id = (int) $project_id;
 		$user_id = (int) get_current_user_id();
 		$steps = get_post_meta($project_id, '_cptt_steps', true);
@@ -459,9 +465,28 @@ class CPTT_Expert {
 		update_post_meta($project_id, '_cptt_client_user_id', $client_id);
 		update_post_meta($project_id, '_cptt_product_id', $product_id);
 		update_post_meta($project_id, '_cptt_is_settled', $is_settled);
-		update_post_meta($project_id, '_cptt_expert_user_ids', $expert_ids);
+		
+        $added_experts = array_diff($expert_ids, $old_experts);
+        foreach($added_experts as $ae_id) {
+            if ((int)$ae_id !== (int)$user_id) {
+                $this->insert_notification($ae_id, 'project_assigned', 'شما به پروژه ' . get_the_title($project_id) . ' اضافه شدید.', $project_id, CPTT_Expert::dashboard_url());
+            }
+        }
+        $removed_experts = array_diff($old_experts, $expert_ids);
+        foreach($removed_experts as $re_id) {
+            if ((int)$re_id !== (int)$user_id) {
+                $this->insert_notification($re_id, 'project_removed', 'شما از پروژه ' . get_the_title($project_id) . ' حذف شدید.', $project_id, CPTT_Expert::dashboard_url());
+            }
+        }
+        update_post_meta($project_id, '_cptt_expert_user_ids', $expert_ids);
+
 		update_post_meta($project_id, '_cptt_expert_user_id', !empty($expert_ids) ? (int)$expert_ids[0] : 0);
 		update_post_meta($project_id, '_cptt_experts_csv', ',' . implode(',', $expert_ids) . ',');
+        foreach($expert_ids as $eid) {
+            if ((int)$eid !== (int)$user_id) {
+                $this->insert_notification($eid, 'project_assigned', 'شما به پروژه جدید ' . $title . ' اضافه شدید.', $project_id, CPTT_Expert::dashboard_url());
+            }
+        }
 		update_post_meta($project_id, '_cptt_wc_cat_ids', $cat_ids);
 		update_post_meta($project_id, '_cptt_wc_cats_csv', ',' . implode(',', $cat_ids) . ',');
 		$changed = true;
@@ -550,6 +575,9 @@ class CPTT_Expert {
 			}
 
 			$new_status = $this->apply_step_status_from_checklist($step, $new_status);
+            if ($old_status !== 'done' && $new_status === 'done') {
+                $this->notify_project_experts($project_id, $user_id, 'step_completed', 'مرحله ' . ($step['title'] ?? '') . ' در پروژه ' . get_the_title($project_id) . ' انجام شد.', CPTT_Expert::dashboard_url());
+            }
 			if ($new_status === 'current') {
 				if ($current_found) $new_status = 'todo';
 				$current_found = true;
@@ -587,7 +615,7 @@ class CPTT_Expert {
 			update_post_meta($project_id, '_cptt_project_notes', $notes);
 			$changed = true;
 			$notifier = get_user_by('id', $user_id);
-			$this->notify_project_experts($project_id, $user_id, 'project_note', ($notifier ? $notifier->display_name : 'کارشناس') . ' یادداشتی ثبت کرد.', CPTT_Expert::dashboard_url());
+			$this->notify_project_experts($project_id, $user_id, 'project_note', ($notifier ? $notifier->display_name : 'کارشناس') . ' یادداشتی ثبت کرد.', CPTT_Expert::dashboard_url() . '#chat-' . $project_id);
 		}
 
 		if ($changed) {
@@ -598,6 +626,12 @@ class CPTT_Expert {
 		}
 
 		$progress = $this->progress_data($project_id);
+		$old_status = get_post_meta($project_id, '_cptt_progress_status_cache', true);
+		if ($old_status !== 'completed' && $progress['status'] === 'completed') {
+			$this->notify_project_experts($project_id, get_current_user_id(), 'project_completed', 'پروژه ' . get_the_title($project_id) . ' تکمیل شد.', CPTT_Expert::dashboard_url() . '#chat-' . $project_id);
+		}
+		update_post_meta($project_id, '_cptt_progress_status_cache', $progress['status']);
+		
 		return ['changed' => $changed, 'last_update_fa' => (string)get_post_meta($project_id, '_cptt_last_update_fa', true), 'progress' => $progress, 'notes' => $this->get_recent_notes($project_id, 4)];
 	}
 
@@ -723,11 +757,7 @@ class CPTT_Expert {
 								<option value="<?php echo esc_attr($u->ID); ?>" <?php selected($client_id, $u->ID); ?>>
 									<?php echo esc_html($u->display_name . (!empty($u->user_email) ? ' (' . $u->user_email . ')' : '')); ?>
 								</option>
-							
-				<?php endforeach; ?>
-				</div> <!-- closing cptt-expert-stepsWrap -->
-				<button type="button" class="cptt-btn cptt-expert-add-step" style="margin-bottom:20px;width:100%;">+ افزودن مرحله جدید</button>
-
+							<?php endforeach; ?>
 						</select>
 					</label>
 					<label>
@@ -957,6 +987,7 @@ class CPTT_Expert {
 				</div>
 				<?php endforeach; ?>
 			</div>
+            <button type="button" class="cptt-btn cptt-expert-add-step" style="margin-bottom:20px;width:100%;background:#f1f5f9;color:#334155;border:2px dashed #cbd5e1;padding:12px;border-radius:12px;">+ افزودن مرحله جدید</button>
 
 			<!-- Form Footer -->
 			<div class="cptt-expert-formFooter">
@@ -1782,7 +1813,7 @@ class CPTT_Expert {
 		$messages[] = ['sender_id' => get_current_user_id(), 'recipient_id' => $recipient_id, 'time' => (int)current_time('timestamp', true), 'content' => $content];
 		update_post_meta($project_id, '_cptt_expert_messages', $messages);
 		$sender = get_user_by('id', get_current_user_id());
-		$this->notify_project_experts($project_id, get_current_user_id(), 'project_chat', ($sender ? $sender->display_name : 'کارشناس') . ' پیامی در چت پروژه ارسال کرد.', CPTT_Expert::dashboard_url());
+		$this->notify_project_experts($project_id, get_current_user_id(), 'project_chat', ($sender ? $sender->display_name : 'کارشناس') . ' پیامی در چت پروژه ارسال کرد.', CPTT_Expert::dashboard_url() . '#chat-' . $project_id);
 		wp_send_json_success(['messages' => $this->get_recent_messages($project_id, 8)]);
 	}
 
@@ -1806,7 +1837,7 @@ class CPTT_Expert {
 		}
 
 		global $wpdb;
-		$this->insert_notification($receiver_id, 'direct_chat', get_user_by('id', get_current_user_id())->display_name . ' برای شما پیام مستقیم فرستاد.', 0, CPTT_Expert::dashboard_url());
+		$this->insert_notification($receiver_id, 'direct_chat', get_user_by('id', get_current_user_id())->display_name . ' برای شما پیام مستقیم فرستاد.', 0, CPTT_Expert::dashboard_url() . '#chat-' . $project_id);
 		$wpdb->insert(
 			$wpdb->prefix . 'cptt_expert_chats',
 			[
@@ -1890,7 +1921,7 @@ class CPTT_Expert {
 			$messages[] = [
 				'sender_id' => $row->sender_id,
 				'content' => $msg_content,
-				'time_fa' => CPTT_Core::jalali_datetime(strtotime($row->created_at)),
+				'time_fa' => CPTT_Core::jalali_datetime(strtotime(get_gmt_from_date($row->created_at))),
 				'sender_name' => ($row->sender_id == $current_id) ? 'شما' : get_user_by('id', $row->sender_id)->display_name
 			];
 		}
@@ -1898,6 +1929,53 @@ class CPTT_Expert {
 	}
 
 	
+	
+	
+	public function ajax_delete_notification() {
+		if (!is_user_logged_in()) wp_send_json_error();
+		check_ajax_referer('cptt_expert_nonce', 'nonce');
+		$id = isset($_POST['id']) ? absint($_POST['id']) : 0;
+		if ($id) {
+			global $wpdb;
+			$wpdb->delete($wpdb->prefix . 'cptt_notifications', ['id' => $id, 'user_id' => get_current_user_id()]);
+		}
+		wp_send_json_success();
+	}
+
+	public function ajax_fetch_all_notifications() {
+		if (!is_user_logged_in()) wp_send_json_error();
+		check_ajax_referer('cptt_expert_nonce', 'nonce');
+		global $wpdb;
+		$user_id = get_current_user_id();
+		$notifications = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$wpdb->prefix}cptt_notifications WHERE user_id = %d ORDER BY created_at DESC LIMIT 50", $user_id));
+		ob_start();
+		if (empty($notifications)) {
+			echo '<div style="padding:15px;text-align:center;color:#666;font-size:13px;">اعلانی وجود ندارد.</div>';
+		} else {
+			foreach ($notifications as $notif) {
+				echo '<div class="cptt-notification-item-wrap" style="position:relative;border-bottom:1px solid #eee;">';
+				echo '<a href="' . esc_url($notif->link ?: '#') . '" class="cptt-notification-item ' . ($notif->is_read ? 'is-read' : '') . '" data-id="' . esc_attr($notif->id) . '" style="padding-left:35px;display:block;">';
+				echo '<span class="cptt-notification-msg">' . esc_html($notif->message) . '</span>';
+				echo '<span class="cptt-notification-time">' . esc_html(class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime(strtotime(get_gmt_from_date($notif->created_at))) : '') . '</span>';
+				echo '</a>';
+				echo '<button type="button" class="cptt-delete-notif-btn" data-id="' . esc_attr($notif->id) . '" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:#ef4444;cursor:pointer;font-size:16px;" title="حذف اعلان">🗑</button>';
+				echo '</div>';
+			}
+		}
+		wp_send_json_success(['html' => ob_get_clean()]);
+	}
+
+	public function ajax_mark_single_notification_read() {
+		if (!is_user_logged_in()) wp_send_json_error();
+		check_ajax_referer('cptt_expert_nonce', 'nonce');
+		$id = isset($_POST['id']) ? absint($_POST['id']) : 0;
+		if ($id) {
+			global $wpdb;
+			$wpdb->update($wpdb->prefix . 'cptt_notifications', ['is_read' => 1], ['id' => $id, 'user_id' => get_current_user_id()]);
+		}
+		wp_send_json_success();
+	}
+
 	public function ajax_mark_notifications_read() {
 		if (!is_user_logged_in()) wp_send_json_error();
 		check_ajax_referer('cptt_expert_nonce', 'nonce');
@@ -1982,9 +2060,28 @@ class CPTT_Expert {
 		update_post_meta($project_id, '_cptt_client_user_id', $client_id);
 		update_post_meta($project_id, '_cptt_product_id', $product_id);
 		update_post_meta($project_id, '_cptt_is_settled', $is_settled);
-		update_post_meta($project_id, '_cptt_expert_user_ids', $expert_ids);
+		
+        $added_experts = array_diff($expert_ids, $old_experts);
+        foreach($added_experts as $ae_id) {
+            if ((int)$ae_id !== (int)$user_id) {
+                $this->insert_notification($ae_id, 'project_assigned', 'شما به پروژه ' . get_the_title($project_id) . ' اضافه شدید.', $project_id, CPTT_Expert::dashboard_url());
+            }
+        }
+        $removed_experts = array_diff($old_experts, $expert_ids);
+        foreach($removed_experts as $re_id) {
+            if ((int)$re_id !== (int)$user_id) {
+                $this->insert_notification($re_id, 'project_removed', 'شما از پروژه ' . get_the_title($project_id) . ' حذف شدید.', $project_id, CPTT_Expert::dashboard_url());
+            }
+        }
+        update_post_meta($project_id, '_cptt_expert_user_ids', $expert_ids);
+
 		update_post_meta($project_id, '_cptt_expert_user_id', !empty($expert_ids) ? (int)$expert_ids[0] : $user_id);
 		update_post_meta($project_id, '_cptt_experts_csv', ',' . implode(',', $expert_ids) . ',');
+        foreach($expert_ids as $eid) {
+            if ((int)$eid !== (int)$user_id) {
+                $this->insert_notification($eid, 'project_assigned', 'شما به پروژه جدید ' . $title . ' اضافه شدید.', $project_id, CPTT_Expert::dashboard_url());
+            }
+        }
 		if (!empty($cat_ids)) {
 			update_post_meta($project_id, '_cptt_wc_cat_ids', $cat_ids);
 			update_post_meta($project_id, '_cptt_wc_cats_csv', ',' . implode(',', $cat_ids) . ',');
@@ -2120,37 +2217,49 @@ class CPTT_Expert {
 			<div class="cptt-expertLayout">
 				<aside class="cptt-expertSidebar">
 
-				<div class="cptt-notification-bell">
-					<?php
-						global $wpdb;
-						$unread_count = $wpdb->get_var($wpdb->prepare("SELECT COUNT(id) FROM {$wpdb->prefix}cptt_notifications WHERE user_id = %d AND is_read = 0", get_current_user_id()));
-						$notifications = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$wpdb->prefix}cptt_notifications WHERE user_id = %d ORDER BY created_at DESC LIMIT 15", get_current_user_id()));
-					?>
-					<button type="button" class="cptt-bell-btn">
-						<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
-						<?php if ($unread_count > 0): ?><span class="cptt-bell-badge"><?php echo esc_html($unread_count); ?></span><?php endif; ?>
-					</button>
-					<div class="cptt-notifications-dropdown" hidden>
-						<div class="cptt-notifications-header">
-							<strong>اعلان‌ها</strong>
-							<button type="button" id="cptt-mark-all-read" style="background:none;border:none;color:#2271b1;cursor:pointer;font-size:12px;">خواندن همه</button>
-						</div>
-						<div class="cptt-notifications-list">
-							<?php if (empty($notifications)): ?>
-								<div style="padding:15px;text-align:center;color:#666;font-size:13px;">اعلان جدیدی وجود ندارد.</div>
-							<?php else: foreach ($notifications as $notif): ?>
-								<a href="<?php echo esc_url($notif->link ?: '#'); ?>" class="cptt-notification-item <?php echo $notif->is_read ? 'is-read' : ''; ?>" data-id="<?php echo esc_attr($notif->id); ?>">
-									<span class="cptt-notification-msg"><?php echo esc_html($notif->message); ?></span>
-									<span class="cptt-notification-time"><?php echo esc_html(CPTT_Core::jalali_datetime(strtotime($notif->created_at))); ?></span>
-								</a>
-							<?php endforeach; endif; ?>
+				
+					<div class="cptt-sidebar-controls desktop-only" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; background: #fff; padding: 12px; border-radius: 16px; border: 1px solid #e6ebf2; box-shadow: 0 4px 10px rgba(0,0,0,0.03);">
+						<button type="button" class="cptt-dark-toggle-icon" title="تغییر حالت شب/روز" style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:50%;width:42px;height:42px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;">🌙</button>
+						<div class="cptt-notification-bell" style="margin-bottom:0;">
+							<?php
+								global $wpdb;
+								$unread_count = $wpdb->get_var($wpdb->prepare("SELECT COUNT(id) FROM {$wpdb->prefix}cptt_notifications WHERE user_id = %d AND is_read = 0", get_current_user_id()));
+								$notifications = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$wpdb->prefix}cptt_notifications WHERE user_id = %d ORDER BY created_at DESC LIMIT 5", get_current_user_id()));
+							?>
+							<button type="button" class="cptt-bell-btn" style="background:#f8fafc;border:1px solid #cbd5e1;">
+								<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+								<?php if ($unread_count > 0): ?><span class="cptt-bell-badge"><?php echo esc_html($unread_count); ?></span><?php endif; ?>
+							</button>
+							<div class="cptt-notifications-dropdown" hidden>
+								<div class="cptt-notifications-header">
+									<strong>اعلان‌ها</strong>
+									<button type="button" id="cptt-mark-all-read" style="background:none;border:none;color:#2271b1;cursor:pointer;font-size:12px;">خواندن همه</button>
+								</div>
+								<div class="cptt-notifications-list">
+									<?php if (empty($notifications)): ?>
+										<div style="padding:15px;text-align:center;color:#666;font-size:13px;">اعلان جدیدی وجود ندارد.</div>
+									<?php else: foreach ($notifications as $notif): ?>
+										<div class="cptt-notification-item-wrap" style="position:relative;border-bottom:1px solid #f1f5f9;">
+											<a href="<?php echo esc_url($notif->link ?: '#'); ?>" class="cptt-notification-item <?php echo $notif->is_read ? 'is-read' : ''; ?>" data-id="<?php echo esc_attr($notif->id); ?>" style="padding-left:35px;display:block;">
+												<span class="cptt-notification-msg"><?php echo esc_html($notif->message); ?></span>
+												<span class="cptt-notification-time"><?php echo esc_html(class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime(strtotime(get_gmt_from_date($notif->created_at))) : ''); ?></span>
+											</a>
+											<button type="button" class="cptt-delete-notif-btn" data-id="<?php echo esc_attr($notif->id); ?>" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:#ef4444;cursor:pointer;font-size:16px;" title="حذف اعلان">🗑</button>
+										</div>
+									<?php endforeach; endif; ?>
+								</div>
+								<div style="padding:10px; border-top:1px solid #e2e8f0; text-align:center;">
+									<button type="button" class="cptt-btn cptt-btn--secondary" data-cptt-open-all-notifs style="width:100%;font-size:12px;padding:8px;">مشاهده تمام اعلان‌ها</button>
+								</div>
+							</div>
 						</div>
 					</div>
-				</div>
 
-					
 					<div class="cptt-sideBox cptt-sideBox--profile">
-						<div class="cptt-sideBox__title">پروفایل کارشناس</div>
+						<div class="cptt-sideBox__title" style="display:flex;justify-content:space-between;align-items:center;">
+							<span>پروفایل کارشناس</span>
+							<span style="font-size:11px;font-weight:normal;color:#64748b;"><?php echo esc_html(class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime(current_time('timestamp', true)) : date('Y-m-d H:i')); ?></span>
+						</div>
 						<div class="cptt-expertProfile" style="display:flex; align-items:center; gap:10px;">
 							<?php
 								$curr_avatar = $this->get_expert_avatar_url($current_user->ID);
@@ -2173,7 +2282,7 @@ class CPTT_Expert {
 							<li><span>تاخیرها</span><strong><?php echo esc_html(number_format_i18n(count($stats['overdue']))); ?></strong></li>
 						</ul>
 					</div>
-					<button type="button" class="cptt-newProjectCta" data-cptt-open-newproject>
+					<button type="button" class="cptt-newProjectCta desktop-only" data-cptt-open-newproject>
 						ایجاد پروژه جدید
 					</button>
 
@@ -2197,9 +2306,7 @@ class CPTT_Expert {
 							<?php endforeach; ?>
 						</div>
 					</div>
-					<button type="button" class="cptt-btn cptt-btn--secondary mobile-only cptt-open-experts-modal-btn" style="width:100%; margin-top:15px;">
-						گفتگو با کارشناسان
-					</button>
+					
 
 					<!-- Mobile Experts Modal -->
 					<div class="cptt-experts-mobile-modal" hidden>
@@ -2224,13 +2331,66 @@ class CPTT_Expert {
 
 				</aside>
 				<div class="cptt-expertMain">
+			<!-- Mobile FAB & Menu -->
+			<button type="button" class="cptt-mobile-fab mobile-only">☰</button>
+			<div class="cptt-mobile-menu" hidden>
+			    <div class="cptt-mobile-menu__backdrop"></div>
+			    <div class="cptt-mobile-menu__dialog">
+			        <div class="cptt-mobile-menu__header" style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:15px;">
+			            <div style="display:flex; align-items:center; gap:16px;">
+			                <button type="button" class="cptt-dark-toggle-icon" style="background:none;border:none;font-size:22px;cursor:pointer;color:#475569;">🌙</button>
+			                <div class="cptt-notification-bell" style="margin-bottom:0;display:flex;align-items:center;">
+			                    <?php
+			                    	$unread_count = $wpdb->get_var($wpdb->prepare("SELECT COUNT(id) FROM {$wpdb->prefix}cptt_notifications WHERE user_id = %d AND is_read = 0", get_current_user_id()));
+			                    ?>
+			                    <button type="button" class="cptt-bell-btn cptt-mobile-bell-btn" style="background:none;border:none;position:relative;cursor:pointer;color:#475569;display:flex;align-items:center;">
+			                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+			                        <?php if ($unread_count > 0): ?><span class="cptt-bell-badge" style="position:absolute;top:-5px;right:-5px;background:#ef4444;color:#fff;font-size:10px;border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-weight:bold;"><?php echo esc_html($unread_count); ?></span><?php endif; ?>
+			                    </button>
+			                </div>
+			            </div>
+                        <button type="button" class="cptt-mobile-menu__close" style="margin-left:0;background:none;border:none;font-size:26px;color:#64748b;cursor:pointer;">×</button>
+			        </div>
+			        
+                    <div style="padding:15px 0; border-bottom:1px solid #e2e8f0; margin-bottom:15px;">
+						<div class="cptt-expertProfile" style="display:flex; align-items:center; gap:10px;">
+							<img src="<?php echo esc_url($curr_avatar); ?>" alt="avatar" style="width:40px; height:40px; border-radius:50%; object-fit:cover;">
+							<div>
+								<strong style="display:block;font-size:14px;"><?php echo esc_html($current_user->display_name); ?></strong>
+								<span style="display:block; font-size:11px; color:#666;"><?php echo esc_html($current_user->user_email); ?></span>
+							</div>
+						</div>
+                    </div>
+
+			        <div style="margin-top:20px; display:grid; gap:10px;">
+			            <button type="button" class="cptt-btn cptt-btn--secondary cptt-open-experts-modal-btn" style="width:100%;">💬 گفتگو با کارشناسان</button>
+			            <button type="button" class="cptt-newProjectCta" data-cptt-open-newproject style="width:100%;">ایجاد پروژه جدید</button>
+                        <a href="<?php echo esc_url(self::public_hub_url()); ?>" class="cptt-btn cptt-btn--secondary" style="width:100%;">مشاهده تمام پروژه‌ها</a>
+			        </div>
+			    </div>
+			</div>
+			
+			<!-- All Notifications Modal -->
+			<div class="cptt-all-notifs-modal" hidden>
+			    <div class="cptt-all-notifs-modal__backdrop" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999998;backdrop-filter:blur(4px);"></div>
+			    <div class="cptt-all-notifs-modal__dialog" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(500px, 90vw);max-height:80vh;background:#fff;border-radius:16px;z-index:9999999;display:flex;flex-direction:column;box-shadow:0 20px 40px rgba(0,0,0,0.2);">
+			        <div style="padding:15px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center;">
+			            <strong style="font-size:16px;">تمام اعلان‌ها</strong>
+			            <button type="button" class="cptt-all-notifs-modal__close" style="background:none;border:none;font-size:24px;cursor:pointer;">×</button>
+			        </div>
+			        <div class="cptt-all-notifs-list" style="overflow-y:auto;flex:1;padding:10px;">در حال بارگذاری...</div>
+			    </div>
+			</div>
+
 			<section class="cptt-proHero cptt-proHero--expert">
 				<div class="cptt-proHero__content">
 					<span class="cptt-proHero__eyebrow">داشبورد حرفه‌ای کارشناس</span>
 					<h1 class="cptt-proHero__title">سلام <?php echo esc_html($current_user->display_name); ?> 👋</h1>
 					<p class="cptt-proHero__text">تمام پروژه‌های محول‌شده، مراحل باز، یادداشت‌ها و وضعیت مشتری‌ها را در یک صفحه یکپارچه مدیریت کنید.</p>
 					<div class="cptt-proHero__actions">
+                        <button type="button" class="cptt-btn cptt-btn--primary mobile-only" data-cptt-open-newproject style="width:100%;">ایجاد پروژه جدید</button>
 						<a class="cptt-btn cptt-btn--primary" href="<?php echo esc_url(self::dashboard_url()); ?>">بروزرسانی داشبورد</a>
+						<a class="cptt-btn cptt-btn--secondary" href="<?php echo esc_url(self::public_hub_url()); ?>">مشاهده تمام پروژه‌ها</a>
 						<?php if (class_exists('CPTT_Report')): ?><span class="cptt-proHero__hint">برای پروژه‌های تکمیل‌شده امکان دریافت گزارش فعال است.</span><?php endif; ?>
 					</div>
 				</div>
@@ -2259,7 +2419,12 @@ class CPTT_Expert {
 				</div>
 			</div>
 
-			<div class="cptt-expertFilters">
+			
+			<div class="cptt-mobile-filter-trigger mobile-only">
+			    <button type="button" class="cptt-btn cptt-btn--secondary" id="cptt-mobile-filter-btn">جستجو و فیلتر پروژه‌ها 🔍</button>
+			</div>
+
+			<div class="cptt-expertFilters" id="cptt-expert-filters-wrap">
 				<label>جستجو<input type="search" id="cptt-expert-search" placeholder="عنوان پروژه، مشتری، محصول..."></label>
 				<label>وضعیت<select id="cptt-expert-status"><option value="">همه</option><option value="completed">تکمیل شده</option><option value="in_progress">در حال انجام</option></select></label>
 				<label>تسویه<select id="cptt-expert-settled"><option value="">همه</option><option value="1">تسویه شده</option><option value="0">تسویه نشده</option></select></label>
@@ -2387,7 +2552,7 @@ class CPTT_Expert {
 			</div>
 
 			<!-- ========== NEW PROJECT MODAL ========== -->
-			<div class="cptt-newProjectModal" id="cptt-new-project-modal" aria-hidden="true">
+			<div class="cptt-newProjectModal" id="cptt-new-project-modal" aria-hidden="true" style="z-index: 99999999;">
 				<div class="cptt-newProjectModal__backdrop" data-cptt-close-newproject></div>
 				<div class="cptt-newProjectModal__dialog" role="dialog" aria-modal="true" aria-labelledby="cptt-new-project-modal-title">
 					<div class="cptt-newProjectModal__header">
@@ -2498,18 +2663,24 @@ class CPTT_Expert {
 		global $wpdb;
 		$user_id = get_current_user_id();
 		$unread = (int)$wpdb->get_var($wpdb->prepare("SELECT COUNT(id) FROM {$wpdb->prefix}cptt_notifications WHERE user_id = %d AND is_read = 0", $user_id));
-		$notifications = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$wpdb->prefix}cptt_notifications WHERE user_id = %d ORDER BY created_at DESC LIMIT 15", $user_id));
+		$notifications = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$wpdb->prefix}cptt_notifications WHERE user_id = %d ORDER BY created_at DESC LIMIT 5", $user_id));
 		ob_start();
 		if (empty($notifications)) {
 			echo '<div style="padding:15px;text-align:center;color:#666;font-size:13px;">اعلان جدیدی وجود ندارد.</div>';
 		} else {
 			foreach ($notifications as $notif) {
-				echo '<a href="' . esc_url($notif->link ?: '#') . '" class="cptt-notification-item ' . ($notif->is_read ? 'is-read' : '') . '" data-id="' . esc_attr($notif->id) . '">';
+				echo '<div class="cptt-notification-item-wrap" style="position:relative;border-bottom:1px solid #f1f5f9;">';
+				echo '<a href="' . esc_url($notif->link ?: '#') . '" class="cptt-notification-item ' . ($notif->is_read ? 'is-read' : '') . '" data-id="' . esc_attr($notif->id) . '" style="padding-left:35px;display:block;">';
 				echo '<span class="cptt-notification-msg">' . esc_html($notif->message) . '</span>';
-				echo '<span class="cptt-notification-time">' . esc_html(CPTT_Core::jalali_datetime(strtotime($notif->created_at))) . '</span>';
+				echo '<span class="cptt-notification-time">' . esc_html(class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime(strtotime(get_gmt_from_date($notif->created_at))) : '') . '</span>';
 				echo '</a>';
+				echo '<button type="button" class="cptt-delete-notif-btn" data-id="' . esc_attr($notif->id) . '" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:#ef4444;cursor:pointer;font-size:16px;" title="حذف اعلان">🗑</button>';
+				echo '</div>';
 			}
 		}
+		echo '<div style="padding:10px; border-top:1px solid #e2e8f0; text-align:center;">';
+		echo '<button type="button" class="cptt-btn cptt-btn--secondary" data-cptt-open-all-notifs style="width:100%;font-size:12px;padding:8px;">مشاهده تمام اعلان‌ها</button>';
+		echo '</div>';
 		$html = ob_get_clean();
 		wp_send_json_success(['unread' => $unread, 'html' => $html]);
 	}
