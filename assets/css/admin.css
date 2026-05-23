@@ -1109,3 +1109,35 @@ body.post-type-cptt_template .cptt-admin-box .cptt-row,
 body.post-type-cptt_checklist_tpl .cptt-admin-box .cptt-row{direction:rtl;}
 
 .cptt-step-body[hidden], .cptt-expert-step__body[hidden] { display: none !important; }
+
+/* ================= Dark Mode Admin ================= */
+body.cptt-dark .wrap.cptt-dashboard,
+body.cptt-dark .cptt-admin-box,
+body.cptt-dark .cptt-notes,
+body.cptt-dark .cptt-acct-box,
+body.cptt-dark .cptt-checktpl,
+body.cptt-dark .cptt-stepCard,
+body.cptt-dark .cptt-insight,
+body.cptt-dark .cptt-proKpi,
+body.cptt-dark .cptt-project-card,
+body.cptt-dark .cptt-acct-kpi,
+body.cptt-dark .cptt-jdp { background: #1e293b; border-color: #334155; color: #e2e8f0; }
+body.cptt-dark .cptt-dashboard h1,
+body.cptt-dark .cptt-fieldLabel,
+body.cptt-dark .cptt-stepCard__title strong,
+body.cptt-dark .cptt-proKpi strong,
+body.cptt-dark .cptt-project-card h2 { color: #f8fafc; }
+body.cptt-dark .cptt-help,
+body.cptt-dark .cptt-acct-label { color: #94a3b8; }
+body.cptt-dark .cptt-jdp__days button { color: #f1f5f9; }
+body.cptt-dark .cptt-jdp__days button:hover { background: #334155; }
+body.cptt-dark .cptt-jdp__days button.is-selected { background: linear-gradient(135deg,#6366f1,#8b5cf6); }
+body.cptt-dark .cptt-stepCard__head,
+body.cptt-dark .cptt-stepCard__body { background: transparent; }
+body.cptt-dark .cptt-stepCard { border-color: #334155; }
+body.cptt-dark .cptt-notes__empty,
+body.cptt-dark .cptt-empty { color: #94a3b8; }
+body.cptt-dark .cptt-acct-table th,
+body.cptt-dark .cptt-acct-table td { border-color: #334155; }
+body.cptt-dark .cptt-expertOpt { background: #0f172a; border-color: #334155; }
+body.cptt-dark .cptt-expertOpt.is-checked { border-color: #6366f1; }

@@ -1405,3 +1405,26 @@
   box-shadow:0 10px 24px rgba(95,142,246,.18);
 }
 .cptt-publicProject__foot .cptt-btn--primary:hover{filter:brightness(.98);}
+
+/* ================= Dark Mode Frontend ================= */
+body.cptt-dark .cptt-wrap,
+body.cptt-dark .cptt-project,
+body.cptt-dark .cptt-modal__dialog,
+body.cptt-dark .cptt-reportCta__msg,
+body.cptt-dark .cptt-ut-item,
+body.cptt-dark .cptt-shell-page,
+body.cptt-dark .cptt-proHero,
+body.cptt-dark .cptt-kpiCard,
+body.cptt-dark .cptt-btn { background: #1e293b; border-color: #334155; color: #e2e8f0; }
+body.cptt-dark .cptt-project__title,
+body.cptt-dark .cptt-modal__title,
+body.cptt-dark .cptt-proHero__title { color: #f8fafc; }
+body.cptt-dark .cptt-project__meta,
+body.cptt-dark .cptt-modal__meta,
+body.cptt-dark .cptt-step__time { color: #94a3b8; }
+body.cptt-dark .cptt-progressbar { background: #334155; }
+body.cptt-dark .cptt-step__btn { background: #0f172a !important; border-color: #334155 !important; }
+body.cptt-dark .cptt-step__label { color: #f1f5f9; }
+body.cptt-dark .cptt-cl li { color: #cbd5e1; }
+body.cptt-dark .cptt-ut-title { color: #f1f5f9; }
+body.cptt-dark .cptt-ut-desc { color: #94a3b8; }

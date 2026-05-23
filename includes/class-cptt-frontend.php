@@ -466,6 +466,15 @@ class CPTT_Frontend {
 		update_post_meta($project_id, '_cptt_last_update', $now);
 		update_post_meta($project_id, '_cptt_last_update_fa', class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime($now) : date('Y-m-d H:i', $now));
 
+		// Notify project experts about completed user task
+		if (class_exists('CPTT_Expert')) {
+			$expert = CPTT_Expert::instance();
+			if (method_exists($expert, 'notify_project_experts')) {
+				$client = get_user_by('id', get_current_user_id());
+				$expert->notify_project_experts($project_id, get_current_user_id(), 'user_task', ($client ? $client->display_name : 'مشتری') . ' یک تسک مشتری را تکمیل کرد.', CPTT_Expert::dashboard_url());
+			}
+		}
+
 		wp_send_json_success([
 			'completed_at_fa' => class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime($now) : date('Y-m-d H:i', $now),
 		]);
