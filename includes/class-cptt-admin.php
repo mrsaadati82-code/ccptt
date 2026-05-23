@@ -676,8 +676,8 @@ class CPTT_Admin {
 							<div class="cptt-stepCard__billing">
 								<div class="cptt-fieldLabel">حساب و کتاب مرحله</div>
 								<div class="cptt-billing-row">
-									<label>هزینه (تومان) <input type="number" name="cptt_steps[<?php echo esc_attr($i); ?>][cost]" value="<?php echo esc_attr($step['cost']??0); ?>" class="cptt-step-cost" step="any" /></label>
-									<label>دریافتی (تومان) <input type="number" name="cptt_steps[<?php echo esc_attr($i); ?>][paid]" value="<?php echo esc_attr($step['paid']??0); ?>" class="cptt-step-paid" step="any" /></label>
+									<label>هزینه (تومان) <input type="text" name="cptt_steps[<?php echo esc_attr($i); ?>][cost]" value="<?php echo esc_attr(number_format($step['cost']??0)); ?>" class="cptt-step-cost cptt-currency-input" step="any" /></label>
+									<label>دریافتی (تومان) <input type="text" name="cptt_steps[<?php echo esc_attr($i); ?>][paid]" value="<?php echo esc_attr(number_format($step['paid']??0)); ?>" class="cptt-step-paid cptt-currency-input" step="any" /></label>
 									<span class="cptt-step-remain">مانده: <?php echo number_format(floatval($step['cost']??0)-floatval($step['paid']??0)); ?></span>
 								</div>
 							</div>
@@ -739,8 +739,8 @@ class CPTT_Admin {
 							<div class="cptt-stepCard__billing">
 								<div class="cptt-fieldLabel">حساب و کتاب مرحله</div>
 								<div class="cptt-billing-row">
-									<label>هزینه (تومان) <input type="number" name="cptt_steps[{{i}}][cost]" value="0" class="cptt-step-cost" step="any" /></label>
-									<label>دریافتی (تومان) <input type="number" name="cptt_steps[{{i}}][paid]" value="0" class="cptt-step-paid" step="any" /></label>
+									<label>هزینه (تومان) <input type="text" name="cptt_steps[{{i}}][cost]" value="0" class="cptt-step-cost cptt-currency-input" step="any" /></label>
+									<label>دریافتی (تومان) <input type="text" name="cptt_steps[{{i}}][paid]" value="0" class="cptt-step-paid cptt-currency-input" step="any" /></label>
 									<span class="cptt-step-remain">مانده: ۰</span>
 								</div>
 							</div>
@@ -906,8 +906,13 @@ class CPTT_Admin {
 			$due_at=isset($s['due_at_local'])?$this->parse_datetime_local($s['due_at_local']):0;
 			$checklist=isset($s['checklist'])?$this->normalize_checklist($s['checklist']):[];
 			$user_tasks=isset($s['user_tasks'])?$this->normalize_user_tasks($s['user_tasks']):[];
-			$cost=isset($s['cost'])?(float)$s['cost']:0;
-			$paid=isset($s['paid'])?(float)$s['paid']:0;
+			
+            $cost = isset($s['cost']) ? (float)str_replace(",", "", $s['cost']) : 0;
+            $paid = isset($s['paid']) ? (float)str_replace(",", "", $s['paid']) : 0;
+            if ($cost > 0 && $paid >= $cost) {
+                $status = 'done';
+            }
+
 			if ($title===''&&$desc===''&&empty($checklist)&&empty($user_tasks)) continue;
 			if ($status==='current') { if ($current_found) $status='todo'; $current_found=true; }
 			$row=['id'=>$id,'title'=>$title,'desc'=>$desc,'status'=>$status,'checklist'=>$checklist,'user_tasks'=>$user_tasks,'cost'=>$cost,'paid'=>$paid];

@@ -16,6 +16,46 @@ class CPTT_Core {
 
 		add_action('pre_get_posts', [$this, 'filter_admin_list_for_experts']);
 		add_action('admin_init', [$this, 'block_edit_for_other_experts']);
+		add_action('init', [$this, 'maybe_update_db']);
+	}
+
+	
+	public function maybe_update_db() {
+		$db_version = get_option('cptt_db_version', '1.0');
+		if (version_compare($db_version, '1.6.0', '<')) {
+			$this->create_custom_tables();
+			update_option('cptt_db_version', '1.6.0');
+		}
+	}
+
+	public function create_custom_tables() {
+		global $wpdb;
+		$charset_collate = $wpdb->get_charset_collate();
+		require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+
+		$sql = "CREATE TABLE {$wpdb->prefix}cptt_expert_chats (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			sender_id bigint(20) unsigned NOT NULL,
+			receiver_id bigint(20) unsigned NOT NULL,
+			message text NOT NULL,
+			file_url varchar(255) DEFAULT NULL,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id)
+		) $charset_collate;";
+		dbDelta($sql);
+
+		$sql2 = "CREATE TABLE {$wpdb->prefix}cptt_notifications (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			user_id bigint(20) unsigned NOT NULL,
+			type varchar(50) NOT NULL,
+			reference_id bigint(20) unsigned DEFAULT NULL,
+			message text NOT NULL,
+			link varchar(255) DEFAULT NULL,
+			is_read tinyint(1) DEFAULT 0,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id)
+		) $charset_collate;";
+		dbDelta($sql2);
 	}
 
 	public static function activate() {

@@ -1107,3 +1107,5 @@ body.post-type-cptt_checklist_tpl #post-body-content{margin:0 !important;}
 body.post-type-cptt_project .cptt-admin-box .cptt-row,
 body.post-type-cptt_template .cptt-admin-box .cptt-row,
 body.post-type-cptt_checklist_tpl .cptt-admin-box .cptt-row{direction:rtl;}
+
+.cptt-step-body[hidden], .cptt-expert-step__body[hidden] { display: none !important; }

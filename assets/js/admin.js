@@ -316,7 +316,7 @@ jQuery(function ($) {
   $(document).on('focus click', '.cptt-jalali-datetime', function(){ openCal(this); });
   $cal.on('click','[data-nav]',function(){ const dir=$(this).data('nav'); viewJ.jm += dir==='next'?1:-1; if(viewJ.jm>12){viewJ.jm=1;viewJ.jy++;} if(viewJ.jm<1){viewJ.jm=12;viewJ.jy--;} drawCal(); });
   $cal.on('click','[data-day]',function(){ setInputDate(parseInt($(this).data('day'),10)); });
-  $cal.on('click','[data-today]',function(){ const n=new Date(); const j=g2j(n.getFullYear(),n.getMonth()+1,n.getDate()); viewJ={jy:j[0],jm:j[1],jd:j[2],hh:n.getHours(),ii:n.getMinutes()}; drawCal(); });
+  $cal.on('click','[data-today]',function(){ const n=new Date(); const j=g2j(n.getFullYear(),n.getMonth()+1,n.getDate()); viewJ={jy:j[0],jm:j[1],jd:j[2],hh:n.getHours(),ii:n.getMinutes()}; setDateCal(j[2]); });
   $cal.on('click','[data-close]',function(){ $cal.hide(); });
   $(document).on('mousedown', function(e){ if(!$(e.target).closest('.cptt-jdp,.cptt-jalali-datetime').length) $cal.hide(); });
 
@@ -505,3 +505,15 @@ jQuery(function($){
   buildDashboardKpis();
   refreshStepAccordions();
 });
+
+  // Currency formatter
+  document.addEventListener('keyup', function(e) {
+      if (e.target && e.target.classList.contains('cptt-currency-input')) {
+          var val = e.target.value.replace(/[^\d]/g, '');
+          if (val) {
+              e.target.value = parseInt(val, 10).toLocaleString('en-US');
+          } else {
+              e.target.value = '';
+          }
+      }
+  });
