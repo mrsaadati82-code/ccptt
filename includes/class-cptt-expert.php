@@ -45,6 +45,7 @@ class CPTT_Expert {
 		add_action('wp_ajax_cptt_expert_delete_project', [$this, 'ajax_delete_project']);
 		add_action('wp_ajax_cptt_expert_delete_step', [$this, 'ajax_delete_step']);
 		add_action('admin_init', [$this, 'redirect_experts_from_admin'], 1);
+		add_filter('body_class', [$this, 'add_isolation_body_class']);
 	}
 
 	public static function dashboard_url() {
@@ -74,14 +75,14 @@ class CPTT_Expert {
 
 	private function current_user_is_expert_only() {
 		$user = wp_get_current_user();
-		$roles = (array) $user->roles;
+		$roles = ($user instanceof WP_User) ? (array)$user->roles : [];
 		return in_array('cptt_expert', $roles, true) && !in_array('administrator', $roles, true);
 	}
 
 	private function current_user_can_view_dashboard() {
 		if (!is_user_logged_in()) return false;
 		$user = wp_get_current_user();
-		$roles = (array) $user->roles;
+		$roles = ($user instanceof WP_User) ? (array)$user->roles : [];
 		return in_array('cptt_expert', $roles, true) || in_array('administrator', $roles, true);
 	}
 
@@ -215,7 +216,7 @@ class CPTT_Expert {
 		$user_id = (int) $user_id;
 		$user = get_user_by('id', $user_id);
 		if (!$user) return [];
-		$roles = (array) $user->roles;
+		$roles = ($user instanceof WP_User) ? (array)$user->roles : [];
 		$args = [
 			'post_type' => 'cptt_project',
 			'post_status' => 'any',
@@ -1038,7 +1039,7 @@ class CPTT_Expert {
 
 	private function is_expert_profile_supported($user) {
 		if (!$user || !($user instanceof WP_User)) return false;
-		$roles = (array) $user->roles;
+		$roles = ($user instanceof WP_User) ? (array)$user->roles : [];
 		return in_array('cptt_expert', $roles, true) || in_array('administrator', $roles, true);
 	}
 
@@ -2614,6 +2615,14 @@ class CPTT_Expert {
 		}
 		$html = ob_get_clean();
 		wp_send_json_success(['unread' => $unread, 'html' => $html]);
+	}
+
+
+	public function add_isolation_body_class($classes) {
+		if (get_query_var(self::QUERY_VAR) || get_query_var(self::PUBLIC_QUERY_VAR) || is_singular('cptt_project')) {
+			$classes[] = 'cptt-v2-scope';
+		}
+		return $classes;
 	}
 
 }
