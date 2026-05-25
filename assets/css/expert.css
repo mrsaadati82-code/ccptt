@@ -101,13 +101,13 @@ body.cptt-expert-dashboard-page #wpadminbar {
 .cptt-sideBox {
 	background: #ffffff;
 	border: 1px solid #e6ebf2;
-	border-radius: 20px;
+	border-radius: var(--cptt-radius) !important;
 	padding: 16px;
 	box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
 }
 
 .cptt-sideBox__title {
-	font-size: 13px;
+	font-size: var(--cptt-font-size) !important;
 	font-weight: 950;
 	color: #0f172a;
 	margin-bottom: 12px;
@@ -164,24 +164,25 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	font-size: 12px;
 	color: #475569;
 	background: #f8fafc;
-	border-radius: 12px;
+	border-radius: var(--cptt-radius) !important;
 	border: 1px solid #f1f5f9;
 }
 
 .cptt-sideList li strong {
 	color: #0f172a;
 	font-weight: 950;
-	font-size: 14px;
+	font-size: var(--cptt-font-size) !important;
 }
 
 /* CTA Button for "New Project" in sidebar (replaces full form) */
 .cptt-newProjectCta {
-	background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    display: inline-flex !important; width: auto !important; min-width: 160px !important;
+    background: linear-gradient(135deg, var(--cptt-primary), var(--cptt-secondary)) !important; color: #fff !important; border-radius: var(--cptt-radius) !important; padding: 10px 20px !important;
 	color: #fff;
 	border: 0;
-	border-radius: 16px;
+	border-radius: var(--cptt-radius) !important;
 	padding: 14px 16px;
-	font-size: 14px;
+	font-size: var(--cptt-font-size) !important;
 	font-weight: 950;
 	cursor: pointer;
 	display: flex;
@@ -260,7 +261,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	margin: 0;
 	color: rgba(255, 255, 255, 0.85);
 	line-height: 1.9;
-	font-size: 13px;
+	font-size: var(--cptt-font-size) !important;
 	position: relative;
 	z-index: 2;
 }
@@ -293,7 +294,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	background: rgba(255, 255, 255, 0.16);
 	backdrop-filter: blur(10px);
 	padding: 14px 12px;
-	border-radius: 16px;
+	border-radius: var(--cptt-radius) !important;
 	border: 1px solid rgba(255, 255, 255, 0.18);
 	text-align: center;
 }
@@ -347,7 +348,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 
 .cptt-kpiCard {
 	background: #fff;
-	border-radius: 18px;
+	border-radius: var(--cptt-radius) !important;
 	padding: 16px;
 	border: 1px solid #e6ebf2;
 	box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
@@ -435,7 +436,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 .cptt-insightBox {
 	background: #fff;
 	border: 1px solid #e6ebf2;
-	border-radius: 18px;
+	border-radius: var(--cptt-radius) !important;
 	padding: 16px;
 	box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
 	background: linear-gradient(180deg, #eff6ff 0%, #fff 40%);
@@ -448,7 +449,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 }
 
 .cptt-insightBox__title {
-	font-size: 13px;
+	font-size: var(--cptt-font-size) !important;
 	font-weight: 950;
 	color: #0f172a;
 	margin-bottom: 12px;
@@ -483,12 +484,12 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	gap: 10px;
 	padding: 10px 12px;
 	background: #fff;
-	border-radius: 12px;
+	border-radius: var(--cptt-radius) !important;
 	border: 1px solid #f1f5f9;
 }
 
 .cptt-insightBox li strong {
-	font-size: 13px;
+	font-size: var(--cptt-font-size) !important;
 	color: #0f172a;
 	font-weight: 900;
 }
@@ -505,7 +506,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	line-height: 1.9;
 	padding: 12px;
 	background: #fff;
-	border-radius: 12px;
+	border-radius: var(--cptt-radius) !important;
 	border: 1px dashed #e2e8f0;
 	text-align: center;
 }
@@ -517,7 +518,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 .cptt-expertFilters {
 	background: #fff;
 	border: 1px solid #e6ebf2;
-	border-radius: 20px;
+	border-radius: var(--cptt-radius) !important;
 	padding: 16px;
 	box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
 	display: grid;
@@ -554,9 +555,9 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	margin-top: 6px;
 	padding: 11px 13px;
 	border: 1px solid #cbd5e1;
-	border-radius: 12px;
+	border-radius: var(--cptt-radius) !important;
 	background: #f8fafc;
-	font: inherit;
+	font-size: var(--cptt-font-size) !important;
 	color: #0f172a;
 	box-sizing: border-box;
 	transition: border-color 0.15s ease, background 0.15s ease;
@@ -576,7 +577,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	background-repeat: no-repeat;
 	background-position: right 12px center;
 	background-size: 18px;
-	font-size: 14px;
+	font-size: var(--cptt-font-size) !important;
 	min-height: 44px;
 }
 
@@ -584,7 +585,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	padding: 11px 18px;
 	white-space: nowrap;
 	min-height: 44px;
-	border-radius: 12px;
+	border-radius: var(--cptt-radius) !important;
 }
 
 /* =====================================================================
@@ -606,7 +607,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 .cptt-expertCard {
 	background: #fff;
 	border: 1px solid #e6ebf2;
-	border-radius: 20px;
+	border-radius: var(--cptt-radius) !important;
 	padding: 18px;
 	box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
 	transition: transform 0.15s ease, box-shadow 0.15s ease;
@@ -739,7 +740,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	padding: 10px 12px;
 	background: #f8fafc;
 	border: 1px solid #f1f5f9;
-	border-radius: 12px;
+	border-radius: var(--cptt-radius) !important;
 }
 
 .cptt-expertCard__infoGrid span {
@@ -752,7 +753,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 .cptt-expertCard__infoGrid strong {
 	display: block;
 	margin-top: 4px;
-	font-size: 13px;
+	font-size: var(--cptt-font-size) !important;
 	color: #0f172a;
 	line-height: 1.7;
 	font-weight: 900;
@@ -808,12 +809,12 @@ body.cptt-expert-dashboard-page #wpadminbar {
 .cptt-expert-projectMeta {
 	background: #f8fafc;
 	border: 1px solid #e2e8f0;
-	border-radius: 16px;
+	border-radius: var(--cptt-radius) !important;
 	padding: 14px;
 }
 
 .cptt-expert-sectionTitle {
-	font-size: 13px;
+	font-size: var(--cptt-font-size) !important;
 	font-weight: 950;
 	color: #0f172a;
 	margin-bottom: 10px;
@@ -860,9 +861,9 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	width: 100%;
 	padding: 11px 12px;
 	border: 1px solid #cbd5e1;
-	border-radius: 12px;
+	border-radius: var(--cptt-radius) !important;
 	background: #fff;
-	font: inherit;
+	font-size: var(--cptt-font-size) !important;
 	color: #0f172a;
 	box-sizing: border-box;
 	transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -892,7 +893,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	padding: 12px;
 	background: #eef2ff;
 	border: 1px solid #e0e7ff;
-	border-radius: 12px;
+	border-radius: var(--cptt-radius) !important;
 	margin-top: 10px;
 }
 
@@ -906,7 +907,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
-	font-size: 13px;
+	font-size: var(--cptt-font-size) !important;
 	color: #0f172a;
 	font-weight: 900;
 	cursor: pointer;
@@ -922,7 +923,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 .cptt-expert-step {
 	background: #fff;
 	border: 1px solid #e6ebf2;
-	border-radius: 16px;
+	border-radius: var(--cptt-radius) !important;
 	overflow: hidden;
 	transition: box-shadow 0.2s ease;
 }
@@ -944,7 +945,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	gap: 12px;
 	text-align: right;
 	transition: background 0.15s ease;
-	font: inherit;
+	font-size: var(--cptt-font-size) !important;
 }
 
 .cptt-expert-step.is-open .cptt-expert-step__toggle {
@@ -962,7 +963,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 
 .cptt-expert-step__toggleMain strong {
 	display: block;
-	font-size: 14px;
+	font-size: var(--cptt-font-size) !important;
 	font-weight: 950;
 	color: #0f172a;
 	line-height: 1.6;
@@ -1047,7 +1048,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	padding: 12px;
 	background: #fff;
 	border: 1px solid #e6ebf2;
-	border-radius: 12px;
+	border-radius: var(--cptt-radius) !important;
 	display: block;
 }
 
@@ -1068,7 +1069,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	border: 1px solid #cbd5e1;
 	border-radius: 10px;
 	background: #f8fafc;
-	font: inherit;
+	font-size: var(--cptt-font-size) !important;
 	color: #0f172a;
 	box-sizing: border-box;
 }
@@ -1083,7 +1084,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 
 .cptt-expert-step__metaItem strong {
 	display: block;
-	font-size: 13px;
+	font-size: var(--cptt-font-size) !important;
 	color: #0f172a;
 	line-height: 1.6;
 	font-weight: 900;
@@ -1105,9 +1106,9 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	width: 100%;
 	padding: 11px 13px;
 	border: 1px solid #cbd5e1;
-	border-radius: 12px;
+	border-radius: var(--cptt-radius) !important;
 	background: #fff;
-	font: inherit;
+	font-size: var(--cptt-font-size) !important;
 	color: #0f172a;
 	box-sizing: border-box;
 	resize: vertical;
@@ -1190,7 +1191,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	border: 1px solid #cbd5e1;
 	border-radius: 10px;
 	background: #fff;
-	font: inherit;
+	font-size: var(--cptt-font-size) !important;
 	color: #0f172a;
 	box-sizing: border-box;
 }
@@ -1216,7 +1217,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 .cptt-expert-userTask {
 	background: #fff;
 	border: 1px solid #fed7aa;
-	border-radius: 12px;
+	border-radius: var(--cptt-radius) !important;
 	padding: 12px;
 	display: grid;
 	gap: 10px;
@@ -1247,7 +1248,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	border: 1px solid #cbd5e1;
 	border-radius: 10px;
 	background: #f8fafc;
-	font: inherit;
+	font-size: var(--cptt-font-size) !important;
 	color: #0f172a;
 	box-sizing: border-box;
 }
@@ -1297,7 +1298,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	margin-top: 4px;
 	background: linear-gradient(180deg, #ecfdf5, #fff);
 	border: 1px solid #a7f3d0;
-	border-radius: 12px;
+	border-radius: var(--cptt-radius) !important;
 	padding: 14px;
 	display: grid;
 	gap: 10px;
@@ -1332,7 +1333,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	background: #10b981;
 	color: #fff;
 	border-radius: 50%;
-	font-size: 14px;
+	font-size: var(--cptt-font-size) !important;
 	font-weight: 900;
 }
 
@@ -1347,7 +1348,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	border: 1px solid #d1fae5;
 	border-radius: 10px;
 	padding: 12px;
-	font-size: 13px;
+	font-size: var(--cptt-font-size) !important;
 	line-height: 1.9;
 	color: #1f2937;
 	white-space: pre-wrap;
@@ -1375,7 +1376,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 
 .cptt-expert-userTask__responseLink::before {
 	content: '🔗';
-	font-size: 14px;
+	font-size: var(--cptt-font-size) !important;
 }
 
 .cptt-expert-userTask__responseLink:hover {
@@ -1471,7 +1472,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 
 .cptt-expert-userTask__fileBtn::before {
 	content: '👁';
-	font-size: 13px;
+	font-size: var(--cptt-font-size) !important;
 }
 
 /* ---------- Form Footer ---------- */
@@ -1480,7 +1481,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	padding: 14px;
 	background: #f8fafc;
 	border: 1px solid #e2e8f0;
-	border-radius: 16px;
+	border-radius: var(--cptt-radius) !important;
 	display: grid;
 	gap: 12px;
 }
@@ -1508,7 +1509,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 .cptt-expert-noteItem {
 	padding: 10px 12px;
 	border: 1px solid #e6ebf2;
-	border-radius: 12px;
+	border-radius: var(--cptt-radius) !important;
 	background: #fff;
 }
 
@@ -1561,7 +1562,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	max-height: 86vh;
 	overflow: auto;
 	background: #fff;
-	border-radius: 20px;
+	border-radius: var(--cptt-radius) !important;
 	padding: 22px;
 	box-shadow: 0 30px 60px rgba(15, 23, 42, 0.35);
 }
@@ -1596,9 +1597,9 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	width: 100%;
 	padding: 10px 12px;
 	border: 1px solid #cbd5e1;
-	border-radius: 12px;
+	border-radius: var(--cptt-radius) !important;
 	background: #f8fafc;
-	font: inherit;
+	font-size: var(--cptt-font-size) !important;
 	color: #0f172a;
 	box-sizing: border-box;
 }
@@ -1700,16 +1701,16 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	align-items: center;
 	justify-content: center;
 	padding: 10px 16px;
-	border-radius: 12px;
+	border-radius: var(--cptt-radius) !important;
 	border: 1px solid #cbd5e1;
 	background: #fff;
 	color: #334155;
-	font-size: 13px;
+	font-size: var(--cptt-font-size) !important;
 	font-weight: 900;
 	cursor: pointer;
 	text-decoration: none;
 	transition: all 0.15s ease;
-	font-family: inherit;
+	font-family: var(--cptt-font-family) !important;
 }
 
 .cptt-shell-page .cptt-btn:hover,
@@ -1746,7 +1747,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	font-weight: 700;
 	background: #fff;
 	border: 1px dashed #cbd5e1;
-	border-radius: 16px;
+	border-radius: var(--cptt-radius) !important;
 	grid-column: 1 / -1;
 }
 
@@ -1757,7 +1758,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	font-weight: 700;
 	background: #fff;
 	border: 1px dashed #cbd5e1;
-	border-radius: 16px;
+	border-radius: var(--cptt-radius) !important;
 	margin-top: 12px;
 }
 
@@ -1780,10 +1781,10 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	width: 280px;
 	background: #fff;
 	border: 1px solid #e2e8f0;
-	border-radius: 16px;
+	border-radius: var(--cptt-radius) !important;
 	padding: 12px;
 	box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
-	font-family: inherit;
+	font-family: var(--cptt-font-family) !important;
 }
 
 .cptt-jdp__head {
@@ -1811,7 +1812,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 }
 
 .cptt-jdp__head strong {
-	font-size: 13px;
+	font-size: var(--cptt-font-size) !important;
 	color: #0f172a;
 	font-weight: 950;
 }
@@ -1846,7 +1847,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	color: #334155;
 	cursor: pointer;
 	font-weight: 700;
-	font-family: inherit;
+	font-family: var(--cptt-font-family) !important;
 }
 
 .cptt-jdp__days button:hover {
@@ -1880,7 +1881,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	border: 1px solid #cbd5e1;
 	border-radius: 8px;
 	text-align: center;
-	font: inherit;
+	font-size: var(--cptt-font-size) !important;
 }
 
 .cptt-jdp__time span {
@@ -1906,7 +1907,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	color: #4338ca;
 	cursor: pointer;
 	font-weight: 900;
-	font-family: inherit;
+	font-family: var(--cptt-font-family) !important;
 }
 
 .cptt-jdp__foot button:hover {
@@ -1947,7 +1948,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 .cptt-expert-list-item { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 8px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); cursor: pointer; transition: all 0.2s ease; border: 1px solid #eee; }
 .cptt-expert-list-item:hover { transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.08); border-color: #2271b1; }
 .cptt-expert-list-item img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
-.cptt-expert-list-item span { font-weight: 500; font-size: 14px; color: #1d2327; }
+.cptt-expert-list-item span { font-weight: 500; font-size: var(--cptt-font-size) !important; color: #1d2327; }
 
 .desktop-only { display: block; }
 .mobile-only { display: none !important; }
@@ -1960,7 +1961,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 .cptt-experts-mobile-modal, .cptt-direct-chat-modal { position: fixed; inset: 0; z-index: 9999999; display: flex; align-items: center; justify-content: center; padding: 20px; }
 .cptt-experts-mobile-modal[hidden], .cptt-direct-chat-modal[hidden] { display: none !important; }
 .cptt-experts-mobile-modal__backdrop, .cptt-direct-chat-modal__backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(2px); }
-.cptt-experts-mobile-modal__dialog, .cptt-direct-chat-modal__dialog { position: relative; background: #fff; border-radius: 12px; width: 100%; max-width: 500px; padding: 24px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); max-height: 90vh; display: flex; flex-direction: column; }
+.cptt-experts-mobile-modal__dialog, .cptt-direct-chat-modal__dialog { position: relative; background: #fff; border-radius: var(--cptt-radius) !important; width: 100%; max-width: 500px; padding: 24px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); max-height: 90vh; display: flex; flex-direction: column; }
 .cptt-experts-mobile-modal__close, .cptt-direct-chat-modal__close { position: absolute; top: 16px; right: 16px; width: 32px; height: 32px; border: none; background: #f0f0f1; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; color: #646970; }
 .cptt-experts-mobile-modal__close:hover, .cptt-direct-chat-modal__close:hover { background: #dcdcde; color: #d63638; }
 
@@ -1982,7 +1983,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 .cptt-expert-card-item:hover { border-color: #2271b1; }
 .cptt-expert-card-item input:checked + img { border: 2px solid #2271b1; }
 .cptt-expert-card-item img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; }
-.cptt-expert-card-item span { font-size: 13px; color: #1d2327; }
+.cptt-expert-card-item span { font-size: var(--cptt-font-size) !important; color: #1d2327; }
 
 .cptt-notification-bell { position: relative; margin-bottom: 20px; z-index: 1000000 !important; }
 .cptt-bell-btn { background: #fff; border: 1px solid #ddd; border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; color: #555; transition: 0.2s; }
@@ -1995,7 +1996,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 .cptt-notification-item { display: flex; flex-direction: column; padding: 12px 15px; border-bottom: 1px solid #f0f0f0; text-decoration: none; color: #333; transition: 0.2s; background: #ebf4fa; }
 .cptt-notification-item.is-read { background: #fff; }
 .cptt-notification-item:hover { background: #f6f7f7; }
-.cptt-notification-msg { font-size: 13px; line-height: 1.5; margin-bottom: 5px; }
+.cptt-notification-msg { font-size: var(--cptt-font-size) !important; line-height: 1.5; margin-bottom: 5px; }
 .cptt-notification-time { font-size: 11px; color: #888; }
 /* =====================================================================
    CPTT Expert Dashboard Additions — Chat Bubbles, Kanban, Dark Mode, Delete
@@ -2005,7 +2006,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 .cptt-chat-bubble {
 	background: #fff;
 	border: 1px solid #e6ebf2;
-	border-radius: 16px;
+	border-radius: var(--cptt-radius) !important;
 	padding: 12px 14px;
 	margin-bottom: 10px;
 	max-width: 82%;
@@ -2037,7 +2038,7 @@ body.cptt-expert-dashboard-page #wpadminbar {
 	flex-wrap: wrap;
 }
 .cptt-chat-bubble__body {
-	font-size: 13px;
+	font-size: var(--cptt-font-size) !important;
 	line-height: 1.9;
 	color: #334155;
 }
@@ -2059,13 +2060,13 @@ body.cptt-expert-dashboard-page #wpadminbar {
 
 /* ---------- Kanban ---------- */
 .cptt-kanban { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; margin-bottom: 20px; }
-.cptt-kanban__col { background: #f8fafc; border: 1px solid #e6ebf2; border-radius: 20px; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-height: 220px; }
-.cptt-kanban__head { font-size: 13px; font-weight: 950; color: #0f172a; padding-bottom: 8px; border-bottom: 1px dashed #dbeafe; margin-bottom: 4px; }
+.cptt-kanban__col { background: #f8fafc; border: 1px solid #e6ebf2; border-radius: var(--cptt-radius) !important; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-height: 220px; }
+.cptt-kanban__head { font-size: var(--cptt-font-size) !important; font-weight: 950; color: #0f172a; padding-bottom: 8px; border-bottom: 1px dashed #dbeafe; margin-bottom: 4px; }
 .cptt-kanban__dropzone { display: flex; flex-direction: column; gap: 10px; flex: 1; }
 .cptt-kanban__card { background: #fff; border: 1px solid #e6ebf2; border-radius: 14px; padding: 12px; cursor: grab; box-shadow: 0 4px 10px rgba(15,23,42,0.04); transition: transform .15s ease, box-shadow .15s ease; }
 .cptt-kanban__card:hover { transform: translateY(-2px); box-shadow: 0 8px 18px rgba(15,23,42,0.08); }
 .cptt-kanban__card.is-dragging { opacity: 0.6; transform: scale(0.98); }
-.cptt-kanban__cardTitle { font-size: 13px; font-weight: 900; color: #0f172a; line-height: 1.7; }
+.cptt-kanban__cardTitle { font-size: var(--cptt-font-size) !important; font-weight: 900; color: #0f172a; line-height: 1.7; }
 .cptt-kanban__cardMeta { font-size: 11px; color: #64748b; margin-top: 4px; }
 
 /* ---------- Delete Buttons ---------- */
@@ -2281,7 +2282,7 @@ body.cptt-dark .cptt-chat-file-preview {
     border: none;
     color: #ef4444;
     cursor: pointer;
-    font-size: 14px;
+    font-size: var(--cptt-font-size) !important;
     font-weight: 900;
     padding: 0 4px;
 }
@@ -2320,7 +2321,7 @@ body.cptt-dark .cptt-emoji-btn:hover {
     flex-direction: column;
     background: #f8fafc;
     border: 1px solid #cbd5e1;
-    border-radius: 20px;
+    border-radius: var(--cptt-radius) !important;
     padding: 10px 14px;
     gap: 0;
     margin-top: auto;
@@ -2458,7 +2459,7 @@ body.cptt-dark .cptt-realtime-clock {
     background: #eff6ff;
     padding: 6px 12px;
     border-radius: 999px;
-    font-size: 13px;
+    font-size: var(--cptt-font-size) !important;
     display: inline-block;
 }
 
@@ -2512,7 +2513,7 @@ body.cptt-dark .cptt-realtime-clock {
 .cptt-mobile-menu__header {
     display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 15px; margin-bottom: 15px;
 }
-.cptt-mobile-menu .cptt-dark-toggle-icon { width: auto; border-radius: 12px; padding: 0 12px; font-size: 13px; gap: 8px; }
+.cptt-mobile-menu .cptt-dark-toggle-icon { width: auto; border-radius: var(--cptt-radius) !important; padding: 0 12px; font-size: var(--cptt-font-size) !important; gap: 8px; }
 
 /* Mobile Filters Wrapper */
 .cptt-mobile-filter-trigger {
@@ -2757,7 +2758,7 @@ body.cptt-dark .cptt-sideBox__title span { color: #f8fafc !important; }
     .cptt-kpiCard {
         padding: 10px 8px !important;
         min-height: auto !important;
-        border-radius: 12px !important;
+        border-radius: var(--cptt-radius) !important !important;
     }
     .cptt-kpiCard__value {
         font-size: 18px !important;
@@ -2829,7 +2830,7 @@ body.cptt-dark .cptt-createProjectCheck label {
     .cptt-createProjectGrid textarea,
     .cptt-expert-step__metaGrid input,
     .cptt-expert-step__metaGrid select {
-        font-size: 14px !important;
+        font-size: var(--cptt-font-size) !important !important;
         padding: 10px !important;
         width: 100% !important;
         max-width: 100% !important;

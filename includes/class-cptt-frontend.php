@@ -124,7 +124,7 @@ class CPTT_Frontend {
 
 		ob_start();
 		?>
-		<div class="cptt-wrap" dir="rtl">
+		<div class="cptt-v2-scope"><div class="cptt-wrap" dir="rtl">
 			<div class="cptt-title">پروژه‌های من</div>
 
 			<?php if ( empty($projects) ): ?>
@@ -373,7 +373,7 @@ class CPTT_Frontend {
 			</div>
 		</div>
 		<?php
-		return ob_get_clean();
+		echo "</div>"; return ob_get_clean();
 	}
 	public function ajax_complete_user_task() {
 		if (!is_user_logged_in()) wp_send_json_error('login_required', 401);
