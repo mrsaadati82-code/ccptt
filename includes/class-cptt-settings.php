@@ -34,6 +34,20 @@ class CPTT_Settings {
 		], is_array($opt) ? $opt : []);
 	}
 
+	public static function get_fields_visibility() {
+		$opt = get_option('cptt_fields', []);
+		return array_merge([
+			'client' => '1',
+			'category' => '1',
+			'product' => '1',
+			'experts' => '1',
+			'template' => '1',
+			'deadline' => '1',
+			'delivery' => '1',
+			'financial' => '1',
+		], is_array($opt) ? $opt : []);
+	}
+
 	public function menu() {
 		add_submenu_page('edit.php?post_type=cptt_project', 'تنظیمات CPTT', 'تنظیمات افزونه', 'manage_options', 'cptt-settings', [$this, 'page']);
 	}
@@ -42,6 +56,7 @@ class CPTT_Settings {
 		register_setting('cptt_settings_group', 'cptt_branding');
 		register_setting('cptt_settings_group', 'cptt_styles');
 		register_setting('cptt_settings_group', 'cptt_advanced');
+		register_setting('cptt_settings_group', 'cptt_fields');
 	}
 
 	public function assets($hook) {
@@ -151,6 +166,639 @@ class CPTT_Settings {
 				display: block !important;
 				color: #475569 !important;
 			}
+
+			/* Robust override rules for specific classes */
+			body.cptt-v2-scope .cptt-notification-bell,
+			.cptt-notification-bell {
+				position: relative !important;
+				margin: 0 !important;
+				padding: 0 !important;
+				border: none !important;
+				background: transparent !important;
+				box-shadow: none !important;
+				width: auto !important;
+				height: auto !important;
+				display: inline-flex !important;
+			}
+			body.cptt-v2-scope .cptt-bell-btn,
+			.cptt-bell-btn {
+				background: #f8fafc !important;
+				border: 1px solid #cbd5e1 !important;
+				border-radius: 50% !important;
+				width: 42px !important;
+				height: 42px !important;
+				display: flex !important;
+				align-items: center !important;
+				justify-content: center !important;
+				cursor: pointer !important;
+				position: relative !important;
+				color: #475569 !important;
+				padding: 0 !important;
+				margin: 0 !important;
+				box-shadow: none !important;
+				outline: none !important;
+				min-width: 0 !important;
+				min-height: 0 !important;
+			}
+			body.cptt-v2-scope .cptt-expert-steps,
+			.cptt-expert-steps {
+				display: grid !important;
+				gap: 10px !important;
+				margin: 0 !important;
+				padding: 0 !important;
+				background: transparent !important;
+				border: none !important;
+			}
+			body.cptt-v2-scope .cptt-expert-step,
+			.cptt-expert-step {
+				background: #ffffff !important;
+				border: 1px solid #e6ebf2 !important;
+				border-radius: 16px !important;
+				overflow: hidden !important;
+				transition: box-shadow 0.2s ease, border-color 0.2s ease !important;
+				margin-bottom: 10px !important;
+			}
+			body.cptt-v2-scope .cptt-expert-step.is-open,
+			.cptt-expert-step.is-open {
+				box-shadow: 0 12px 30px rgba(99, 102, 241, 0.12) !important;
+				border-color: #c7d2fe !important;
+			}
+			body.cptt-v2-scope .cptt-expert-step__toggle,
+			.cptt-expert-step__toggle {
+				width: 100% !important;
+				border: none !important;
+				background: linear-gradient(135deg, #f8fafc, #ffffff) !important;
+				padding: 14px 16px !important;
+				cursor: pointer !important;
+				display: flex !important;
+				align-items: center !important;
+				justify-content: space-between !important;
+				gap: 12px !important;
+				text-align: right !important;
+				transition: background 0.15s ease !important;
+				min-height: 0 !important;
+				line-height: normal !important;
+				font-size: 13px !important;
+				box-shadow: none !important;
+				margin: 0 !important;
+				border-radius: 0 !important;
+				outline: none !important;
+				text-transform: none !important;
+			}
+			body.cptt-v2-scope .cptt-expert-step.is-open .cptt-expert-step__toggle,
+			.cptt-expert-step.is-open .cptt-expert-step__toggle {
+				background: linear-gradient(135deg, #eef2ff, #f5f3ff) !important;
+			}
+			body.cptt-v2-scope .cptt-emoji-btn,
+			.cptt-emoji-btn {
+				background: transparent !important;
+				border: 1px solid transparent !important;
+				border-radius: 6px !important;
+				cursor: pointer !important;
+				padding: 4px !important;
+				transition: transform 0.15s ease !important;
+				min-width: 0 !important;
+				min-height: 0 !important;
+				box-shadow: none !important;
+				outline: none !important;
+				margin: 0 !important;
+				display: inline-flex !important;
+			}
+			body.cptt-v2-scope .cptt-emoji-btn:hover,
+			.cptt-emoji-btn:hover {
+				transform: scale(1.2) !important;
+				border-color: #cbd5e1 !important;
+				background: #f8fafc !important;
+			}
+			body.cptt-v2-scope .cptt-emoji-picker,
+			.cptt-emoji-picker {
+				display: flex !important;
+				gap: 6px !important;
+				margin-bottom: 8px !important;
+				overflow-x: auto !important;
+				padding-bottom: 4px !important;
+				border: none !important;
+				background: transparent !important;
+			}
+			body.cptt-v2-scope .cptt-expert-add-checkitem,
+			body.cptt-v2-scope .cptt-expert-add-usertask,
+			.cptt-expert-add-checkitem,
+			.cptt-expert-add-usertask {
+				background: #f1f5f9 !important;
+				color: #475569 !important;
+				border: 1px solid #cbd5e1 !important;
+				border-radius: 8px !important;
+				padding: 8px 16px !important;
+				font-size: 12px !important;
+				font-weight: 700 !important;
+				cursor: pointer !important;
+				display: inline-flex !important;
+				align-items: center !important;
+				justify-content: center !important;
+				box-shadow: none !important;
+				margin-top: 10px !important;
+				min-height: 32px !important;
+				height: auto !important;
+				transition: all 0.15s ease !important;
+				outline: none !important;
+			}
+			body.cptt-v2-scope .cptt-expert-add-checkitem:hover,
+			body.cptt-v2-scope .cptt-expert-add-usertask:hover,
+			.cptt-expert-add-checkitem:hover,
+			.cptt-expert-add-usertask:hover {
+				background: #e2e8f0 !important;
+				color: #0f172a !important;
+				border-color: #94a3b8 !important;
+			}
+			body.cptt-v2-scope .cptt-expert-remove-checkitem,
+			body.cptt-v2-scope .cptt-expert-remove-usertask,
+			.cptt-expert-remove-checkitem,
+			.cptt-expert-remove-usertask {
+				color: #ef4444 !important;
+				background: #fee2e2 !important;
+				border: none !important;
+				border-radius: 50% !important;
+				width: 24px !important;
+				height: 24px !important;
+				display: inline-flex !important;
+				align-items: center !important;
+				justify-content: center !important;
+				font-size: 14px !important;
+				font-weight: bold !important;
+				cursor: pointer !important;
+				padding: 0 !important;
+				margin: 0 !important;
+				min-width: 0 !important;
+				min-height: 0 !important;
+				box-shadow: none !important;
+				transition: all 0.15s ease !important;
+				outline: none !important;
+			}
+			body.cptt-v2-scope .cptt-expert-remove-checkitem:hover,
+			body.cptt-v2-scope .cptt-expert-remove-usertask:hover,
+			.cptt-expert-remove-checkitem:hover,
+			.cptt-expert-remove-usertask:hover {
+				background: #fecaca !important;
+				color: #b91c1c !important;
+			}
+			body.cptt-v2-scope .cptt-direct-chat-modal__close,
+			body.cptt-v2-scope .cptt-newProjectModal__close,
+			body.cptt-v2-scope .cptt-experts-mobile-modal__close,
+			body.cptt-v2-scope .cptt-expert-chatModal__close,
+			.cptt-direct-chat-modal__close,
+			.cptt-newProjectModal__close,
+			.cptt-experts-mobile-modal__close,
+			.cptt-expert-chatModal__close {
+				position: absolute !important;
+				top: 16px !important;
+				right: 16px !important;
+				width: 32px !important;
+				height: 32px !important;
+				border: none !important;
+				background: #f0f0f1 !important;
+				border-radius: 50% !important;
+				display: flex !important;
+				align-items: center !important;
+				justify-content: center !important;
+				cursor: pointer !important;
+				color: #646970 !important;
+				font-size: 20px !important;
+				font-weight: bold !important;
+				line-height: 1 !important;
+				padding: 0 !important;
+				margin: 0 !important;
+				box-shadow: none !important;
+				outline: none !important;
+				min-width: 0 !important;
+				min-height: 0 !important;
+				text-shadow: none !important;
+				text-transform: none !important;
+			}
+			body.cptt-v2-scope .cptt-direct-chat-modal__close:hover,
+			body.cptt-v2-scope .cptt-newProjectModal__close:hover,
+			body.cptt-v2-scope .cptt-experts-mobile-modal__close:hover,
+			body.cptt-v2-scope .cptt-expert-chatModal__close:hover,
+			.cptt-direct-chat-modal__close:hover,
+			.cptt-newProjectModal__close:hover,
+			.cptt-experts-mobile-modal__close:hover,
+			.cptt-expert-chatModal__close:hover {
+				background: #dcdcde !important;
+				color: #d63638 !important;
+			}
+			body.cptt-v2-scope .cptt-mobile-fab,
+			.cptt-mobile-fab {
+				position: fixed !important;
+				bottom: 20px !important;
+				right: 20px !important;
+				width: 60px !important;
+				height: 60px !important;
+				border-radius: 50% !important;
+				background: #4f46e5 !important;
+				color: #ffffff !important;
+				border: none !important;
+				box-shadow: 0 10px 25px rgba(79, 70, 229, 0.4) !important;
+				z-index: 9999999 !important;
+				cursor: pointer !important;
+				display: flex !important;
+				align-items: center !important;
+				justify-content: center !important;
+				padding: 0 !important;
+				margin: 0 !important;
+				min-width: 0 !important;
+				min-height: 0 !important;
+				font-size: 24px !important;
+				outline: none !important;
+			}
+			body.cptt-v2-scope .cptt-jdp,
+			.cptt-jdp {
+				z-index: 100000000000 !important;
+			}
+			/* Handle desktop-only and mobile-only buttons consistently */
+			@media (max-width: 980px) {
+				body.cptt-v2-scope .desktop-only,
+				.desktop-only {
+					display: none !important;
+				}
+				body.cptt-v2-scope .mobile-only,
+				.mobile-only {
+					display: block !important;
+				}
+				body.cptt-v2-scope button.mobile-only,
+				button.mobile-only {
+					display: inline-flex !important;
+				}
+			}
+			@media (min-width: 981px) {
+				body.cptt-v2-scope .mobile-only,
+				.mobile-only {
+					display: none !important;
+				}
+				body.cptt-v2-scope .desktop-only,
+				.desktop-only {
+					display: block !important;
+				}
+			}
+
+			/* Robust Dark/Light mode SVG icons toggling */
+			body:not(.cptt-dark) .cptt-dark-toggle-icon .cptt-svg-moon {
+				display: block !important;
+			}
+			body:not(.cptt-dark) .cptt-dark-toggle-icon .cptt-svg-sun {
+				display: none !important;
+			}
+			body.cptt-dark .cptt-dark-toggle-icon .cptt-svg-moon {
+				display: none !important;
+			}
+			body.cptt-dark .cptt-dark-toggle-icon .cptt-svg-sun {
+				display: block !important;
+			}
+
+			/* Control bar layout next to each other */
+			body.cptt-v2-scope .cptt-sidebar-controls {
+				display: flex !important;
+				flex-direction: row !important;
+				justify-content: space-between !important;
+				align-items: center !important;
+				gap: 12px !important;
+			}
+
+			/* Robust Dark Mode overrides */
+			body.cptt-dark,
+			body.cptt-dark .cptt-wrap,
+			body.cptt-dark .cptt-v2-scope,
+			.cptt-v2-scope.cptt-dark,
+			body.cptt-dark .cptt-expertSidebar,
+			body.cptt-dark .cptt-sideBox,
+			body.cptt-dark .cptt-kpiCard,
+			body.cptt-dark .cptt-insightBox,
+			body.cptt-dark .cptt-expertCard,
+			body.cptt-dark .cptt-expert-step,
+			body.cptt-dark .cptt-expertFilters,
+			body.cptt-dark .cptt-expert-projectMeta,
+			body.cptt-dark .cptt-newProjectModal__dialog,
+			body.cptt-dark .cptt-expert-chatModal__dialog,
+			body.cptt-dark .cptt-direct-chat-modal__dialog,
+			body.cptt-dark .cptt-expertsDirectory,
+			body.cptt-dark .cptt-hubProjects,
+			body.cptt-dark .cptt-publicProject,
+			body.cptt-dark .cptt-hubStep,
+			body.cptt-dark .cptt-hubModal__dialog,
+			body.cptt-dark .cptt-expertBadge,
+			body.cptt-dark .cptt-kanban__col,
+			body.cptt-dark .cptt-kanban__card {
+				background-color: #1e293b !important;
+				background: #1e293b !important;
+				border-color: #334155 !important;
+				color: #e2e8f0 !important;
+			}
+			body.cptt-dark .cptt-expertProfile strong,
+			body.cptt-dark .cptt-expertCard__top h3,
+			body.cptt-dark .cptt-sideBox__title,
+			body.cptt-dark .cptt-kpiCard__value,
+			body.cptt-dark .cptt-insightBox__title,
+			body.cptt-dark .cptt-expert-step__toggleMain strong,
+			body.cptt-dark .cptt-expert-step__metaGrid label > span,
+			body.cptt-dark .cptt-expert-sectionTitle,
+			body.cptt-dark .cptt-hubStep__head strong,
+			body.cptt-dark .cptt-publicProject__top h3,
+			body.cptt-dark .cptt-expertsHero__title,
+			body.cptt-dark .cptt-hubModal__title,
+			body.cptt-dark .cptt-direct-chat-info strong,
+			body.cptt-dark .cptt-kanban__head,
+			body.cptt-dark .cptt-kanban__cardTitle {
+				color: #f8fafc !important;
+			}
+			body.cptt-dark .cptt-expertCard__meta,
+			body.cptt-dark .cptt-expert-step__toggleMain span,
+			body.cptt-dark .cptt-expert-step__metaItem > span,
+			body.cptt-dark .cptt-hubStep__meta,
+			body.cptt-dark .cptt-publicProject__experts,
+			body.cptt-dark .cptt-hubMetaChip,
+			body.cptt-dark .cptt-kanban__cardMeta {
+				color: #94a3b8 !important;
+			}
+			body.cptt-dark .cptt-expert-step__body,
+			body.cptt-dark .cptt-expert-noteField textarea,
+			body.cptt-dark .cptt-createProjectGrid input,
+			body.cptt-dark .cptt-createProjectGrid select,
+			body.cptt-dark .cptt-expertFilters input,
+			body.cptt-dark .cptt-expertFilters select,
+			body.cptt-dark .cptt-expert-step__metaGrid input,
+			body.cptt-dark .cptt-expert-step__metaGrid select,
+			body.cptt-dark .cptt-expert-checkRow input,
+			body.cptt-dark .cptt-expert-userTask input,
+			body.cptt-dark .cptt-expert-userTask textarea {
+				background-color: #0f172a !important;
+				background: #0f172a !important;
+				color: #e2e8f0 !important;
+				border-color: #334155 !important;
+			}
+			body.cptt-dark .cptt-jdp {
+				background-color: #1e293b !important;
+				background: #1e293b !important;
+				border-color: #334155 !important;
+			}
+			body.cptt-dark .cptt-jdp__head strong,
+			body.cptt-dark .cptt-jdp__days button {
+				color: #f1f5f9 !important;
+			}
+			body.cptt-dark .cptt-jdp__days button:hover {
+				background: #334155 !important;
+			}
+			body.cptt-dark .cptt-jdp__days button.is-selected {
+				background: linear-gradient(135deg,#6366f1,#8b5cf6) !important;
+			}
+			body.cptt-dark .cptt-notification-item {
+				background: #1e293b !important;
+				border-color: #334155 !important;
+				color: #e2e8f0 !important;
+			}
+			body.cptt-dark .cptt-notification-item.is-read {
+				background: #0f172a !important;
+			}
+			body.cptt-dark .cptt-notifications-header {
+				background: #1e293b !important;
+				border-bottom-color: #334155 !important;
+			}
+			body.cptt-dark .cptt-expert-list-item {
+				background: #1e293b !important;
+				border-color: #334155 !important;
+			}
+			body.cptt-dark .cptt-expert-list-item span {
+				color: #e2e8f0 !important;
+			}
+			body.cptt-dark .cptt-empty,
+			body.cptt-dark .cptt-dashboard__empty,
+			body.cptt-dark .cptt-expert-emptyMini {
+				background: #1e293b !important;
+				border-color: #334155 !important;
+				color: #94a3b8 !important;
+			}
+			body.cptt-dark .cptt-chat-bubble {
+				background: #1e293b !important;
+				border-color: #334155 !important;
+				color: #e2e8f0 !important;
+			}
+			body.cptt-dark .cptt-chat-bubble__body {
+				color: #e2e8f0 !important;
+			}
+			body.cptt-dark .cptt-newProjectModal__header {
+				background: linear-gradient(135deg,#312e81,#4c1d95,#be185d) !important;
+			}
+			body.cptt-dark .cptt-hubChecklist li {
+				background: #1e293b !important;
+				border-color: #334155 !important;
+			}
+			body.cptt-dark .cptt-hubChecklist li.is-done {
+				background: #064e3b !important;
+				border-color: #065f46 !important;
+			}
+			body.cptt-dark .cptt-hubModal__stats div,
+			body.cptt-dark .cptt-hubModal__detailsGrid div {
+				background: #1e293b !important;
+				border-color: #334155 !important;
+			}
+			body.cptt-dark .cptt-bell-btn,
+			body.cptt-dark .cptt-dark-toggle-icon {
+				background: #1e293b !important;
+				border-color: #334155 !important;
+				color: #cbd5e1 !important;
+			}
+
+			/* Robust button sizing & SVG scale overrides for Hello Elementor */
+			body.cptt-v2-scope .cptt-dark-toggle-icon,
+			.cptt-dark-toggle-icon {
+				background: #f8fafc !important;
+				border: 1px solid #cbd5e1 !important;
+				border-radius: 50% !important;
+				width: 42px !important;
+				height: 42px !important;
+				display: inline-flex !important;
+				align-items: center !important;
+				justify-content: center !important;
+				cursor: pointer !important;
+				position: relative !important;
+				color: #475569 !important;
+				padding: 0 !important;
+				margin: 0 !important;
+				box-shadow: none !important;
+				outline: none !important;
+				min-width: 42px !important;
+				min-height: 42px !important;
+				max-width: 42px !important;
+				max-height: 42px !important;
+			}
+			body.cptt-v2-scope .cptt-dark-toggle-icon svg,
+			.cptt-dark-toggle-icon svg {
+				width: 22px !important;
+				height: 22px !important;
+				display: block !important;
+				margin: 0 !important;
+				padding: 0 !important;
+				max-width: 22px !important;
+				max-height: 22px !important;
+				min-width: 22px !important;
+				min-height: 22px !important;
+			}
+			body.cptt-dark .cptt-expertCard__details,
+			body.cptt-dark .cptt-expertCard__panels,
+			body.cptt-dark .cptt-expertCard__mainPanel,
+			body.cptt-dark .cptt-expertCard__sidePanel {
+				background-color: #1e293b !important;
+				background: #1e293b !important;
+			}
+			body.cptt-dark .cptt-expert-step__toggle {
+				background: linear-gradient(135deg, #1e293b, #111827) !important;
+				border-color: #334155 !important;
+			}
+			body.cptt-dark .cptt-expert-step.is-open .cptt-expert-step__toggle {
+				background: linear-gradient(135deg, #312e81, #1e293b) !important;
+			}
+			body.cptt-dark .cptt-expert-card-item {
+				background: #111827 !important;
+				border-color: #334155 !important;
+				color: #e2e8f0 !important;
+			}
+			body.cptt-dark .cptt-expert-card-item span {
+				color: #e2e8f0 !important;
+			}
+			body.cptt-dark .cptt-experts-card-list {
+				background: transparent !important;
+			}
+			body.cptt-dark .cptt-expert-notesWrap,
+			body.cptt-dark .cptt-expert-messagesWrap,
+			body.cptt-dark .cptt-expert-noteItem {
+				background-color: #0f172a !important;
+				background: #0f172a !important;
+				border-color: #334155 !important;
+			}
+			body.cptt-dark .cptt-expert-noteItem__head strong {
+				color: #f8fafc !important;
+			}
+			body.cptt-dark .cptt-expert-noteItem__body {
+				color: #e2e8f0 !important;
+			}
+			body.cptt-dark .cptt-expertFilters {
+				background: #1e293b !important;
+			}
+
+			/* Robust Expert Strip Centering */
+			body.cptt-v2-scope .cptt-expertsStrip,
+			.cptt-expertsStrip {
+				display: flex !important;
+				flex-wrap: wrap !important;
+				justify-content: center !important;
+				gap: 14px !important;
+				margin: 0 auto !important;
+				padding: 0 !important;
+				width: 100% !important;
+			}
+
+			/* Robust Expert Badge isolated styling */
+			body.cptt-v2-scope .cptt-expertBadge,
+			.cptt-expertBadge {
+				appearance: none !important;
+				-webkit-appearance: none !important;
+				border: 1px solid #e5edf8 !important;
+				background: linear-gradient(180deg,#ffffff,#f8fbff) !important;
+				border-radius: 22px !important;
+				padding: 16px 12px !important;
+				display: flex !important;
+				flex-direction: column !important;
+				align-items: center !important;
+				gap: 8px !important;
+				cursor: pointer !important;
+				box-shadow: 0 14px 28px rgba(15,23,42,.05) !important;
+				transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease !important;
+				width: 100% !important;
+				height: auto !important;
+				flex: 1 1 150px !important;
+				max-width: 180px !important;
+				min-width: 130px !important;
+				margin: 0 !important;
+				text-transform: none !important;
+				line-height: normal !important;
+				font-family: var(--cptt-font-main) !important;
+				outline: none !important;
+			}
+
+			/* Touch Carousel on Mobile (CSS Only, ultra-smooth) */
+			@media (max-width: 600px) {
+				body.cptt-v2-scope .cptt-expertsStrip,
+				.cptt-expertsStrip {
+					display: flex !important;
+					flex-wrap: nowrap !important;
+					overflow-x: auto !important;
+					justify-content: flex-start !important;
+					padding-bottom: 12px !important;
+					scroll-snap-type: x mandatory !important;
+					-webkit-overflow-scrolling: touch !important;
+				}
+				body.cptt-v2-scope .cptt-expertBadge,
+				.cptt-expertBadge {
+					flex: 0 0 calc(50% - 7px) !important;
+					min-width: calc(50% - 7px) !important;
+					max-width: calc(50% - 7px) !important;
+					scroll-snap-align: start !important;
+				}
+			}
+			body.cptt-v2-scope .cptt-expertBadge:hover,
+			.cptt-expertBadge:hover {
+				transform: translateY(-3px) !important;
+				box-shadow: 0 20px 36px rgba(15,23,42,.1) !important;
+				border-color: #c7ddff !important;
+				background: linear-gradient(180deg,#ffffff,#eff6ff) !important;
+			}
+			body.cptt-v2-scope .cptt-expertBadge__avatar img,
+			.cptt-expertBadge__avatar img {
+				width: 72px !important;
+				height: 72px !important;
+				border-radius: 999px !important;
+				display: block !important;
+				border: 3px solid #e0ecff !important;
+				box-shadow: 0 10px 20px rgba(37,99,235,.12) !important;
+				margin: 0 auto !important;
+				object-fit: cover !important;
+				max-width: none !important;
+				max-height: none !important;
+			}
+			body.cptt-v2-scope .cptt-expertBadge__name,
+			.cptt-expertBadge__name {
+				font-size: 14px !important;
+				font-weight: 950 !important;
+				color: #0f172a !important;
+				line-height: 1.7 !important;
+				text-align: center !important;
+				display: block !important;
+				margin: 0 !important;
+				padding: 0 !important;
+			}
+			body.cptt-v2-scope .cptt-expertBadge__title,
+			.cptt-expertBadge__title {
+				font-size: 11px !important;
+				font-weight: 900 !important;
+				color: #64748b !important;
+				text-align: center !important;
+				line-height: 1.8 !important;
+				display: block !important;
+				margin: 0 !important;
+				padding: 0 !important;
+			}
+			body.cptt-dark .cptt-expertBadge {
+				background: #1e293b !important;
+				border-color: #334155 !important;
+				color: #e2e8f0 !important;
+			}
+			body.cptt-dark .cptt-expertBadge__name {
+				color: #f8fafc !important;
+			}
+			body.cptt-dark .cptt-expertBadge__title {
+				color: #94a3b8 !important;
+			}
+			body.cptt-dark .cptt-expertBadge:hover {
+				background: #1e293b !important;
+				border-color: #475569 !important;
+			}
 			' . ($adv['custom_css'] ?? '') . '
 		</style>';
 	}
@@ -161,13 +809,14 @@ class CPTT_Settings {
 		?>
 		<div class="cptt-settings-wrap cptt-v2-scope" dir="rtl">
 			<header class="cptt-set-header">
-				<div class="cptt-set-logo"><h1>تنظیمات CPTT v2.8.5</h1></div>
+				<div class="cptt-set-logo"><h1>تنظیمات CPTT v4.2.0</h1></div>
 				<button type="submit" form="cptt-settings-form" class="cptt-btn-primary">ذخیره تغییرات</button>
 			</header>
 			<div class="cptt-set-body">
 				<aside class="cptt-set-sidebar">
 					<a href="?post_type=cptt_project&page=cptt-settings&tab=style" class="<?php echo $tab==='style'?'is-active':'';?>">استایل و فونت</a>
 					<a href="?post_type=cptt_project&page=cptt-settings&tab=branding" class="<?php echo $tab==='branding'?'is-active':'';?>">برندینگ</a>
+					<a href="?post_type=cptt_project&page=cptt-settings&tab=fields" class="<?php echo $tab==='fields'?'is-active':'';?>">تنظیمات فیلدها</a>
 					<a href="?post_type=cptt_project&page=cptt-settings&tab=advanced" class="<?php echo $tab==='advanced'?'is-active':'';?>">تنظیمات سیستمی</a>
 				</aside>
 				<main class="cptt-set-main">
@@ -190,6 +839,101 @@ class CPTT_Settings {
 								<div class="cptt-set-field"><label>گردی گوشه‌ها</label><input type="number" name="cptt_styles[border_radius]" value="<?php echo esc_attr($style['border_radius']); ?>" /></div>
 								<div class="cptt-set-field"><label>سایز متن پایه</label><input type="number" name="cptt_styles[font_size_base]" value="<?php echo esc_attr($style['font_size_base']); ?>" /></div>
 								<div class="cptt-set-field"><label>سایز تیتر فیلدها</label><input type="number" name="cptt_styles[label_size]" value="<?php echo esc_attr($style['label_size']); ?>" /></div>
+							</div>
+						<?php elseif ($tab === 'fields'): 
+							$fields = self::get_fields_visibility();
+						?>
+							<div class="cptt-settings-fields-tab">
+								<span style="font-size:14px;font-weight:bold;margin-bottom:15px;display:block;color:#0f172a;">با دکمه‌های سوئیچ زیر، فیلدهای فرم ایجاد پروژه را روشن یا خاموش کنید:</span>
+								
+								<style>
+								.cptt-switch-container {
+									display: grid;
+									grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+									gap: 14px;
+									margin-top: 15px;
+								}
+								.cptt-switch-item {
+									display: flex;
+									justify-content: space-between;
+									align-items: center;
+									background: #ffffff;
+									border: 1px solid #e2e8f0;
+									padding: 12px 16px;
+									border-radius: 12px;
+									box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+								}
+								.cptt-switch-item label {
+									font-weight: 700;
+									color: #334155;
+									margin: 0;
+								}
+								.cptt-switch {
+									position: relative;
+									display: inline-block;
+									width: 50px;
+									height: 26px;
+								}
+								.cptt-switch input {
+									opacity: 0;
+									width: 0;
+									height: 0;
+								}
+								.cptt-slider {
+									position: absolute;
+									cursor: pointer;
+									top: 0;
+									left: 0;
+									right: 0;
+									bottom: 0;
+									background-color: #cbd5e1;
+									transition: .3s;
+									border-radius: 34px;
+								}
+								.cptt-slider:before {
+									position: absolute;
+									content: "";
+									height: 20px;
+									width: 20px;
+									left: 3px;
+									bottom: 3px;
+									background-color: white;
+									transition: .3s;
+									border-radius: 50%;
+								}
+								.cptt-switch input:checked + .cptt-slider {
+									background-color: #6366f1;
+								}
+								.cptt-switch input:checked + .cptt-slider:before {
+									transform: translateX(24px);
+								}
+								</style>
+
+								<div class="cptt-switch-container">
+								<?php 
+								$labels = [
+									'client' => 'انتخاب مشتری',
+									'category' => 'انتخاب دسته‌بندی محصول',
+									'product' => 'انتخاب محصول مرتبط',
+									'experts' => 'انتخاب کارشناسان پروژه',
+									'template' => 'انتخاب تمپلیت مراحل',
+									'deadline' => 'انتخاب مهلت کل پروژه',
+									'delivery' => 'انتخاب روش تحویل و آدرس',
+									'financial' => 'بخش اطلاعات مالی (بودجه‌بندی کل و جزئی)',
+								];
+								foreach ($labels as $key => $lbl):
+									$val = $fields[$key] ?? '1';
+								?>
+								<div class="cptt-switch-item">
+									<label><?php echo esc_html($lbl); ?></label>
+									<label class="cptt-switch">
+										<input type="hidden" name="cptt_fields[<?php echo esc_attr($key); ?>]" value="0" />
+										<input type="checkbox" name="cptt_fields[<?php echo esc_attr($key); ?>]" value="1" <?php checked($val, '1'); ?> />
+										<span class="cptt-slider"></span>
+									</label>
+								</div>
+								<?php endforeach; ?>
+								</div>
 							</div>
 						<?php elseif ($tab === 'advanced'): ?>
 							<div class="cptt-set-field full">

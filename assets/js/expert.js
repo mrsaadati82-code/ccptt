@@ -39,22 +39,17 @@
      DARK MODE
      ========================================================= */
   function initDarkMode() {
+    if (!document.body.classList.contains('cptt-expert-dashboard-page')) {
+        return;
+    }
     var saved = localStorage.getItem('cptt_dark_mode');
     if (saved === '1') document.body.classList.add('cptt-dark');
     
     qsa('.cptt-dark-toggle-icon').forEach(function(btn) {
-        if (document.body.classList.contains('cptt-dark')) {
-            btn.innerHTML = '☀️';
-            if (btn.textContent.indexOf('حالت') > -1) btn.innerHTML = '☀️ حالت روشن';
-        }
         btn.addEventListener('click', function() {
             document.body.classList.toggle('cptt-dark');
             var on = document.body.classList.contains('cptt-dark');
             localStorage.setItem('cptt_dark_mode', on ? '1' : '0');
-            qsa('.cptt-dark-toggle-icon').forEach(function(b) {
-                b.innerHTML = on ? '☀️' : '🌙';
-                if (b.textContent.indexOf('حالت') > -1) b.innerHTML = on ? '☀️ حالت روشن' : '🌙 حالت تاریک';
-            });
         });
     });
   }

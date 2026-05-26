@@ -2,6 +2,11 @@
 if ( ! defined('ABSPATH') ) exit;
 
 class CPTT_Expert {
+	private function get_persian_day_of_week($timestamp) {
+		$days = ['یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه', 'شنبه'];
+		$w = (int)date('w', $timestamp);
+		return $days[$w] ?? '';
+	}
 	private static $instance = null;
 	const QUERY_VAR = 'cptt_expert_dashboard';
 	const PUBLIC_QUERY_VAR = 'cptt_experts_hub';
@@ -30,6 +35,7 @@ class CPTT_Expert {
 		add_action('edit_user_profile_update', [$this, 'save_expert_profile_fields']);
 		add_action('wp_ajax_cptt_expert_save_project', [$this, 'ajax_save_project']);
 		add_action('wp_ajax_cptt_expert_create_project', [$this, 'ajax_create_project']);
+		add_action('wp_ajax_cptt_expert_create_customer', [$this, 'ajax_create_customer']);
 		add_action('wp_ajax_cptt_expert_send_message', [$this, 'ajax_send_message']);
 		add_action('wp_ajax_cptt_expert_fetch_messages', [$this, 'ajax_fetch_messages']);
 		add_action('wp_ajax_cptt_expert_fetch_notifications', [$this, 'ajax_fetch_notifications']);
@@ -193,7 +199,9 @@ class CPTT_Expert {
 		$users = get_users(['fields' => ['ID','display_name','user_email']]);
 		$out = [];
 		foreach ($users as $u) {
-			if (user_can($u->ID, 'edit_cptt_projects') || in_array('cptt_expert', (array)$u->roles, true)) {
+			$userdata = get_userdata($u->ID);
+			$roles = $userdata ? (array)$userdata->roles : [];
+			if (user_can($u->ID, 'edit_cptt_projects') || in_array('cptt_expert', $roles, true)) {
 				$out[] = $u;
 			}
 		}
@@ -202,7 +210,7 @@ class CPTT_Expert {
 
 	private function get_user_role_label($user_id) {
 		$user = get_user_by('id', $user_id);
-		if (!$user) return '';
+		if (!$user || !($user instanceof WP_User)) return '';
 		$roles = (array)$user->roles;
 		if (in_array('administrator', $roles, true)) return 'مدیر سایت';
 		if (in_array('cptt_expert', $roles, true)) return 'کارشناس';
@@ -216,21 +224,18 @@ class CPTT_Expert {
 		$user_id = (int) $user_id;
 		$user = get_user_by('id', $user_id);
 		if (!$user) return [];
-		$roles = ($user instanceof WP_User) ? (array)$user->roles : [];
 		$args = [
 			'post_type' => 'cptt_project',
 			'post_status' => 'any',
 			'numberposts' => -1,
 			'orderby' => 'date',
 			'order' => 'DESC',
-		];
-		if (!in_array('administrator', $roles, true)) {
-			$args['meta_query'] = [[
+			'meta_query' => [[
 				'key' => '_cptt_experts_csv',
 				'value' => ',' . $user_id . ',',
 				'compare' => 'LIKE',
-			]];
-		}
+			]]
+		];
 		return get_posts($args);
 	}
 
@@ -442,16 +447,15 @@ class CPTT_Expert {
 		return $fallback_status;
 	}
 
-	private function save_expert_project($project_id, $posted_steps, $note, $meta = []) {
-        $old_experts = self::get_existing_experts($project_id);
+		private function save_expert_project($project_id, $posted_steps, $note, $meta = []) {
+		$old_experts = self::get_existing_experts($project_id);
 
 		$project_id = (int) $project_id;
 		$user_id = (int) get_current_user_id();
-		$steps = get_post_meta($project_id, '_cptt_steps', true);
-		if (!is_array($steps)) $steps = [];
+		$old_steps = get_post_meta($project_id, '_cptt_steps', true);
+		if (!is_array($old_steps)) $old_steps = [];
 		$now = (int) current_time('timestamp', true);
 		$changed = false;
-		$current_found = false;
 
 		$project_title = sanitize_text_field($meta['project_title'] ?? '');
 		if ($project_title !== '' && $project_title !== get_the_title($project_id)) {
@@ -470,19 +474,19 @@ class CPTT_Expert {
 		update_post_meta($project_id, '_cptt_product_id', $product_id);
 		update_post_meta($project_id, '_cptt_is_settled', $is_settled);
 		
-        $added_experts = array_diff($expert_ids, $old_experts);
-        foreach($added_experts as $ae_id) {
-            if ((int)$ae_id !== (int)$user_id) {
-                $this->insert_notification($ae_id, 'project_assigned', 'شما به پروژه ' . get_the_title($project_id) . ' اضافه شدید.', $project_id, self::dashboard_url() . "#project-" . $project_id);
-            }
-        }
-        $removed_experts = array_diff($old_experts, $expert_ids);
-        foreach($removed_experts as $re_id) {
-            if ((int)$re_id !== (int)$user_id) {
-                $this->insert_notification($re_id, 'project_removed', 'شما از پروژه ' . get_the_title($project_id) . ' حذف شدید.', $project_id, self::dashboard_url() . "#project-" . $project_id);
-            }
-        }
-        update_post_meta($project_id, '_cptt_expert_user_ids', $expert_ids);
+		$added_experts = array_diff($expert_ids, $old_experts);
+		foreach($added_experts as $ae_id) {
+			if ((int)$ae_id !== (int)$user_id) {
+				$this->insert_notification($ae_id, 'project_assigned', 'شما به پروژه ' . get_the_title($project_id) . ' اضافه شدید.', $project_id, self::dashboard_url() . "#project-" . $project_id);
+			}
+		}
+		$removed_experts = array_diff($old_experts, $expert_ids);
+		foreach($removed_experts as $re_id) {
+			if ((int)$re_id !== (int)$user_id) {
+				$this->insert_notification($re_id, 'project_removed', 'شما از پروژه ' . get_the_title($project_id) . ' حذف شدید.', $project_id, self::dashboard_url() . "#project-" . $project_id);
+			}
+		}
+		update_post_meta($project_id, '_cptt_expert_user_ids', $expert_ids);
 		update_post_meta($project_id, '_cptt_expert_user_id', !empty($expert_ids) ? (int)$expert_ids[0] : 0);
 		update_post_meta($project_id, '_cptt_experts_csv', ',' . implode(',', $expert_ids) . ',');
         
@@ -501,110 +505,183 @@ class CPTT_Expert {
 			}
 		}
 
-		foreach ($steps as &$step) {
-			if (!is_array($step)) continue;
-			$step_id = !empty($step['id']) ? (string)$step['id'] : '';
-			if ($step_id === '' || !isset($posted_steps[$step_id])) continue;
-			$posted = $posted_steps[$step_id];
-			$old_status = (string)($step['status'] ?? 'todo');
-			$new_status = (string)($posted['status'] ?? $old_status);
-			if (!in_array($new_status, ['todo', 'current', 'done'], true)) $new_status = 'todo';
-			$step_changed = false;
-			$new_title = sanitize_text_field($posted['title'] ?? ($step['title'] ?? ''));
-			if (($step['title'] ?? '') !== $new_title) { $step['title'] = $new_title; $step_changed = true; }
-			$new_desc = wp_kses_post($posted['desc'] ?? ($step['desc'] ?? ''));
-			if (($step['desc'] ?? '') !== $new_desc) { $step['desc'] = $new_desc; $step_changed = true; }
-			$new_cost = isset($posted['cost']) ? (float)$posted['cost'] : (float)($step['cost'] ?? 0);
-			$new_paid = isset($posted['paid']) ? (float)$posted['paid'] : (float)($step['paid'] ?? 0);
-			if ($new_cost > 0 && $new_paid >= $new_cost) { $new_status = 'done'; }
-			if ((float)($step['cost'] ?? 0) !== $new_cost) { $step['cost'] = $new_cost; $step_changed = true; }
-			if ((float)($step['paid'] ?? 0) !== $new_paid) { $step['paid'] = $new_paid; $step_changed = true; }
-			$due_local = trim((string)($posted['due_at_local'] ?? ''));
-			if ($due_local !== '' && class_exists('CPTT_Core') && method_exists('CPTT_Core', 'parse_jalali_datetime')) {
-				$new_due = (int) CPTT_Core::parse_jalali_datetime($due_local);
-				if (!empty($new_due) && (int)($step['due_at'] ?? 0) !== $new_due) {
-					$step['due_at'] = $new_due;
-					$step['due_at_fa'] = CPTT_Core::jalali_datetime($new_due);
-					$step_changed = true;
-				}
-			}
+		$new_steps = [];
+		if (isset($meta['steps']) && is_array($meta['steps'])) {
+			foreach ($meta['steps'] as $posted_id => $row) {
+				$posted_id = sanitize_text_field((string)$posted_id);
+				if ($posted_id === '' || !is_array($row)) continue;
 
-			if (!empty($step['checklist']) && is_array($step['checklist'])) {
-				foreach ($step['checklist'] as &$item) {
-					if (!is_array($item)) continue;
-					$check_id = !empty($item['id']) ? (string)$item['id'] : '';
-					if ($check_id === '') continue;
-					$old_item = $item;
-					$pitem = $posted['checklist'][$check_id] ?? [];
-					$new_done = !empty($pitem['done']);
-					$before_done = !empty($old_item['done']) ? 1 : 0;
-					$this->apply_checklist_timestamps($item, $new_done, $old_item, $now, $user_id);
-					$new_text = sanitize_text_field($pitem['text'] ?? ($item['text'] ?? ''));
-					$new_url = esc_url_raw($pitem['url'] ?? ($item['url'] ?? ''));
-					if (($item['text'] ?? '') !== $new_text) { $item['text'] = $new_text; $step_changed = true; }
-					if (($item['url'] ?? '') !== $new_url) { $item['url'] = $new_url; $step_changed = true; }
-					if ($before_done !== (int)!empty($item['done'])) { $changed = true; $step_changed = true; }
-				}
-				unset($item);
-			}
-
-			if (!empty($step['user_tasks']) && is_array($step['user_tasks'])) {
-				foreach ($step['user_tasks'] as &$task) {
-					if (!is_array($task)) continue;
-					$task_id = !empty($task['id']) ? (string)$task['id'] : '';
-					if ($task_id === '' || empty($posted['user_tasks'][$task_id])) continue;
-					$ptask = $posted['user_tasks'][$task_id];
-					$new_ut_title = sanitize_text_field($ptask['title'] ?? ($task['title'] ?? ''));
-					$new_ut_desc = wp_kses_post($ptask['desc'] ?? ($task['desc'] ?? ''));
-					$new_ut_sms = !empty($ptask['sms_remind']) ? 1 : 0;
-					if (($task['title'] ?? '') !== $new_ut_title) { $task['title'] = $new_ut_title; $step_changed = true; }
-					if (($task['desc'] ?? '') !== $new_ut_desc) { $task['desc'] = $new_ut_desc; $step_changed = true; }
-					if ((int)($task['sms_remind'] ?? 0) !== $new_ut_sms) { $task['sms_remind'] = $new_ut_sms; $step_changed = true; }
-					$ut_due_local = trim((string)($ptask['due_at_local'] ?? ''));
-					if ($ut_due_local !== '' && class_exists('CPTT_Core') && method_exists('CPTT_Core', 'parse_jalali_datetime')) {
-						$new_ut_due = (int) CPTT_Core::parse_jalali_datetime($ut_due_local);
-						if (!empty($new_ut_due) && (int)($task['due_at'] ?? 0) !== $new_ut_due) {
-							$task['due_at'] = $new_ut_due;
-							$task['due_at_fa'] = CPTT_Core::jalali_datetime($new_ut_due);
-							$step_changed = true;
-						}
+				$old_step = null;
+				foreach ($old_steps as $old_idx => $os) {
+					$os_id = !empty($os['id']) ? (string)$os['id'] : ('step_' . $old_idx);
+					if ($os_id === $posted_id) {
+						$old_step = $os;
+						break;
 					}
 				}
-				unset($task);
-			}
 
-			$new_status = $this->apply_step_status_from_checklist($step, $new_status);
-            if ($old_status !== 'done' && $new_status === 'done') {
-                $this->notify_project_experts($project_id, $user_id, 'step_completed', 'مرحله ' . ($step['title'] ?? '') . ' در پروژه ' . get_the_title($project_id) . ' انجام شد.', self::dashboard_url() . "#project-" . $project_id);
-            }
-			if ($new_status === 'current') {
-				if ($current_found) $new_status = 'todo';
-				$current_found = true;
-			}
-			if ($old_status !== $new_status || $step_changed) {
-				$step['status'] = $new_status;
-				$step['updated_at'] = $now;
-				$step['updated_at_fa'] = class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime($now) : date('Y-m-d H:i', $now);
-				$step['updated_by'] = $user_id;
-				$changed = true;
-			}
-		}
-		unset($step);
+				$status = sanitize_key($row['status'] ?? 'todo');
+				if (!in_array($status, ['todo', 'current', 'done'], true)) $status = 'todo';
 
-		if (!$current_found) {
-			foreach ($steps as &$step) {
-				if (!is_array($step)) continue;
-				if (($step['status'] ?? 'todo') === 'todo') {
-					$step['status'] = 'current';
-					$step['updated_at'] = $now;
-					$step['updated_at_fa'] = class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime($now) : date('Y-m-d H:i', $now);
-					$step['updated_by'] = $user_id;
-					$changed = true;
-					break;
+				$title = sanitize_text_field($row['title'] ?? '');
+				$desc = wp_kses_post($row['desc'] ?? '');
+				$cost = isset($row['cost']) ? (float)str_replace(",", "", (string)$row['cost']) : 0;
+				$paid = isset($row['paid']) ? (float)str_replace(",", "", (string)$row['paid']) : 0;
+
+				if ($cost > 0 && $paid >= $cost) {
+					$status = 'done';
 				}
+
+				$checklist = [];
+				if (!empty($row['checklist']) && is_array($row['checklist'])) {
+					foreach ($row['checklist'] as $check_id => $item) {
+						$check_id = sanitize_text_field((string)$check_id);
+						if ($check_id === '') continue;
+
+						$p_done = !empty($item['done']) ? 1 : 0;
+						$p_text = sanitize_text_field($item['text'] ?? '');
+						$p_url = esc_url_raw($item['url'] ?? '');
+
+						$old_check = null;
+						if ($old_step && !empty($old_step['checklist']) && is_array($old_step['checklist'])) {
+							foreach ($old_step['checklist'] as $oc) {
+								$oc_id = !empty($oc['id']) ? (string)$oc['id'] : '';
+								if ($oc_id === $check_id) {
+									$old_check = $oc;
+									break;
+								}
+							}
+						}
+
+						$chk_item = [
+							'id' => $check_id,
+							'done' => $p_done,
+							'text' => $p_text,
+							'url' => $p_url,
+						];
+
+						if ($p_done) {
+							if ($old_check && !empty($old_check['done']) && !empty($old_check['done_at'])) {
+								$chk_item['done_at'] = (int)$old_check['done_at'];
+								$chk_item['done_at_fa'] = $old_check['done_at_fa'];
+								$chk_item['done_by'] = (int)($old_check['done_by'] ?? $user_id);
+							} else {
+								$chk_item['done_at'] = $now;
+								$chk_item['done_at_fa'] = class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime($now) : date('Y-m-d H:i', $now);
+								$chk_item['done_by'] = $user_id;
+							}
+						}
+
+						$checklist[] = $chk_item;
+					}
+				}
+
+				$user_tasks = [];
+				if (!empty($row['user_tasks']) && is_array($row['user_tasks'])) {
+					foreach ($row['user_tasks'] as $task_id => $task) {
+						$task_id = sanitize_text_field((string)$task_id);
+						if ($task_id === '' || !is_array($task)) continue;
+
+						$t_title = sanitize_text_field($task['title'] ?? '');
+						$t_desc = wp_kses_post($task['desc'] ?? '');
+						$t_sms = !empty($task['sms_remind']) ? 1 : 0;
+						$t_due_local = trim((string)($task['due_at_local'] ?? ''));
+
+						$old_ut = null;
+						if ($old_step && !empty($old_step['user_tasks']) && is_array($old_step['user_tasks'])) {
+							foreach ($old_step['user_tasks'] as $out_task) {
+								$out_task_id = !empty($out_task['id']) ? (string)$out_task['id'] : '';
+								if ($out_task_id === $task_id) {
+									$old_ut = $out_task;
+									break;
+								}
+							}
+						}
+
+						$ut_item = [
+							'id' => $task_id,
+							'title' => $t_title,
+							'desc' => $t_desc,
+							'sms_remind' => $t_sms,
+						];
+
+						if ($t_due_local !== '' && class_exists('CPTT_Core') && method_exists('CPTT_Core', 'parse_jalali_datetime')) {
+							$t_due = (int) CPTT_Core::parse_jalali_datetime($t_due_local);
+							if ($t_due) {
+								$ut_item['due_at'] = $t_due;
+								$ut_item['due_at_fa'] = CPTT_Core::jalali_datetime($t_due);
+							}
+						} elseif ($old_ut && isset($old_ut['due_at'])) {
+							$ut_item['due_at'] = $old_ut['due_at'];
+							$ut_item['due_at_fa'] = $old_ut['due_at_fa'];
+						}
+
+						if ($old_ut) {
+							$preserve_keys = [
+								'done', 'response', 'response_url', 'response_file_url', 
+								'response_file_name', 'response_file_type', 'response_files', 
+								'completed_at', 'completed_at_fa', 'completed_by', 
+								'last_reminder_at', 'last_reminder_at_fa'
+							];
+							foreach ($preserve_keys as $pk) {
+								if (isset($old_ut[$pk])) {
+									$ut_item[$pk] = $old_ut[$pk];
+								}
+							}
+						}
+
+						$user_tasks[] = $ut_item;
+					}
+				}
+
+				$new_id = $posted_id;
+				if (strpos($posted_id, 'step_') === 0 || $posted_id === '') {
+					$new_id = function_exists('wp_generate_uuid4') ? wp_generate_uuid4() : ('st_' . wp_rand(1000, 9999));
+				}
+
+				$step_data = [
+					'id' => $new_id,
+					'status' => $status,
+					'title' => $title,
+					'desc' => $desc,
+					'cost' => $cost,
+					'paid' => $paid,
+					'checklist' => $checklist,
+					'user_tasks' => $user_tasks,
+				];
+
+				$due_local = trim((string)($row['due_at_local'] ?? ''));
+				if ($due_local !== '' && class_exists('CPTT_Core') && method_exists('CPTT_Core', 'parse_jalali_datetime')) {
+					$due = (int) CPTT_Core::parse_jalali_datetime($due_local);
+					if ($due) {
+						$step_data['due_at'] = $due;
+						$step_data['due_at_fa'] = CPTT_Core::jalali_datetime($due);
+					}
+				} elseif ($old_step && isset($old_step['due_at'])) {
+					$step_data['due_at'] = $old_step['due_at'];
+					$step_data['due_at_fa'] = $old_step['due_at_fa'];
+				}
+
+				$old_status = $old_step ? ($old_step['status'] ?? 'todo') : 'todo';
+				if ($old_status !== 'done' && $status === 'done') {
+					$this->notify_project_experts($project_id, $user_id, 'step_completed', 'مرحله ' . $title . ' در پروژه ' . get_the_title($project_id) . ' انجام شد.', self::dashboard_url() . "#project-" . $project_id);
+				}
+
+				if ($old_step) {
+					$step_data['updated_at'] = ($old_status !== $status) ? $now : ($old_step['updated_at'] ?? $now);
+					$step_data['updated_at_fa'] = ($old_status !== $status) ? (class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime($now) : date('Y-m-d H:i', $now)) : ($old_step['updated_at_fa'] ?? '');
+					$step_data['updated_by'] = ($old_status !== $status) ? $user_id : ($old_step['updated_by'] ?? $user_id);
+				} else {
+					$step_data['updated_at'] = $now;
+					$step_data['updated_at_fa'] = class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime($now) : date('Y-m-d H:i', $now);
+					$step_data['updated_by'] = $user_id;
+				}
+
+				$new_steps[] = $step_data;
 			}
-			unset($step);
 		}
+
+		update_post_meta($project_id, '_cptt_steps', $new_steps);
 
 		$note = trim((string)$note);
 		if ($note !== '') {
@@ -617,12 +694,9 @@ class CPTT_Expert {
 			$this->notify_project_experts($project_id, $user_id, 'project_note', ($notifier ? $notifier->display_name : 'کارشناس') . ' یادداشتی ثبت کرد.', self::dashboard_url() . "#project-" . $project_id . '#chat-' . $project_id);
 		}
 
-		if ($changed) {
-			update_post_meta($project_id, '_cptt_steps', $steps);
-			update_post_meta($project_id, '_cptt_last_update', $now);
-			update_post_meta($project_id, '_cptt_last_update_fa', class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime($now) : date('Y-m-d H:i', $now));
-			if (class_exists('CPTT_SMS') && method_exists('CPTT_SMS', 'maybe_notify_project_completed')) CPTT_SMS::maybe_notify_project_completed($project_id);
-		}
+		update_post_meta($project_id, '_cptt_last_update', $now);
+		update_post_meta($project_id, '_cptt_last_update_fa', class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime($now) : date('Y-m-d H:i', $now));
+		if (class_exists('CPTT_SMS') && method_exists('CPTT_SMS', 'maybe_notify_project_completed')) CPTT_SMS::maybe_notify_project_completed($project_id);
 
 		$progress = $this->progress_data($project_id);
 		$old_status = get_post_meta($project_id, '_cptt_progress_status_cache', true);
@@ -631,7 +705,7 @@ class CPTT_Expert {
 		}
 		update_post_meta($project_id, '_cptt_progress_status_cache', $progress['status']);
 		
-		return ['changed' => $changed, 'last_update_fa' => (string)get_post_meta($project_id, '_cptt_last_update_fa', true), 'progress' => $progress, 'notes' => $this->get_recent_notes($project_id, 4)];
+		return ['changed' => true, 'last_update_fa' => (string)get_post_meta($project_id, '_cptt_last_update_fa', true), 'progress' => $progress, 'notes' => $this->get_recent_notes($project_id, 4)];
 	}
 
 	public function ajax_save_project() {
@@ -1144,7 +1218,7 @@ class CPTT_Expert {
 		}
 
 		$user = get_user_by('id', $expert_id);
-		if ($user && !in_array('cptt_expert', (array) $user->roles, true)) $user->set_role('cptt_expert');
+		if ($user instanceof WP_User && !in_array('cptt_expert', (array) $user->roles, true)) $user->set_role('cptt_expert');
 		update_user_meta($expert_id, 'cptt_expert_title', $title);
 		update_user_meta($expert_id, 'cptt_expert_short_bio', $bio);
 		update_user_meta($expert_id, 'cptt_expert_specialties', $specialties);
@@ -1590,7 +1664,7 @@ class CPTT_Expert {
 		$login_label = $viewer_can_private ? 'ورود به داشبورد کارشناس' : 'ورود به حساب کارشناس';
 		ob_start();
 		?>
-		<div class="cptt-wrap cptt-expertsHub" dir="rtl">
+		<div class="cptt-wrap cptt-expertsHub cptt-v2-scope" dir="rtl">
 			<section class="cptt-expertsHero">
 				<div class="cptt-expertsHero__content">
 					<span class="cptt-expertsHero__eyebrow">ویترین حرفه‌ای کارشناسان</span>
@@ -1983,20 +2057,24 @@ class CPTT_Expert {
 		}
 	}
 
-	private function create_project($data) {
+		private function create_project($data) {
 		$user_id = (int)get_current_user_id();
 		$title = sanitize_text_field($data['title'] ?? '');
 		$client_id = absint($data['client_user_id'] ?? 0);
 		$product_id = absint($data['product_id'] ?? 0);
 		$template_id = absint($data['template_id'] ?? 0);
 		$deadline_local = trim((string)($data['deadline_local'] ?? ''));
-		$is_settled = !empty($data['is_settled']) ? 1 : 0;
 		$note = sanitize_textarea_field((string)($data['note'] ?? ''));
 		$expert_ids = isset($data['expert_user_ids']) && is_array($data['expert_user_ids']) ? array_values(array_filter(array_unique(array_map('absint', $data['expert_user_ids'])))) : [$user_id];
 		if (empty($expert_ids)) $expert_ids = [$user_id];
 
 		$wc_cat_ids = isset($data['wc_cat_id']) ? [absint($data['wc_cat_id'])] : (isset($data['wc_cat_ids']) ? (array)$data['wc_cat_ids'] : []);
 		$cat_ids = array_values(array_filter(array_unique(array_map('intval', $wc_cat_ids))));
+
+		$delivery_method = sanitize_text_field($data['delivery_method'] ?? 'in_person');
+		$delivery_province = sanitize_text_field($data['delivery_province'] ?? '');
+		$delivery_city = sanitize_text_field($data['delivery_city'] ?? '');
+		$delivery_address = sanitize_textarea_field($data['delivery_address'] ?? '');
 
 		if ($title === '') return new WP_Error('invalid', 'عنوان پروژه الزامی است.');
 		$project_id = wp_insert_post([
@@ -2009,15 +2087,79 @@ class CPTT_Expert {
 		$project_id = (int)$project_id;
 		update_post_meta($project_id, '_cptt_client_user_id', $client_id);
 		update_post_meta($project_id, '_cptt_product_id', $product_id);
+
+		$posted_titles = isset($data['create_step_titles']) ? $data['create_step_titles'] : [];
+		$posted_fees = isset($data['create_step_fees']) ? $data['create_step_fees'] : [];
+		$posted_qty = isset($data['create_step_qty']) ? $data['create_step_qty'] : [];
+		$posted_paids = isset($data['create_step_paids']) ? $data['create_step_paids'] : [];
+
+		$total_price = 0;
+		$paid_amount = 0;
+		$steps = [];
+
+		if (!empty($posted_titles)) {
+			foreach ($posted_titles as $i => $st_title) {
+				$st_title = sanitize_text_field($st_title);
+				if ($st_title === '') continue;
+
+				$fee = isset($posted_fees[$i]) ? (float)str_replace(",", "", (string)$posted_fees[$i]) : 0;
+				$qty = isset($posted_qty[$i]) ? (int)$posted_qty[$i] : 1;
+				if ($qty < 1) $qty = 1;
+				$cost = $fee * $qty;
+				$paid = isset($posted_paids[$i]) ? (float)str_replace(",", "", (string)$posted_paids[$i]) : 0;
+
+				$total_price += $cost;
+				$paid_amount += $paid;
+
+				$steps[] = [
+					'id' => function_exists('wp_generate_uuid4') ? wp_generate_uuid4() : ('st_' . wp_rand(1000, 9999)),
+					'title' => $st_title,
+					'status' => ($i === 0) ? 'current' : 'todo',
+					'cost' => $cost,
+					'paid' => $paid,
+					'checklist' => [],
+					'user_tasks' => [],
+				];
+			}
+		}
+
+		if (empty($steps)) {
+			// fallback default
+			$steps = [[
+				'id' => function_exists('wp_generate_uuid4') ? wp_generate_uuid4() : ('st_' . wp_rand(1000, 9999)),
+				'title' => 'مرحله اول',
+				'status' => 'current',
+				'cost' => 0,
+				'paid' => 0,
+				'checklist' => [],
+				'user_tasks' => [],
+			]];
+		}
+
+		update_post_meta($project_id, '_cptt_steps', $steps);
+		
+		$remain_amount = $total_price - $paid_amount;
+		$is_settled = ($remain_amount <= 0 && $total_price > 0) ? 1 : 0;
+
+		update_post_meta($project_id, '_cptt_unit_price', $total_price);
+		update_post_meta($project_id, '_cptt_quantity', 1);
+		update_post_meta($project_id, '_cptt_total_price', $total_price);
+		update_post_meta($project_id, '_cptt_paid_amount', $paid_amount);
+		update_post_meta($project_id, '_cptt_remain_amount', $remain_amount);
 		update_post_meta($project_id, '_cptt_is_settled', $is_settled);
+
+		update_post_meta($project_id, '_cptt_delivery_method', $delivery_method);
+		update_post_meta($project_id, '_cptt_delivery_province', $delivery_province);
+		update_post_meta($project_id, '_cptt_delivery_city', $delivery_city);
+		update_post_meta($project_id, '_cptt_delivery_address', $delivery_address);
 		
 		update_post_meta($project_id, '_cptt_expert_user_ids', $expert_ids);
 		update_post_meta($project_id, '_cptt_expert_user_id', !empty($expert_ids) ? (int)$expert_ids[0] : $user_id);
 		update_post_meta($project_id, '_cptt_experts_csv', ',' . implode(',', $expert_ids) . ',');
         
-        foreach($expert_ids as $eid) {
-            $this->insert_notification($eid, 'project_assigned', 'شما به پروژه جدید ' . $title . ' اضافه شدید.', $project_id, self::dashboard_url() . "#project-" . $project_id);
-        }
+		foreach($expert_ids as $eid) {
+			$this->insert_notification($eid, 'project_assigned', 'شما به پروژه جدید ' . $title . ' اضافه شدید.', $project_id, self::dashboard_url() . "#project-" . $project_id);
+		}
 
 		if (!empty($cat_ids)) {
 			update_post_meta($project_id, '_cptt_wc_cat_ids', $cat_ids);
@@ -2027,11 +2169,25 @@ class CPTT_Expert {
 			update_post_meta($project_id, '_cptt_wc_product_id', $product_id);
 			if (empty($cat_ids)) $this->sync_project_categories_from_product($project_id, $product_id);
 		}
-		if ($template_id && get_post_type($template_id) === 'cptt_template') {
-			$steps = get_post_meta($template_id, '_cptt_template_steps', true);
-			$steps = $this->prepare_template_steps_for_project($steps);
-			update_post_meta($project_id, '_cptt_steps', $steps);
+
+		// Also sync these meta values into linked WooCommerce order if present
+		$order_id = (int)get_post_meta($project_id, '_cptt_wc_order_id', true);
+		if ($order_id && function_exists('wc_get_order')) {
+			$order = wc_get_order($order_id);
+			if ($order) {
+				$order->update_meta_data('_cptt_unit_price', $total_price);
+				$order->update_meta_data('_cptt_quantity', 1);
+				$order->update_meta_data('_cptt_total_price', $total_price);
+				$order->update_meta_data('_cptt_paid_amount', $paid_amount);
+				$order->update_meta_data('_cptt_remain_amount', $remain_amount);
+				$order->update_meta_data('_cptt_delivery_method', $delivery_method);
+				$order->update_meta_data('_cptt_delivery_province', $delivery_province);
+				$order->update_meta_data('_cptt_delivery_city', $delivery_city);
+				$order->update_meta_data('_cptt_delivery_address', $delivery_address);
+				$order->save();
+			}
 		}
+
 		if ($deadline_local !== '' && class_exists('CPTT_Core') && method_exists('CPTT_Core', 'parse_jalali_datetime')) {
 			$deadline = (int) CPTT_Core::parse_jalali_datetime($deadline_local);
 			if ($deadline) {
@@ -2052,6 +2208,69 @@ class CPTT_Expert {
 		return $project_id;
 	}
 
+		public function ajax_create_customer() {
+		if (!is_user_logged_in()) wp_send_json_error('login_required', 401);
+		check_ajax_referer('cptt_expert_nonce', 'nonce');
+		if (!$this->current_user_can_view_dashboard()) wp_send_json_error('no_access', 403);
+
+		$full_name = sanitize_text_field($_POST['full_name'] ?? '');
+		$phone = sanitize_text_field($_POST['phone'] ?? '');
+
+		if ($full_name === '' || $phone === '') {
+			wp_send_json_error('نام و شماره موبایل الزامی است.', 400);
+		}
+
+		// Clean phone number (keep only digits)
+		$phone = preg_replace('/\D/', '', $phone);
+		if (strlen($phone) < 10) {
+			wp_send_json_error('شماره موبایل معتبر نیست.', 400);
+		}
+
+		// Check if username (phone) already exists
+		if (username_exists($phone)) {
+			$existing_user = get_user_by('login', $phone);
+			if ($existing_user) {
+				wp_send_json_success([
+					'ID' => $existing_user->ID,
+					'display_name' => $existing_user->display_name,
+					'user_email' => $existing_user->user_email,
+				]);
+			}
+		}
+
+		$email = $phone . '@cityprint.ir';
+		if (email_exists($email)) {
+			$email = $phone . '_' . wp_rand(100,999) . '@cityprint.ir';
+		}
+
+		$password = wp_generate_password(12, true, false);
+		$user_id = wp_create_user($phone, $password, $email);
+
+		if (is_wp_error($user_id)) {
+			wp_send_json_error($user_id->get_error_message(), 400);
+		}
+
+		$user_id = (int)$user_id;
+		wp_update_user([
+			'ID' => $user_id,
+			'display_name' => $full_name,
+			'nickname' => $full_name,
+		]);
+
+		update_user_meta($user_id, 'billing_phone', $phone);
+		
+		$user = get_user_by('id', $user_id);
+		if ($user) {
+			$user->set_role('customer');
+		}
+
+		wp_send_json_success([
+			'ID' => $user_id,
+			'display_name' => $full_name,
+			'user_email' => $phone,
+		]);
+	}
+
 	public function ajax_create_project() {
 		if (!is_user_logged_in()) wp_send_json_error('login_required', 401);
 		check_ajax_referer('cptt_expert_nonce', 'nonce');
@@ -2063,18 +2282,26 @@ class CPTT_Expert {
 		wp_send_json_success(['project_id' => (int)$project_id, 'redirect' => self::dashboard_url()]);
 	}
 
-	private function render_create_project_form() {
+			private function render_create_project_form() {
 		$customers = $this->customer_users();
 		$products = $this->products();
 		$templates = $this->templates();
 		$cats = $this->category_terms();
 		$experts_all = $this->get_all_project_users();
+		
+		$vis = class_exists('CPTT_Settings') ? CPTT_Settings::get_fields_visibility() : [
+			'client' => '1', 'category' => '1', 'product' => '1', 'experts' => '1', 'template' => '1', 'deadline' => '1', 'delivery' => '1', 'financial' => '1'
+		];
 		?>
 		<form class="cptt-expert-create-form">
 				<div class="cptt-createProjectGrid">
 					<label><span>عنوان پروژه</span><input type="text" name="title" placeholder="مثلاً پروژه طراحی سایت مشتری"></label>
-					<label><span>مشتری</span><select name="client_user_id"><option value="">— انتخاب مشتری —</option><?php foreach ($customers as $u): ?><option value="<?php echo esc_attr($u->ID); ?>"><?php echo esc_html($u->display_name . (!empty($u->user_email) ? ' (' . $u->user_email . ')' : '')); ?></option><?php endforeach; ?></select></label>
 					
+					<?php if (($vis['client'] ?? '1') === '1'): ?>
+					<label><span>مشتری</span><select name="client_user_id"><option value="">— انتخاب مشتری —</option><?php foreach ($customers as $u): ?><option value="<?php echo esc_attr($u->ID); ?>"><?php echo esc_html($u->display_name . (!empty($u->user_email) ? ' (' . $u->user_email . ')' : '')); ?></option><?php endforeach; ?></select></label>
+					<?php endif; ?>
+					
+					<?php if (($vis['category'] ?? '1') === '1'): ?>
 					<label><span>دسته‌بندی</span>
 						<select name="wc_cat_id" id="cptt-create-cat-select">
 							<option value="">— انتخاب دسته‌بندی —</option>
@@ -2083,20 +2310,44 @@ class CPTT_Expert {
 							<?php endforeach; ?>
 						</select>
 					</label>
+					<?php endif; ?>
+
+					<?php if (($vis['product'] ?? '1') === '1'): ?>
 					<label id="cptt-create-product-wrap" style="display:none;">
 						<span>محصول مرتبط</span>
 						<select name="product_id" id="cptt-create-product-select">
 							<option value="">— بدون محصول —</option>
 							<?php foreach ($products as $product): 
 								$prod_cats = wp_get_post_terms($product->ID, 'product_cat', ['fields' => 'ids']);
+								$product_obj = function_exists('wc_get_product') ? wc_get_product($product->ID) : null;
+								$price = $product_obj ? $product_obj->get_price() : 0;
 							?>
-							<option value="<?php echo esc_attr($product->ID); ?>" data-cats="<?php echo esc_attr(implode(',', $prod_cats)); ?>">
+							<option value="<?php echo esc_attr($product->ID); ?>" data-cats="<?php echo esc_attr(implode(',', $prod_cats)); ?>" data-price="<?php echo esc_attr($price); ?>">
 								<?php echo esc_html(get_the_title($product->ID)); ?>
 							</option>
 							<?php endforeach; ?>
 						</select>
 					</label>
-					<label><span>تمپلیت مراحل</span><select name="template_id"><option value="">— بدون تمپلیت —</option><?php foreach ($templates as $t): ?><option value="<?php echo esc_attr($t->ID); ?>"><?php echo esc_html(get_the_title($t->ID)); ?></option><?php endforeach; ?></select></label>
+					<?php endif; ?>
+
+					<?php if (($vis['template'] ?? '1') === '1'): ?>
+					<label><span>تمپلیت مراحل</span>
+						<select name="template_id" id="cptt-create-template-select">
+							<option value="">— بدون تمپلیت —</option>
+							<?php foreach ($templates as $t): 
+								$steps = get_post_meta($t->ID, '_cptt_template_steps', true);
+								if (!is_array($steps)) $steps = [];
+								$step_titles = [];
+								foreach ($steps as $s) { $step_titles[] = (string)($s['title'] ?? ''); }
+								$steps_json = wp_json_encode($step_titles, JSON_UNESCAPED_UNICODE);
+							?>
+							<option value="<?php echo esc_attr($t->ID); ?>" data-steps="<?php echo esc_attr($steps_json); ?>"><?php echo esc_html(get_the_title($t->ID)); ?></option>
+							<?php endforeach; ?>
+						</select>
+					</label>
+					<?php endif; ?>
+
+					<?php if (($vis['experts'] ?? '1') === '1'): ?>
 					<div style="grid-column: 1 / -1;">
 						<span>کارشناسان پروژه</span>
 						<div class="cptt-experts-card-list">
@@ -2112,16 +2363,479 @@ class CPTT_Expert {
 							<?php endforeach; ?>
 						</div>
 					</div>
+					<?php endif; ?>
 
+					<?php if (($vis['deadline'] ?? '1') === '1'): ?>
 					<label><span>مهلت پروژه</span><input type="text" class="cptt-jalali-datetime" name="deadline_local" placeholder="۱۴۰۳/۰۱/۳۱ ۱۴:۳۰"></label>
-					<label class="cptt-createProjectCheck"><span>وضعیت مالی</span><label><input type="checkbox" name="is_settled" value="1"> تسویه شده</label></label>
+					<?php endif; ?>
+					
+					<label class="cptt-createProjectCheck" style="display:none;"><span>وضعیت مالی</span><label><input type="checkbox" name="is_settled" value="1"> تسویه شده</label></label>
 				</div>
+
+				<?php if (($vis['financial'] ?? '1') === '1'): ?>
+				<!-- Dynamic Step-by-Step Financial Budget Breakdown -->
+				<div id="cptt-create-steps-finance-wrap" style="grid-column: 1 / -1; margin-top: 15px; border-top: 1px dashed #cbd5e1; padding-top: 15px;">
+					<span style="font-size: 13px; font-weight: bold; color: #475569; display: block; margin-bottom: 8px;">بودجه‌بندی مراحل پروژه</span>
+					<div id="cptt-create-finance-header" style="display:grid; grid-template-columns: 2.2fr 1.2fr 80px 1.4fr 1.4fr auto; gap:6px; align-items:center; margin-bottom:6px; font-size:11px; font-weight:bold; color:#64748b; padding-left:30px;">
+						<span>عنوان مرحله</span>
+						<span>مبلغ فی (ریال)</span>
+						<span>تعداد</span>
+						<span>مبلغ کل (ریال)</span>
+						<span>پرداختی (ریال)</span>
+					</div>
+					<div id="cptt-create-steps-finance-list" style="display:grid; gap:6px;"></div>
+					<button type="button" id="cptt-create-add-finance-row" class="cptt-btn" style="margin-top:10px; font-size:11px; padding:6px 12px; min-height: 30px; height: 30px; background:#f1f5f9; color:#475569; border: 1px dashed #cbd5e1; border-radius:8px; width:100%;">+ افزودن ردیف بودجه جدید</button>
+				</div>
+
+				<!-- Total Project Billing Summary (Single Row) -->
+				<div class="cptt-createProjectGrid" style="grid-column: 1 / -1; border-top: 1px dashed #cbd5e1; padding-top: 15px; margin-top: 10px; grid-template-columns: 1fr 1fr 1fr auto; gap:12px; align-items:center; padding-bottom:5px;">
+					<span style="font-size: 13px; font-weight: 900; color: #475569; grid-column: 1 / -1; margin-bottom: 4px;">خلاصه حساب و کتاب کل پروژه</span>
+					<label style="margin:0;">
+						<span>جمع کل پروژه (ریال)</span>
+						<input type="text" id="cptt-create-total-price" value="0" readonly style="background:#f1f5f9; width:100%;">
+					</label>
+					<label style="margin:0;">
+						<span>بیعانه / پرداختی کل (ریال)</span>
+						<input type="text" id="cptt-create-paid-amount" value="0" readonly style="background:#f1f5f9; width:100%;">
+					</label>
+					<label style="margin:0;">
+						<span>مانده کل (ریال)</span>
+						<input type="text" id="cptt-create-remaining" value="0" readonly style="background:#f1f5f9; width:100%;">
+					</label>
+					<div style="align-self:end; margin:0;">
+						<span id="cptt-create-finance-status" class="cptt-expert-status cptt-expert-status--done" style="display:inline-flex; align-items:center; height:44px; margin:0; box-sizing:border-box;">تسویه شده</span>
+					</div>
+				</div>
+				<?php endif; ?>
+
+				<?php if (($vis['delivery'] ?? '1') === '1'): ?>
+				<!-- Delivery Section inside popup -->
+				<div id="cptt-create-address-wrap" style="grid-column: 1 / -1; display:none; border-top: 1px dashed #cbd5e1; padding-top: 15px; margin-top: 10px;">
+					<span style="font-size: 13px; font-weight: 900; color: #475569; display: block; margin-bottom: 6px;">روش و آدرس تحویل پروژه</span>
+					<div class="cptt-createProjectGrid" style="grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px; padding:0;">
+						<label style="margin:0;">
+							<span>روش تحویل</span>
+							<select name="delivery_method" id="cptt-create-delivery-method" style="width:100%;">
+								<option value="in_person">حضوری</option>
+								<option value="shipping">ارسال</option>
+							</select>
+						</label>
+						<label id="cptt-create-province-wrap" style="display:none; margin:0;">
+							<span>استان</span>
+							<select name="delivery_province" id="cptt-create-province" style="width:100%;">
+								<option value="">— انتخاب استان —</option>
+							</select>
+						</label>
+					</div>
+					<div class="cptt-createProjectGrid" style="grid-template-columns: 1fr; gap:10px; padding:0;">
+						<label id="cptt-create-city-wrap" style="display:none; margin:0;">
+							<span>شهر</span>
+							<select name="delivery_city" id="cptt-create-city" style="width:100%;">
+								<option value="">— انتخاب شهر —</option>
+							</select>
+						</label>
+						<label id="cptt-create-detail-address-wrap" style="display:none; margin:0;">
+							<span>آدرس تکمیلی</span>
+							<textarea name="delivery_address" id="cptt-create-detail-address" rows="2" placeholder="خیابان، کوچه، پلاک، واحد..."></textarea>
+						</label>
+					</div>
+				</div>
+				<?php endif; ?>
+
 				<label class="cptt-expert-noteField"><span>یادداشت اولیه</span><textarea name="note" rows="3" placeholder="در صورت نیاز توضیح اولیه ثبت کنید..."></textarea></label>
 				<div class="cptt-expert-formActions">
 					<button type="submit" class="cptt-btn cptt-btn--primary">ایجاد پروژه</button>
 					<div class="cptt-expert-formMsg" aria-live="polite"></div>
 				</div>
 		</form>
+
+		<!-- Nested New Customer Modal -->
+		<div id="cptt-new-customer-modal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.6); z-index:10000000000; align-items:center; justify-content:center; padding:15px; backdrop-filter:blur(3px);">
+			<div style="background:#ffffff; border-radius:18px; width:min(400px, 100%); padding:20px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.1); border:1px solid #e2e8f0; position:relative; direction:rtl; text-align:right;">
+				<span style="font-size:14px; font-weight:bold; color:#0f172a; display:block; margin-bottom:12px;">ثبت مشتری جدید</span>
+				<div class="cptt-createProjectGrid" style="grid-template-columns:1fr; gap:10px; padding:0;">
+					<label style="margin:0;">
+						<span>نام و نام خانوادگی</span>
+						<input type="text" id="cptt-cust-fullname" placeholder="مثال: علیرضا محمدی" style="width:100%;">
+					</label>
+					<label style="margin:0;">
+						<span>شماره موبایل</span>
+						<input type="text" id="cptt-cust-phone" placeholder="مثال: ۰۹۱۲۳۴۵۶۷۸۹" style="width:100%;">
+					</label>
+					<div style="display:flex; gap:10px; margin-top:10px;">
+						<button type="button" id="cptt-cust-submit" class="cptt-btn cptt-btn--primary" style="flex:1;">ثبت مشتری</button>
+						<button type="button" id="cptt-cust-close" class="cptt-btn" style="flex:1; background:#f1f5f9; color:#475569;">انصراف</button>
+					</div>
+					<div id="cptt-cust-msg" style="font-size:12px; margin-top:5px; text-align:center;"></div>
+				</div>
+			</div>
+		</div>
+
+		<script>
+		(function() {
+			var provincesAndCities = {
+				"تهران": ["تهران", "ورامین", "شهریار", "قدس", "ملارد", "صالحیه", "پاکدشت", "اسلامشهر", "ری", "دماوند"],
+				"اصفهان": ["اصفهان", "کاشان", "خمینی‌شهر", "نجف‌آباد", "شاهین‌شهر", "شهرضا", "فولادشهر", "تیران", "گلپایگان"],
+				"خراسان رضوی": ["مشهد", "سبزوار", "نیشابور", "تربت حیدریه", "قوچان", "کاشمر", "چناران", "سرخس", "درگز"],
+				"فارس": ["شیراز", "مرودشت", "جهرم", "فسا", "داراب", "فیروزآباد", "لار", "کازرون", "آباده"],
+				"خوزستان": ["اهواز", "دزفول", "آبادان", "خرمشهر", "اندیمشک", "ایذه", "شوشتر", "بهبهان", "ماهشهر"],
+				"آذربایجان شرقی": ["تبریز", "مراغه", "مرند", "میانه", "اهر", "بناب", "سراب", "ملکان", "جلفا"],
+				"آذربایجان غربی": ["ارومیه", "خوی", "بوکان", "مهاباد", "میاندوآب", "سلماس", "پیرانشهر", "نقده", "تکاب"],
+				"مازندران": ["ساری", "بابل", "آمل", "قائم‌شهر", "بهشهر", "چالوس", "نوشهر", "تنکابن", "رامسر"],
+				"گیلان": ["رشت", "بندر انزلی", "لاهیجان", "لنگرود", "هشتپر", "آستارا", "صومعه‌سرا", "رودسر", "فومن"],
+				"کرمان": ["کرمان", "سیرجان", "رفسنجان", "جیرفت", "بم", "زرند", "کهنوج", "شهربابک"],
+				"سیستان و بلوچستان": ["زاهدان", "زابل", "ایرانشهر", "چابهار", "سراوان", "خاش", "کنارک"],
+				"البرز": ["کرج", "فردیس", "کمال‌شهر", "نظرآباد", "محمدشهر", "هشتگرد", "اشتهارد"],
+				"کرمانشاه": ["کرمانشاه", "اسلام‌آباد غرب", "کنگاور", "جوانرود", "سرپل ذهاب", "سنقر", "هرسین"],
+				"همدان": ["همدان", "ملایر", "نهاوند", "تویسرکان", "اسدآباد", "کبودرآهنگ", "بهار"],
+				"یزد": ["یزد", "میبد", "اردکان", "بافق", "مهریز", "ابرکوه", "تفت"],
+				"کردستان": ["سنندج", "سقز", "مریوان", "بانه", "قروه", "کامیاران", "بیجار", "دیواندره"],
+				"هرمزگان": ["بندرعباس", "میناب", "دهبارز", "قشم", "کیش", "بندر لنگه", "جاسک"],
+				"گلستان": ["گرگان", "گنبد کاووس", "بندر ترکمن", "علی‌آباد کتول", "کردکوی", "کلاله", "آزادشهر"],
+				"لرستان": ["خرم‌آباد", "بروجرد", "دورود", "کوهدشت", "دلفان", "الیگودرز", "الشتر", "ازنا"],
+				"مرکزی": ["اراک", "ساوه", "خمینی", "محلات", "دلیجان", "شازند", "تفرش"],
+				"اردبیل": ["اردبیل", "پارس‌آباد", "مشگین‌شهر", "خلخال", "گرمی", "نمین"],
+				"قزوین": ["قزوین", "الوند", "تاکستان", "آبیک", "اقبالیه", "محمدیه"],
+				"قم": ["قم", "قنوات", "جعفریه"],
+				"sمنان": ["سمنان", "شاهرود", "دامغان", "گرمسار", "مهدی‌شهر", "سرخه"],
+				"بوشهر": ["بوشهر", "برازجان", "گناوه", "کنگان", "خورموج", "دیلم", "عسلویه"],
+				"زنجان": ["زنجان", "ابهر", "خرمدره", "قیدار", "آب‌بر"],
+				"چهارمحال و بختیاری": ["شهرکرد", "بروجن", "لردگان", "فارسان", "اردل"],
+				"خراسان شمالی": ["بجنورد", "شیروان", "اسفراین", "آشخانه", "جاجرم"],
+				"خراسان جنوبی": ["بیرجند", "قائن", "طبس", "فردوس", "نهبندان"],
+				"کهگیلویه و بویراحمد": ["یاسوج", "دوگنبدان", "دهدشت", "لیکک", "سی‌سخت"],
+				"ایلام": ["ایلام", "ایوان", "دهلران", "آبدانان", "مهران"]
+			};
+
+			function escapeHtml(text) {
+				return text
+					.replace(/&/g, "&amp;")
+					.replace(/</g, "&lt;")
+					.replace(/>/g, "&gt;")
+					.replace(/"/g, "&quot;")
+					.replace(/'/g, "&#039;");
+			}
+
+			function formatWithCommas(num) {
+				var clean = num.toString().replace(/\D/g, "");
+				return clean.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+			}
+
+			function parseFromCommas(str) {
+				return parseFloat(str.toString().replace(/,/g, "")) || 0;
+			}
+
+			function setupCreateFinance() {
+				var templateSelect = document.getElementById('cptt-create-template-select');
+				var productSelect = document.getElementById('cptt-create-product-select');
+				var totalPriceInput = document.getElementById('cptt-create-total-price');
+				var paidAmountInput = document.getElementById('cptt-create-paid-amount');
+				var remainingInput = document.getElementById('cptt-create-remaining');
+				var financeStatus = document.getElementById('cptt-create-finance-status');
+				
+				var deliverySelect = document.getElementById('cptt-create-delivery-method');
+				var addressWrap = document.getElementById('cptt-create-address-wrap');
+				var provinceWrap = document.getElementById('cptt-create-province-wrap');
+				var provinceSelect = document.getElementById('cptt-create-province');
+				var citySelect = document.getElementById('cptt-create-city');
+				var cityWrap = document.getElementById('cptt-create-city-wrap');
+				var detailAddressWrap = document.getElementById('cptt-create-detail-address-wrap');
+
+				var clientSelect = document.querySelector('select[name="client_user_id"]');
+
+				// Populate provinces dropdown
+				if (provinceSelect) {
+					provinceSelect.innerHTML = '<option value="">— انتخاب استان —</option>';
+					Object.keys(provincesAndCities).sort().forEach(function(prov) {
+						var opt = document.createElement('option');
+						opt.value = prov;
+						opt.textContent = prov;
+						provinceSelect.appendChild(opt);
+					});
+
+					provinceSelect.addEventListener('change', function() {
+						var prov = provinceSelect.value;
+						if (prov && provincesAndCities[prov]) {
+							if (citySelect) {
+								citySelect.innerHTML = '<option value="">— انتخاب شهر —</option>';
+								provincesAndCities[prov].forEach(function(city) {
+									var opt = document.createElement('option');
+									opt.value = city;
+									opt.textContent = city;
+									citySelect.appendChild(opt);
+								});
+							}
+							if (cityWrap) cityWrap.style.display = 'block';
+						} else {
+							if (cityWrap) cityWrap.style.display = 'none';
+							if (detailAddressWrap) detailAddressWrap.style.display = 'none';
+						}
+					});
+				}
+
+				if (citySelect) {
+					citySelect.addEventListener('change', function() {
+						if (citySelect.value) {
+							if (detailAddressWrap) detailAddressWrap.style.display = 'block';
+						} else {
+							if (detailAddressWrap) detailAddressWrap.style.display = 'none';
+						}
+					});
+				}
+
+				if (deliverySelect && addressWrap) {
+					deliverySelect.addEventListener('change', function() {
+						if (deliverySelect.value === 'shipping') {
+							addressWrap.style.display = 'block';
+							if (provinceWrap) provinceWrap.style.display = 'block';
+						} else {
+							addressWrap.style.display = 'none';
+							if (provinceWrap) provinceWrap.style.display = 'none';
+							if (cityWrap) cityWrap.style.display = 'none';
+							if (detailAddressWrap) detailAddressWrap.style.display = 'none';
+						}
+					});
+				}
+
+				if (templateSelect) {
+					templateSelect.addEventListener('change', function() {
+						var selectedOpt = templateSelect.options[templateSelect.selectedIndex];
+						var stepsData = selectedOpt ? selectedOpt.getAttribute('data-steps') : '';
+						var steps = [];
+						if (stepsData) {
+							try { steps = JSON.parse(stepsData); } catch(err) {}
+						}
+						rebuildStepsFinanceList(steps);
+					});
+				}
+
+				function rebuildStepsFinanceList(stepTitles) {
+					var list = document.getElementById('cptt-create-steps-finance-list');
+					if (!list) return;
+
+					list.innerHTML = '';
+					if (!stepTitles || !stepTitles.length) {
+						// Always show at least 1 empty row by default
+						addStepsFinanceRow('مرحله اول', 0, 1, 0);
+						calculateFromStepBreakdown();
+						return;
+					}
+
+					stepTitles.forEach(function(title) {
+						addStepsFinanceRow(title, 0, 1, 0);
+					});
+					calculateFromStepBreakdown();
+				}
+
+				function addStepsFinanceRow(title, fee, qty, paid) {
+					var list = document.getElementById('cptt-create-steps-finance-list');
+					if (!list) return;
+
+					var rowId = 'row_' + Math.floor(Math.random() * 100000);
+					var html = '<div class="cptt-create-finance-row" id="' + rowId + '" style="display:grid; grid-template-columns: 2.2fr 1.2fr 80px 1.4fr 1.4fr auto; gap:6px; align-items:center; margin-bottom:5px;">' +
+						'  <input type="text" name="create_step_titles[]" value="' + escapeHtml(title) + '" placeholder="عنوان مرحله" style="font-size:12px; padding:6px 8px; min-height:30px; height:30px; border-radius:8px; border:1px solid #cbd5e1; box-sizing:border-box; width:100%;" />' +
+						'  <input type="text" class="cptt-create-step-fee cptt-num-format" name="create_step_fees[]" value="' + formatWithCommas(fee) + '" placeholder="مبلغ فی" style="font-size:12px; padding:6px 8px; min-height:30px; height:30px; border-radius:8px; border:1px solid #cbd5e1; box-sizing:border-box; width:100%;" />' +
+						'  <input type="number" class="cptt-create-step-qty" name="create_step_qty[]" value="' + qty + '" min="1" style="font-size:12px; padding:6px 8px; min-height:30px; height:30px; border-radius:8px; border:1px solid #cbd5e1; box-sizing:border-box; width:100%; text-align:center;" />' +
+						'  <input type="text" class="cptt-create-step-cost" readonly style="font-size:12px; padding:6px 8px; min-height:30px; height:30px; border-radius:8px; border:1px solid #cbd5e1; box-sizing:border-box; width:100%; background:#f1f5f9; font-weight:700;" value="' + formatWithCommas(fee * qty) + '" />' +
+						'  <input type="text" class="cptt-create-step-paid cptt-num-format" name="create_step_paids[]" value="' + formatWithCommas(paid) + '" placeholder="پرداختی" style="font-size:12px; padding:6px 8px; min-height:30px; height:30px; border-radius:8px; border:1px solid #cbd5e1; box-sizing:border-box; width:100%;" />' +
+						'  <button type="button" class="cptt-create-remove-finance-row" style="color:#ef4444; background:#fee2e2; border:none; border-radius:50%; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; font-size:14px; font-weight:bold; padding:0; line-height:1;">×</button>' +
+						'</div>';
+					list.insertAdjacentHTML('beforeend', html);
+
+					var row = document.getElementById(rowId);
+					
+					// Format commas on typing
+					row.querySelectorAll('.cptt-num-format').forEach(function(inp) {
+						inp.addEventListener('input', function(e) {
+							var cursor = e.target.selectionStart;
+							var oldLen = e.target.value.length;
+							var clean = e.target.value.replace(/\D/g, "");
+							e.target.value = formatWithCommas(clean);
+							var newLen = e.target.value.length;
+							e.target.setSelectionRange(cursor + (newLen - oldLen), cursor + (newLen - oldLen));
+							
+							calculateRowTotal(row);
+						});
+					});
+
+					row.querySelector('.cptt-create-step-qty').addEventListener('input', function() {
+						calculateRowTotal(row);
+					});
+
+					row.querySelector('.cptt-create-remove-finance-row').addEventListener('click', function() {
+						row.remove();
+						calculateFromStepBreakdown();
+					});
+				}
+
+				function calculateRowTotal(row) {
+					var fee = parseFromCommas(row.querySelector('.cptt-create-step-fee').value);
+					var qty = parseInt(row.querySelector('.cptt-create-step-qty').value) || 1;
+					if (qty < 1) qty = 1;
+					row.querySelector('.cptt-create-step-cost').value = formatWithCommas(fee * qty);
+					calculateFromStepBreakdown();
+				}
+
+				var addBudgetBtn = document.getElementById('cptt-create-add-finance-row');
+				if (addBudgetBtn) {
+					addBudgetBtn.addEventListener('click', function() {
+						addStepsFinanceRow('مرحله جدید', 0, 1, 0);
+						calculateFromStepBreakdown();
+					});
+				}
+
+				function calculateFromStepBreakdown() {
+					var list = document.getElementById('cptt-create-steps-finance-list');
+					if (!list) return;
+
+					var totalCost = 0;
+					var totalPaid = 0;
+					var costs = list.querySelectorAll('.cptt-create-step-cost');
+					var paids = list.querySelectorAll('.cptt-create-step-paid');
+					
+					costs.forEach(function(inp) {
+						totalCost += parseFromCommas(inp.value);
+					});
+					paids.forEach(function(inp) {
+						totalPaid += parseFromCommas(inp.value);
+					});
+
+					if (totalPriceInput) totalPriceInput.value = formatWithCommas(totalCost);
+					if (paidAmountInput) paidAmountInput.value = formatWithCommas(totalPaid);
+
+					var remain = totalCost - totalPaid;
+					if (remainingInput) remainingInput.value = formatWithCommas(remain);
+
+					if (financeStatus) {
+						if (remain <= 0 && totalCost > 0) {
+							financeStatus.textContent = 'تسویه شده';
+							financeStatus.className = 'cptt-expert-status cptt-expert-status--done';
+							financeStatus.style.background = '';
+							financeStatus.style.color = '';
+							financeStatus.style.borderColor = '';
+						} else {
+							financeStatus.textContent = 'تسویه نشده';
+							financeStatus.className = 'cptt-expert-status';
+							financeStatus.style.background = 'rgba(239, 68, 68, 0.14)';
+							financeStatus.style.color = '#ef4444';
+							financeStatus.style.borderColor = 'rgba(239, 68, 68, 0.28)';
+						}
+					}
+				}
+
+				if (productSelect) {
+					productSelect.addEventListener('change', function() {
+						var selectedOpt = productSelect.options[productSelect.selectedIndex];
+						if (selectedOpt) {
+							var price = parseFloat(selectedOpt.getAttribute('data-price')) || 0;
+							// Add a single default budget row with product price if empty
+							var list = document.getElementById('cptt-create-steps-finance-list');
+							if (list && list.children.length <= 1) {
+								list.innerHTML = '';
+								addStepsFinanceRow('مرحله اول', price, 1, 0);
+								calculateFromStepBreakdown();
+							}
+						}
+					});
+				}
+
+				// Trigger customer creation modal
+				if (clientSelect) {
+					var hasTrigger = false;
+					for (var i = 0; i < clientSelect.options.length; i++) {
+						if (clientSelect.options[i].value === 'new_customer_trigger') {
+							hasTrigger = true; break;
+						}
+					}
+					if (!hasTrigger) {
+						var newOpt = document.createElement('option');
+						newOpt.value = 'new_customer_trigger';
+						newOpt.style.fontWeight = 'bold';
+						newOpt.style.color = '#6366f1';
+						newOpt.textContent = '+ ثبت مشتری جدید —';
+						clientSelect.insertBefore(newOpt, clientSelect.firstChild);
+					}
+
+					clientSelect.addEventListener('change', function() {
+						if (clientSelect.value === 'new_customer_trigger') {
+							var custModal = document.getElementById('cptt-new-customer-modal');
+							if (custModal) {
+								custModal.style.display = 'flex';
+							}
+							clientSelect.value = '';
+						}
+					});
+				}
+
+				// Generate default first row
+				rebuildStepsFinanceList([]);
+			}
+
+			// New Customer Submission
+			var custSubmit = document.getElementById('cptt-cust-submit');
+			var custClose = document.getElementById('cptt-cust-close');
+			var custModal = document.getElementById('cptt-new-customer-modal');
+			if (custSubmit && custClose && custModal) {
+				custClose.addEventListener('click', function() {
+					custModal.style.display = 'none';
+				});
+
+				custSubmit.addEventListener('click', function() {
+					var fullname = document.getElementById('cptt-cust-fullname').value.trim();
+					var phone = document.getElementById('cptt-cust-phone').value.trim();
+					var msg = document.getElementById('cptt-cust-msg');
+
+					if (!fullname || !phone) {
+						if (msg) { msg.textContent = 'نام و شماره موبایل الزامی است.'; msg.style.color = '#ef4444'; }
+						return;
+					}
+
+					if (msg) { msg.textContent = 'در حال ثبت...'; msg.style.color = '#475569'; }
+
+					var fd = new FormData();
+					fd.append('action', 'cptt_expert_create_customer');
+					fd.append('nonce', (window.CPTT_EXPERT && CPTT_EXPERT.nonce) ? CPTT_EXPERT.nonce : '');
+					fd.append('full_name', fullname);
+					fd.append('phone', phone);
+
+					fetch((window.CPTT_EXPERT && CPTT_EXPERT.ajax) ? CPTT_EXPERT.ajax : '', {
+						method: 'POST',
+						body: fd
+					}).then(r => r.json()).then(res => {
+						if (res.success) {
+							if (msg) { msg.textContent = 'مشتری با موفقیت ثبت شد.'; msg.style.color = '#047857'; }
+							
+							var select = document.querySelector('select[name="client_user_id"]');
+							if (select) {
+								var opt = document.createElement('option');
+								opt.value = res.data.ID;
+								opt.textContent = res.data.display_name + ' (' + res.data.user_email + ')';
+								select.appendChild(opt);
+								select.value = res.data.ID;
+							}
+
+							setTimeout(function() {
+								custModal.style.display = 'none';
+								document.getElementById('cptt-cust-fullname').value = '';
+								document.getElementById('cptt-cust-phone').value = '';
+								if (msg) msg.textContent = '';
+							}, 1000);
+						} else {
+							if (msg) { msg.textContent = res.data || 'خطا در ثبت مشتری'; msg.style.color = '#ef4444'; }
+						}
+					}).catch(err => {
+						if (msg) { msg.textContent = 'خطای شبکه در ثبت مشتری'; msg.style.color = '#ef4444'; }
+					});
+				});
+			}
+			
+			if (document.readyState === 'loading') {
+				document.addEventListener('DOMContentLoaded', setupCreateFinance);
+			} else {
+				setupCreateFinance();
+			}
+		})();
+		</script>
 		<?php
 	}
 
@@ -2150,12 +2864,15 @@ class CPTT_Expert {
 		$current_user = wp_get_current_user();
 		ob_start();
 		?>
-		<div class="cptt-wrap cptt-expertWrap" dir="rtl">
+		<div class="cptt-wrap cptt-expertWrap cptt-v2-scope" dir="rtl">
 			<div class="cptt-expertLayout">
 				<aside class="cptt-expertSidebar">
 
 					<div class="cptt-sidebar-controls desktop-only" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; background: #fff; padding: 12px; border-radius: 16px; border: 1px solid #e6ebf2; box-shadow: 0 4px 10px rgba(0,0,0,0.03); position:relative; z-index: 10000000 !important;">
-						<button type="button" class="cptt-dark-toggle-icon" title="تغییر حالت شب/روز" style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:50%;width:42px;height:42px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;">🌙</button>
+						<button type="button" class="cptt-dark-toggle-icon" title="تغییر حالت شب/روز" style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:50%;width:42px;height:42px;display:flex;align-items:center;justify-content:center;cursor:pointer;">
+							<svg class="cptt-svg-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+							<svg class="cptt-svg-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+						</button>
 						<div class="cptt-notification-bell" style="margin-bottom:0;">
 							<?php
 								global $wpdb;
@@ -2194,7 +2911,10 @@ class CPTT_Expert {
 					<div class="cptt-sideBox cptt-sideBox--profile">
 						<div class="cptt-sideBox__title" style="display:flex;justify-content:space-between;align-items:center;">
 							<span>پروفایل کارشناس</span>
-							<span style="font-size:11px;font-weight:normal;color:#64748b;"><?php echo esc_html(class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime(current_time('timestamp', true)) : date('Y-m-d H:i')); ?></span>
+							<span style="font-size:11px;font-weight:normal;color:#64748b;"><?php 
+								$now_ts = current_time('timestamp', true);
+								echo esc_html($this->get_persian_day_of_week($now_ts) . ' ' . (class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime($now_ts) : date('Y-m-d H:i'))); 
+							?></span>
 						</div>
 						<div class="cptt-expertProfile" style="display:flex; align-items:center; gap:10px;">
 							<?php
@@ -2274,7 +2994,10 @@ class CPTT_Expert {
 			    <div class="cptt-mobile-menu__dialog">
 			        <div class="cptt-mobile-menu__header">
 			            <div style="display:flex; align-items:center; gap:16px;">
-			                <button type="button" class="cptt-dark-toggle-icon" style="background:none;border:none;font-size:22px;cursor:pointer;color:#475569;">🌙</button>
+			                <button type="button" class="cptt-dark-toggle-icon" style="background:none;border:none;cursor:pointer;color:#475569;display:flex;align-items:center;justify-content:center;">
+			                <svg class="cptt-svg-moon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+			                <svg class="cptt-svg-sun" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+			            </button>
 			                <div class="cptt-notification-bell" style="margin-bottom:0;display:flex;align-items:center;">
 			                    <?php
 			                    	$unread_count = $wpdb->get_var($wpdb->prepare("SELECT COUNT(id) FROM {$wpdb->prefix}cptt_notifications WHERE user_id = %d AND is_read = 0", get_current_user_id()));

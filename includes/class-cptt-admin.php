@@ -523,7 +523,13 @@ class CPTT_Admin {
 				<?php endforeach; ?>
 			</div>
 			<div class="cptt-notes__add">
-				<label class="cptt-label">یادداشت جدید</label>
+				<label class="cptt-label" for="cptt_new_note">یادداشت جدید</label>
+				<textarea id="cptt_new_note" name="cptt_new_note" rows="3" style="width:100%;" placeholder="یادداشت خود را بنویسید..."></textarea>
+			</div>
+		</div>
+		<?php
+	}
+	public function render_accounting_metabox($post) {
 		$fin=$this->project_financial_data($post->ID);
 		$steps=get_post_meta($post->ID,'_cptt_steps',true);
 		if (!is_array($steps)) $steps=[];
@@ -908,12 +914,12 @@ class CPTT_Admin {
             }
 
 			if ($title===''&&$desc===''&&empty($checklist)&&empty($user_tasks)) continue;
-			if ($status==='current') { if ($current_found) $status='todo'; $current_found=true; }
+			if ($status==='current') { $current_found=true; }
 			$row=['id'=>$id,'title'=>$title,'desc'=>$desc,'status'=>$status,'checklist'=>$checklist,'user_tasks'=>$user_tasks,'cost'=>$cost,'paid'=>$paid];
 			if ($due_at) { $row['due_at']=$due_at; $row['due_at_fa']=class_exists('CPTT_Core')?CPTT_Core::jalali_datetime($due_at):date('Y/m/d H:i',$due_at); }
 			$out[]=$row;
 		}
-		if (!$current_found) { foreach ($out as $i=>$s) { if ($s['status']==='todo') { $out[$i]['status']='current'; break; } } }
+/* Fallback for single current step disabled */
 		return $out;
 	}
 	private function apply_step_status_from_checklist($steps) {
