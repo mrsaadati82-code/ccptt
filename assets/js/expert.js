@@ -2062,26 +2062,7 @@
       });
     });
 
-    // آپلود آواتار
-    var avatarBtn = document.getElementById('cptt-ep-avatar-btn');
-    if (avatarBtn && window.wp && window.wp.media) {
-      var frame;
-      avatarBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        if (!frame) {
-          frame = wp.media({ title: 'انتخاب عکس پروفایل', button: { text: 'انتخاب' }, multiple: false });
-          frame.on('select', function() {
-            var att = frame.state().get('selection').first().toJSON();
-            document.getElementById('cptt-ep-avatar-id').value = att.id;
-            var preview = document.getElementById('cptt-ep-avatar-preview');
-            if (preview) {
-              preview.innerHTML = '<img src="' + att.url + '" alt="avatar" style="width:100%;height:100%;object-fit:cover;">';
-            }
-          });
-        }
-        frame.open();
-      });
-    }
+    // Avatar upload handled by separate IIFE below
 
     // ارسال فرم
     if (form) {
@@ -2107,6 +2088,259 @@
             if (msgEl) { msgEl.textContent = '✗ خطای شبکه'; msgEl.style.color = '#dc2626'; }
           });
       });
+    }
+  });
+})();
+
+/* =========================================================
+   REDESIGNED Expert Profile Modal (Public Hub)
+   + Avatar Upload via File Input with Crop
+   ========================================================= */
+(function() {
+  'use strict';
+  function escH(s) { return String(s||'').replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[c];}); }
+
+  // Override the existing expert modal renderer
+  var oldModal = document.getElementById('cptt-expert-profile-modal');
+  if (oldModal) {
+    // Rebind badge clicks to use new renderer
+    document.removeEventListener('click', _cpttOldExpertHandler);
+  }
+
+  function b64DecodeUtf8(b64) {
+    try {
+      var bin = atob(b64);
+      var bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return window.TextDecoder ? new TextDecoder('utf-8').decode(bytes) : decodeURIComponent(escape(bin));
+    } catch(e) { return ''; }
+  }
+
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('.cptt-expertBadge');
+    if (!btn) return;
+    e.stopPropagation();
+    var b64 = btn.getAttribute('data-expert');
+    if (!b64) return;
+    try {
+      var expert = JSON.parse(b64DecodeUtf8(b64));
+      openRedesignedExpertModal(expert);
+    } catch(ex) { console.error(ex); }
+  }, true); // capture phase to override old handler
+
+  function openRedesignedExpertModal(expert) {
+    var modal = document.getElementById('cptt-expert-profile-modal');
+    if (!modal) return;
+    var content = modal.querySelector('#cptt-expert-profile-content');
+    if (!content) return;
+
+    var avatarSrc = expert.avatar || '';
+    var name = expert.name || 'کارشناس';
+    var title = expert.title || '';
+    var bio = expert.bio || '';
+    var skills = expert.specialties || [];
+
+    var html = '';
+    // Hero section with gradient
+    html += '<div class="cptt-expertProfile__hero">';
+    html += '<div class="cptt-expertProfile__avatarFloat">';
+    if (avatarSrc) {
+      html += '<img src="'+escH(avatarSrc)+'" alt="'+escH(name)+'">';
+    } else {
+      html += '<div class="cptt-expertProfile__avatarDefault2">'+escH(name.charAt(0))+'</div>';
+    }
+    html += '</div>';
+    html += '<h2 class="cptt-expertProfile__name">'+escH(name)+'</h2>';
+    if (title) html += '<div class="cptt-expertProfile__title">'+escH(title)+'</div>';
+    html += '</div>';
+
+    // Body
+    html += '<div class="cptt-expertProfile__body">';
+
+    // Stats
+    html += '<div class="cptt-expertProfile__statsRow">';
+    html += '<div class="cptt-expertProfile__statCard"><strong>'+escH(String(expert.active_projects||0))+'</strong><span>پروژه فعال</span></div>';
+    html += '<div class="cptt-expertProfile__statCard"><strong>'+escH(String(expert.completed_projects||0))+'</strong><span>تکمیل شده</span></div>';
+    html += '</div>';
+
+    // Bio
+    if (bio) {
+      html += '<div class="cptt-expertProfile__bioText">'+escH(bio)+'</div>';
+    }
+
+    // Skills
+    if (skills.length) {
+      html += '<div class="cptt-expertProfile__skillsWrap">';
+      skills.forEach(function(sk) {
+        if (sk) html += '<span class="cptt-expertProfile__skillTag">'+escH(sk)+'</span>';
+      });
+      html += '</div>';
+    }
+
+    html += '</div>';
+
+    content.innerHTML = html;
+    modal.removeAttribute('hidden');
+    document.body.style.overflow = 'hidden';
+  }
+})();
+
+/* =========================================================
+   AVATAR UPLOAD v3 - Bulletproof crop with inline styles
+   ========================================================= */
+(function(){
+  'use strict';
+  document.addEventListener('DOMContentLoaded', function(){
+    var btn = document.getElementById('cptt-ep-avatar-btn');
+    if (!btn) return;
+
+    var fi = document.createElement('input');
+    fi.type = 'file'; fi.accept = 'image/*';
+    fi.style.cssText = 'position:fixed;left:-9999px;opacity:0;';
+    document.body.appendChild(fi);
+
+    btn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); fi.value=''; fi.click(); });
+
+    fi.addEventListener('change', function(){
+      if (!fi.files || !fi.files[0]) return;
+      var rd = new FileReader();
+      rd.onload = function(ev){ startCrop(ev.target.result); };
+      rd.readAsDataURL(fi.files[0]);
+    });
+
+    var _m=null, _img=null, _s=1, _px=0, _py=0, _drag=false, _dx=0, _dy=0, _lp=0, RING=220, OUT=400;
+
+    function startCrop(src){
+      endCrop();
+      var d = document.createElement('div');
+      d.id='cptt-avm';
+      // All styles inline - no CSS conflicts possible
+      d.style.cssText='position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:12px;';
+      d.innerHTML =
+        '<div style="position:absolute;inset:0;background:rgba(15,23,42,.75);backdrop-filter:blur(6px);" id="cptt-avbg"></div>'+
+        '<div style="position:relative;background:#fff;border-radius:20px;padding:20px;width:320px;max-width:92vw;box-shadow:0 30px 60px rgba(0,0,0,.3);text-align:center;direction:rtl;" id="cptt-avbox">'+
+          '<div style="font-size:15px;font-weight:900;color:#0f172a;margin:0 0 4px;">تنظیم عکس پروفایل</div>'+
+          '<div style="font-size:11px;color:#94a3b8;margin:0 0 12px;">با انگشت یا موس جابجا کنید · اسکرول یا پینچ برای زوم</div>'+
+          '<div id="cptt-avring" style="width:'+RING+'px;height:'+RING+'px;margin:0 auto 12px;border-radius:50%;overflow:hidden;border:3px solid #c7d2fe;position:relative;background:#f1f5f9;touch-action:none;cursor:grab;">'+
+            '<img id="cptt-avimg" src="'+src+'" draggable="false" style="position:absolute;display:block;pointer-events:none;user-select:none;">'+
+          '</div>'+
+          '<input type="range" id="cptt-avzoom" min="20" max="500" value="100" style="width:90%;margin:0 auto 14px;display:block;accent-color:#6366f1;">'+
+          '<div style="display:flex;gap:8px;">'+
+            '<button type="button" id="cptt-avok" style="flex:1;padding:10px 0;border-radius:12px;border:none;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:14px;font-weight:800;cursor:pointer;min-height:44px;">ثبت عکس</button>'+
+            '<button type="button" id="cptt-avno" style="flex:1;padding:10px 0;border-radius:12px;border:1px solid #cbd5e1;background:#fff;color:#334155;font-size:14px;font-weight:800;cursor:pointer;min-height:44px;">انصراف</button>'+
+          '</div>'+
+        '</div>';
+      document.body.appendChild(d);
+      _m = d;
+      _img = document.getElementById('cptt-avimg');
+      var ring = document.getElementById('cptt-avring');
+      var zoom = document.getElementById('cptt-avzoom');
+      _s=100; _px=0; _py=0;
+
+      _img.onload = function(){
+        var fit = RING / Math.min(_img.naturalWidth, _img.naturalHeight);
+        _s = Math.max(20, Math.round(fit*100));
+        zoom.value = _s;
+        _px=0; _py=0;
+        paint();
+      };
+
+      zoom.oninput = function(){ _s = +this.value; paint(); };
+
+      ring.addEventListener('wheel', function(e){
+        e.preventDefault();
+        _s += (e.deltaY<0?8:-8);
+        _s = Math.max(20,Math.min(500,_s));
+        zoom.value = _s;
+        paint();
+      }, {passive:false});
+
+      ring.addEventListener('mousedown', function(e){ _drag=true; _dx=e.clientX-_px; _dy=e.clientY-_py; e.preventDefault(); });
+      var mmv = function(e){ if(!_drag) return; _px=e.clientX-_dx; _py=e.clientY-_dy; paint(); };
+      var mup = function(){ _drag=false; };
+      document.addEventListener('mousemove', mmv);
+      document.addEventListener('mouseup', mup);
+
+      ring.addEventListener('touchstart', function(e){
+        if(e.touches.length===2){
+          _lp=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+          e.preventDefault();
+        } else if(e.touches.length===1){
+          _drag=true; _dx=e.touches[0].clientX-_px; _dy=e.touches[0].clientY-_py; e.preventDefault();
+        }
+      }, {passive:false});
+      ring.addEventListener('touchmove', function(e){
+        if(e.touches.length===2){
+          var nd=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+          _s+=(nd-_lp)*0.4; _s=Math.max(20,Math.min(500,_s)); zoom.value=Math.round(_s); _lp=nd; paint(); e.preventDefault();
+        } else if(_drag&&e.touches.length===1){
+          _px=e.touches[0].clientX-_dx; _py=e.touches[0].clientY-_dy; paint(); e.preventDefault();
+        }
+      }, {passive:false});
+      ring.addEventListener('touchend', function(){ _drag=false; _lp=0; });
+
+      document.getElementById('cptt-avno').onclick = endCrop;
+      document.getElementById('cptt-avbg').onclick = endCrop;
+
+      document.getElementById('cptt-avok').onclick = function(){
+        var b = this; b.disabled=true; b.textContent='آپلود...';
+        // Create canvas matching ring view exactly
+        var c = document.createElement('canvas');
+        c.width=OUT; c.height=OUT;
+        var ctx = c.getContext('2d');
+        var sc = _s/100;
+        var iw = _img.naturalWidth*sc;
+        var ih = _img.naturalHeight*sc;
+        var half = RING/2;
+        // Image position in ring: centered at (half+_px, half+_py) with size (iw, ih)
+        // imgLeft = half - iw/2 + _px, imgTop = half - ih/2 + _py
+        var ratio = OUT/RING;
+        var cx = (half - iw/2 + _px)*ratio;
+        var cy = (half - ih/2 + _py)*ratio;
+        ctx.drawImage(_img, cx, cy, iw*ratio, ih*ratio);
+
+        c.toBlob(function(blob){
+          if(!blob){ b.disabled=false; b.textContent='ثبت عکس'; return; }
+          var fd = new FormData();
+          fd.append('action','cptt_expert_upload_avatar');
+          fd.append('nonce', window.CPTT_EXPERT?CPTT_EXPERT.nonce:'');
+          fd.append('avatar_file', blob, 'avatar.jpg');
+          fetch(window.CPTT_EXPERT?CPTT_EXPERT.ajax:'',{method:'POST',credentials:'same-origin',body:fd})
+          .then(function(r){return r.json();})
+          .then(function(j){
+            if(j.success&&j.data){
+              var p=document.getElementById('cptt-ep-avatar-preview');
+              if(p) p.innerHTML='<img src="'+j.data.url+'" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">';
+              var h=document.getElementById('cptt-ep-avatar-id');
+              if(h) h.value=j.data.id;
+              endCrop();
+            } else {
+              alert(j.data||'خطا'); b.disabled=false; b.textContent='ثبت عکس';
+            }
+          }).catch(function(){ alert('خطای شبکه'); b.disabled=false; b.textContent='ثبت عکس'; });
+        },'image/jpeg',0.92);
+      };
+
+      // Clean up on close
+      _m._cleanup = function(){ document.removeEventListener('mousemove',mmv); document.removeEventListener('mouseup',mup); };
+    }
+
+    function paint(){
+      if(!_img) return;
+      var sc=_s/100;
+      var w=_img.naturalWidth*sc;
+      var h=_img.naturalHeight*sc;
+      var half=RING/2;
+      _img.style.width=w+'px';
+      _img.style.height=h+'px';
+      _img.style.left=(half-w/2+_px)+'px';
+      _img.style.top=(half-h/2+_py)+'px';
+    }
+
+    function endCrop(){
+      var m=document.getElementById('cptt-avm');
+      if(m){ if(m._cleanup) m._cleanup(); m.remove(); }
+      _m=null; _img=null; _drag=false; fi.value='';
     }
   });
 })();

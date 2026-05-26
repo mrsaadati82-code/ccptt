@@ -3841,7 +3841,7 @@ body.cptt-dark .cptt-step-reorder-handle {
 .cptt-new-customer-modal-dialog .cptt-ncm-footer {
   padding: 0 24px 20px !important;
   display: grid !important;
-  grid-template-columns: 1fr 1fr !important;
+  grid-template-columns: 1fr !important;
   gap: 10px !important;
 }
 .cptt-new-customer-modal-dialog .cptt-ncm-footer .cptt-btn {
@@ -3877,5 +3877,285 @@ body.cptt-dark .cptt-step-reorder-handle {
   }
   .cptt-hubModal__finRow {
     grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+
+/* =========================================================
+   EXPERT PROFILE MODAL - REDESIGN (v5.0)
+   ========================================================= */
+.cptt-expertProfileModal .cptt-hubModal__dialog {
+  width: min(500px, 95vw) !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+.cptt-expertProfileModal .cptt-hubModal__close {
+  top: 12px !important;
+  left: 12px !important;
+  z-index: 10 !important;
+  background: rgba(255,255,255,0.85) !important;
+}
+.cptt-expertProfile__hero {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 55%, #ec4899 110%) !important;
+  padding: 28px 24px 60px !important;
+  text-align: center !important;
+  position: relative !important;
+}
+.cptt-expertProfile__hero .cptt-expertProfile__name {
+  color: #fff !important;
+  margin: 0 !important;
+  font-size: 20px !important;
+}
+.cptt-expertProfile__hero .cptt-expertProfile__title {
+  color: rgba(255,255,255,0.85) !important;
+  font-size: 13px !important;
+  margin: 4px 0 0 !important;
+}
+.cptt-expertProfile__avatarFloat {
+  width: 96px !important;
+  height: 96px !important;
+  border-radius: 50% !important;
+  border: 4px solid #fff !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2) !important;
+  overflow: hidden !important;
+  position: absolute !important;
+  bottom: -48px !important;
+  right: 50% !important;
+  transform: translateX(50%) !important;
+  background: #eff6ff !important;
+}
+.cptt-expertProfile__avatarFloat img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  display: block !important;
+}
+.cptt-expertProfile__avatarDefault2 {
+  width: 100% !important;
+  height: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: linear-gradient(135deg,#6366f1,#8b5cf6) !important;
+  color: #fff !important;
+  font-size: 36px !important;
+  font-weight: 900 !important;
+}
+.cptt-expertProfile__body {
+  padding: 56px 24px 24px !important;
+}
+.cptt-expertProfile__statsRow {
+  display: grid !important;
+  grid-template-columns: repeat(2, 1fr) !important;
+  gap: 10px !important;
+  margin-bottom: 18px !important;
+}
+.cptt-expertProfile__statCard {
+  background: linear-gradient(135deg, #f8fafc, #fff) !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 14px !important;
+  padding: 14px 10px !important;
+  text-align: center !important;
+}
+.cptt-expertProfile__statCard strong {
+  display: block !important;
+  font-size: 24px !important;
+  font-weight: 950 !important;
+  color: #4f46e5 !important;
+  line-height: 1.2 !important;
+}
+.cptt-expertProfile__statCard span {
+  display: block !important;
+  font-size: 11px !important;
+  color: #64748b !important;
+  font-weight: 700 !important;
+  margin-top: 4px !important;
+}
+.cptt-expertProfile__bioText {
+  font-size: 13px !important;
+  color: #334155 !important;
+  line-height: 1.9 !important;
+  background: #f8fafc !important;
+  border-radius: 12px !important;
+  padding: 14px !important;
+  border: 1px solid #f1f5f9 !important;
+  margin-bottom: 16px !important;
+}
+.cptt-expertProfile__skillsWrap {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  justify-content: center !important;
+}
+.cptt-expertProfile__skillTag {
+  background: linear-gradient(135deg,#eef2ff,#f5f3ff) !important;
+  border: 1px solid #c7d2fe !important;
+  border-radius: 999px !important;
+  padding: 5px 14px !important;
+  font-size: 12px !important;
+  color: #4338ca !important;
+  font-weight: 800 !important;
+}
+@media (max-width: 480px) {
+  .cptt-expertProfile__hero { padding: 22px 16px 54px !important; }
+  .cptt-expertProfile__body { padding: 50px 16px 20px !important; }
+}
+
+
+
+
+
+/* =========================================================
+   BUDGET FIELD LABELS (mobile + desktop)
+   ========================================================= */
+.cptt-bf {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+}
+.cptt-bf-lbl {
+  display: none;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  color: #64748b !important;
+  margin-bottom: 4px !important;
+  white-space: nowrap !important;
+}
+
+@media (max-width: 720px) {
+  .cptt-bf-lbl {
+    display: block !important;
+  }
+  #cptt-create-finance-header {
+    display: none !important;
+  }
+  .cptt-create-finance-row {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px !important;
+    padding: 14px !important;
+    background: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 14px !important;
+    margin-bottom: 10px !important;
+    position: relative !important;
+  }
+  .cptt-create-finance-row .cptt-bf:first-child {
+    grid-column: 1 / -1 !important;
+  }
+  .cptt-create-finance-row .cptt-bf--total {
+    display: none !important;
+  }
+  .cptt-create-finance-row .cptt-bf--qty {
+    max-width: 100% !important;
+  }
+  .cptt-create-finance-row .cptt-create-remove-finance-row {
+    position: absolute !important;
+    top: 10px !important;
+    left: 10px !important;
+  }
+  .cptt-create-finance-row input {
+    font-size: 13px !important;
+    min-height: 40px !important;
+  }
+}
+
+/* Summary fields mobile - shorter labels */
+@media (max-width: 600px) {
+  #cptt-create-steps-finance-wrap + .cptt-createProjectGrid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    padding-top: 12px !important;
+  }
+  #cptt-create-steps-finance-wrap + .cptt-createProjectGrid > span {
+    font-size: 12px !important;
+  }
+  #cptt-create-steps-finance-wrap + .cptt-createProjectGrid label span {
+    font-size: 11px !important;
+  }
+  #cptt-create-steps-finance-wrap + .cptt-createProjectGrid input {
+    font-size: 12px !important;
+    padding: 8px !important;
+    min-height: 38px !important;
+  }
+}
+
+/* =========================================================
+   Analytics Toggle
+   ========================================================= */
+.cptt-analytics-toggle {
+  background: #fff !important;
+  border: 1px solid #e6ebf2 !important;
+  border-radius: 20px !important;
+  box-shadow: 0 6px 18px rgba(15,23,42,0.04) !important;
+  overflow: hidden !important;
+  margin-bottom: 12px !important;
+}
+.cptt-analytics-toggle > summary {
+  padding: 16px 20px !important;
+  cursor: pointer !important;
+  font-size: 15px !important;
+  font-weight: 950 !important;
+  color: #0f172a !important;
+  list-style: none !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+.cptt-analytics-toggle[open] > summary {
+  border-bottom: 1px solid #e6ebf2 !important;
+}
+.cptt-analytics-toggle > summary::-webkit-details-marker { display: none !important; }
+.cptt-analytics-toggle > summary::marker { display: none !important; content: "" !important; }
+body.cptt-dark .cptt-analytics-toggle {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+}
+body.cptt-dark .cptt-analytics-toggle > summary {
+  color: #f8fafc !important;
+}
+body.cptt-dark .cptt-analytics-toggle[open] > summary {
+  border-bottom-color: #334155 !important;
+}
+
+/* =========================================================
+   Responsive Analytics inside dashboard
+   ========================================================= */
+.cptt-expert-analytics-section {
+  max-width: 100%;
+  overflow: hidden;
+}
+@media (max-width: 600px) {
+  .cptt-expert-analytics-section > div[style*="grid-template-columns"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .cptt-expert-analytics-section > div[style*="grid-template-columns:100px"] {
+    grid-template-columns: 80px 1fr 40px !important;
+  }
+}
+
+
+/* =========================================================
+   Edit Profile - Avatar button mobile fix
+   ========================================================= */
+.cptt-editProfile__avatarWrap {
+  flex-wrap: wrap !important;
+}
+@media (max-width: 480px) {
+  .cptt-editProfile__avatarWrap {
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+  }
+  .cptt-editProfile__avatarWrap > div {
+    width: 100% !important;
+    text-align: center !important;
+  }
+  #cptt-ep-avatar-btn {
+    width: 100% !important;
+    max-width: 200px !important;
   }
 }

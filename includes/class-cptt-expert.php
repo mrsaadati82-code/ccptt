@@ -51,6 +51,7 @@ class CPTT_Expert {
 		add_action('wp_ajax_cptt_expert_delete_project', [$this, 'ajax_delete_project']);
 		add_action('wp_ajax_cptt_expert_delete_step', [$this, 'ajax_delete_step']);
 		add_action('wp_ajax_cptt_expert_save_profile', [$this, 'ajax_save_own_profile']);
+		add_action('wp_ajax_cptt_expert_upload_avatar', [$this, 'ajax_upload_avatar']);
 		add_action('admin_init', [$this, 'redirect_experts_from_admin'], 1);
 		add_filter('body_class', [$this, 'add_isolation_body_class']);
 	}
@@ -1394,7 +1395,7 @@ class CPTT_Expert {
 						<input type="hidden" name="cptt_expert_manage_submit" value="1">
 						<input type="hidden" name="cptt_expert_id" value="<?php echo esc_attr((string) $values['id']); ?>">
 						<div class="cptt-adminExperts__grid">
-							<label class="cptt-adminExperts__field"><span>نام کاربری</span><input type="text" name="cptt_expert_username" value="<?php echo esc_attr($values['username']); ?>" <?php disabled($editing); ?>></label>
+							<label class="cptt-adminExperts__field"><span>نام کاربری</span><input type="text" name="cptt_expert_username" value="<?php echo esc_attr($values['username']); ?>" <?php disabled((bool)$editing); ?>></label>
 							<label class="cptt-adminExperts__field"><span>ایمیل</span><input type="email" name="cptt_expert_email" value="<?php echo esc_attr($values['email']); ?>"></label>
 							<label class="cptt-adminExperts__field"><span>نام نمایشی</span><input type="text" name="cptt_expert_display_name" value="<?php echo esc_attr($values['display_name']); ?>"></label>
 							<label class="cptt-adminExperts__field"><span><?php echo $editing ? 'رمز عبور جدید (اختیاری)' : 'رمز عبور (در صورت خالی بودن، خودکار ساخته می‌شود)'; ?></span><input type="text" name="cptt_expert_password" value=""></label>
@@ -2503,15 +2504,15 @@ class CPTT_Expert {
 				<div class="cptt-createProjectGrid" style="grid-column: 1 / -1; border-top: 1px dashed #cbd5e1; padding-top: 15px; margin-top: 10px; grid-template-columns: 1fr 1fr 1fr auto; gap:12px; align-items:center; padding-bottom:5px;">
 					<span style="font-size: 13px; font-weight: 900; color: #475569; grid-column: 1 / -1; margin-bottom: 4px;">خلاصه حساب و کتاب کل پروژه</span>
 					<label style="margin:0;">
-						<span>جمع کل پروژه (ریال)</span>
+						<span>جمع کل</span>
 						<input type="text" id="cptt-create-total-price" value="0" readonly style="background:#f1f5f9; width:100%;">
 					</label>
 					<label style="margin:0;">
-						<span>بیعانه / پرداختی کل (ریال)</span>
+						<span>پرداختی</span>
 						<input type="text" id="cptt-create-paid-amount" value="0" readonly style="background:#f1f5f9; width:100%;">
 					</label>
 					<label style="margin:0;">
-						<span>مانده کل (ریال)</span>
+						<span>مانده</span>
 						<input type="text" id="cptt-create-remaining" value="0" readonly style="background:#f1f5f9; width:100%;">
 					</label>
 					<div style="align-self:end; margin:0;">
@@ -2523,7 +2524,7 @@ class CPTT_Expert {
 				<?php if (($vis['delivery'] ?? '1') === '1'): ?>
 				<!-- Delivery Section inside popup -->
 				<div id="cptt-create-address-wrap" style="grid-column: 1 / -1; border-top: 1px dashed #cbd5e1; padding-top: 15px; margin-top: 10px;">
-					<span style="font-size: 13px; font-weight: 900; color: #475569; display: block; margin-bottom: 6px;">روش و آدرس تحویل پروژه</span>
+					<span style="font-size: 13px; font-weight: 900; color: #475569; display: block; margin-bottom: 6px;">تحویل پروژه</span>
 					<div class="cptt-createProjectGrid" style="grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px; padding:0;">
 						<label style="margin:0;">
 							<span>روش تحویل</span>
@@ -2581,7 +2582,6 @@ class CPTT_Expert {
 				<div id="cptt-cust-msg"></div>
 				<div class="cptt-ncm-footer">
 					<button type="button" id="cptt-cust-submit" class="cptt-btn cptt-btn--primary">✔ ثبت مشتری</button>
-					<button type="button" class="cptt-btn" style="background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;" onclick="document.getElementById('cptt-new-customer-modal').style.display='none';">انصراف</button>
 				</div>
 			</div>
 		</div>
@@ -2754,11 +2754,11 @@ class CPTT_Expert {
 
 					var rowId = 'row_' + Math.floor(Math.random() * 100000);
 					var html = '<div class="cptt-create-finance-row" id="' + rowId + '" style="display:grid; grid-template-columns: 2.2fr 1.2fr 80px 1.4fr 1.4fr auto; gap:6px; align-items:center; margin-bottom:5px;">' +
-						'  <input type="text" name="create_step_titles[]" value="' + escapeHtml(title) + '" placeholder="عنوان مرحله" style="font-size:12px; padding:6px 8px; min-height:30px; height:30px; border-radius:8px; border:1px solid #cbd5e1; box-sizing:border-box; width:100%;" />' +
-						'  <input type="text" class="cptt-create-step-fee cptt-num-format" name="create_step_fees[]" value="' + formatWithCommas(fee) + '" placeholder="مبلغ فی" style="font-size:12px; padding:6px 8px; min-height:30px; height:30px; border-radius:8px; border:1px solid #cbd5e1; box-sizing:border-box; width:100%;" />' +
-						'  <input type="number" class="cptt-create-step-qty" name="create_step_qty[]" value="' + qty + '" min="1" style="font-size:12px; padding:6px 8px; min-height:30px; height:30px; border-radius:8px; border:1px solid #cbd5e1; box-sizing:border-box; width:100%; text-align:center;" />' +
-						'  <input type="text" class="cptt-create-step-cost" readonly style="font-size:12px; padding:6px 8px; min-height:30px; height:30px; border-radius:8px; border:1px solid #cbd5e1; box-sizing:border-box; width:100%; background:#f1f5f9; font-weight:700;" value="' + formatWithCommas(fee * qty) + '" />' +
-						'  <input type="text" class="cptt-create-step-paid cptt-num-format" name="create_step_paids[]" value="' + formatWithCommas(paid) + '" placeholder="پرداختی" style="font-size:12px; padding:6px 8px; min-height:30px; height:30px; border-radius:8px; border:1px solid #cbd5e1; box-sizing:border-box; width:100%;" />' +
+						'  <div class="cptt-bf"><span class="cptt-bf-lbl">عنوان مرحله</span><input type="text" name="create_step_titles[]" value="' + escapeHtml(title) + '" placeholder="عنوان مرحله" style="font-size:13px; padding:8px 10px; min-height:38px; height:38px; border-radius:10px; border:1px solid #cbd5e1; box-sizing:border-box; width:100%;" /></div>' +
+						'  <div class="cptt-bf"><span class="cptt-bf-lbl">مبلغ فی (ریال)</span><input type="text" class="cptt-create-step-fee cptt-num-format" name="create_step_fees[]" value="' + formatWithCommas(fee) + '" placeholder="مبلغ فی" style="font-size:13px; padding:8px 10px; min-height:38px; height:38px; border-radius:10px; border:1px solid #cbd5e1; box-sizing:border-box; width:100%;" /></div>' +
+						'  <div class="cptt-bf cptt-bf--qty"><span class="cptt-bf-lbl">تعداد</span><input type="number" class="cptt-create-step-qty" name="create_step_qty[]" value="' + qty + '" min="1" placeholder="تعداد" style="font-size:13px; padding:8px 10px; min-height:38px; height:38px; border-radius:10px; border:1px solid #cbd5e1; box-sizing:border-box; width:100%; text-align:center;" /></div>' +
+						'  <div class="cptt-bf cptt-bf--total"><span class="cptt-bf-lbl">مبلغ کل</span><input type="text" class="cptt-create-step-cost" readonly style="font-size:13px; padding:8px 10px; min-height:38px; height:38px; border-radius:10px; border:1px solid #cbd5e1; box-sizing:border-box; width:100%; background:#f1f5f9; font-weight:700;" value="' + formatWithCommas(fee * qty) + '" /></div>' +
+						'  <div class="cptt-bf"><span class="cptt-bf-lbl">پرداختی (ریال)</span><input type="text" class="cptt-create-step-paid cptt-num-format" name="create_step_paids[]" value="' + formatWithCommas(paid) + '" placeholder="پرداختی" style="font-size:13px; padding:8px 10px; min-height:38px; height:38px; border-radius:10px; border:1px solid #cbd5e1; box-sizing:border-box; width:100%;" /></div>' +
 						'  <button type="button" class="cptt-create-remove-finance-row" style="color:#ef4444; background:#fee2e2; border:none; border-radius:50%; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; font-size:14px; font-weight:bold; padding:0; line-height:1;">×</button>' +
 						'</div>';
 					list.insertAdjacentHTML('beforeend', html);
@@ -2900,6 +2900,29 @@ class CPTT_Expert {
 		if ($avatar_id) update_user_meta($uid, 'cptt_expert_avatar_id', $avatar_id);
 		wp_send_json_success(['message' => 'پروفایل با موفقیت ذخیره شد.']);
 	}
+
+	public function ajax_upload_avatar() {
+		if (!is_user_logged_in()) wp_send_json_error('login_required', 401);
+		check_ajax_referer('cptt_expert_nonce', 'nonce');
+		if (!$this->current_user_can_view_dashboard()) wp_send_json_error('no_access', 403);
+		if (empty($_FILES['avatar_file']['name'])) wp_send_json_error('no_file', 400);
+		require_once(ABSPATH . 'wp-admin/includes/file.php');
+		require_once(ABSPATH . 'wp-admin/includes/image.php');
+		require_once(ABSPATH . 'wp-admin/includes/media.php');
+		$upload = wp_handle_upload($_FILES['avatar_file'], ['test_form' => false]);
+		if (isset($upload['error'])) wp_send_json_error($upload['error'], 400);
+		$attachment_id = wp_insert_attachment([
+			'post_mime_type' => $upload['type'],
+			'post_title' => 'avatar-' . get_current_user_id(),
+			'post_status' => 'inherit',
+		], $upload['file']);
+		if (is_wp_error($attachment_id)) wp_send_json_error('upload_fail', 400);
+		$metadata = wp_generate_attachment_metadata($attachment_id, $upload['file']);
+		wp_update_attachment_metadata($attachment_id, $metadata);
+		update_user_meta(get_current_user_id(), 'cptt_expert_avatar_id', $attachment_id);
+		wp_send_json_success(['id' => $attachment_id, 'url' => $upload['url']]);
+	}
+
 
 	public function shortcode_dashboard($atts) {
 		if (!is_user_logged_in()) {
@@ -3146,6 +3169,19 @@ class CPTT_Expert {
 			</div>
 
 			
+
+			<?php if (class_exists('CPTT_Analytics')): ?>
+			<details class="cptt-analytics-toggle" style="background:#fff;border:1px solid #e6ebf2;border-radius:20px;padding:0;box-shadow:0 6px 18px rgba(15,23,42,0.04);margin-bottom:8px;">
+				<summary style="padding:16px 20px;cursor:pointer;font-size:15px;font-weight:950;color:#0f172a;list-style:none;display:flex;align-items:center;justify-content:space-between;">
+					<span>📊 گزارش عملکرد من</span>
+					<span style="font-size:20px;transition:transform 0.2s;">⌄</span>
+				</summary>
+				<div style="padding:0 20px 20px;">
+					<?php echo CPTT_Analytics::instance()->render_expert_dashboard_analytics($user_id); ?>
+				</div>
+			</details>
+			<?php endif; ?>
+
 			<div class="cptt-mobile-filter-trigger mobile-only">
 			    <button type="button" class="cptt-btn cptt-btn--secondary" id="cptt-mobile-filter-btn">جستجو و فیلتر پروژه‌ها 🔍</button>
 			</div>
