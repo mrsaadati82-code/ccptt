@@ -681,6 +681,21 @@ class CPTT_Admin {
 									<span class="cptt-step-remain">مانده: <?php echo number_format(floatval($step['cost']??0)-floatval($step['paid']??0)); ?></span>
 								</div>
 							</div>
+							<!-- Step Assigned Expert (فقط اگر >1 کارشناس) -->
+							<?php
+							$_admin_proj_experts = class_exists('CPTT_Core') ? CPTT_Core::get_project_expert_ids(get_the_ID()) : [];
+							$_admin_step_assigned = (int)($step['assigned_expert_id'] ?? 0);
+							if (count($_admin_proj_experts) > 1): ?>
+							<div class="cptt-stepCard__expertAssign" style="margin-top:10px;">
+								<div class="cptt-fieldLabel">کارشناس مسئول مرحله</div>
+								<select name="cptt_steps[<?php echo esc_attr($i); ?>][assigned_expert_id]">
+									<option value="">— بدون کارشناس مشخص —</option>
+									<?php foreach ($_admin_proj_experts as $_ape_id): $ape_user = get_user_by('id',(int)$_ape_id); if (!$ape_user) continue; ?>
+									<option value="<?php echo esc_attr($_ape_id); ?>" <?php selected($_admin_step_assigned, (int)$_ape_id); ?>><?php echo esc_html($ape_user->display_name); ?></option>
+									<?php endforeach; ?>
+								</select>
+							</div>
+							<?php endif; ?>
 							<?php endif; ?>
 						</div>
 					</div>
@@ -915,7 +930,8 @@ class CPTT_Admin {
 
 			if ($title===''&&$desc===''&&empty($checklist)&&empty($user_tasks)) continue;
 			if ($status==='current') { $current_found=true; }
-			$row=['id'=>$id,'title'=>$title,'desc'=>$desc,'status'=>$status,'checklist'=>$checklist,'user_tasks'=>$user_tasks,'cost'=>$cost,'paid'=>$paid];
+			$assigned_expert_id=isset($s['assigned_expert_id'])?absint($s['assigned_expert_id']):0;
+			$row=['id'=>$id,'title'=>$title,'desc'=>$desc,'status'=>$status,'checklist'=>$checklist,'user_tasks'=>$user_tasks,'cost'=>$cost,'paid'=>$paid,'assigned_expert_id'=>$assigned_expert_id];
 			if ($due_at) { $row['due_at']=$due_at; $row['due_at_fa']=class_exists('CPTT_Core')?CPTT_Core::jalali_datetime($due_at):date('Y/m/d H:i',$due_at); }
 			$out[]=$row;
 		}

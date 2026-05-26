@@ -809,7 +809,7 @@ class CPTT_Settings {
 		?>
 		<div class="cptt-settings-wrap cptt-v2-scope" dir="rtl">
 			<header class="cptt-set-header">
-				<div class="cptt-set-logo"><h1>تنظیمات CPTT v4.2.0</h1></div>
+				<div class="cptt-set-logo"><h1>تنظیمات CPTT v4.5.0</h1></div>
 				<button type="submit" form="cptt-settings-form" class="cptt-btn-primary">ذخیره تغییرات</button>
 			</header>
 			<div class="cptt-set-body">

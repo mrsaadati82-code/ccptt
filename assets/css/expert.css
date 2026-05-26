@@ -2962,3 +2962,920 @@ body.cptt-dark .cptt-step-reorder-handle {
         ;
     }
 }
+
+/* =========================================================
+   NEW CUSTOMER MODAL - fully isolated, no theme conflicts
+   ========================================================= */
+.cptt-v2-scope .cptt-new-customer-modal-overlay,
+.cptt-new-customer-modal-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  background: rgba(15,23,42,0.65) !important;
+  z-index: 2147483647 !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 15px !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+  backdrop-filter: blur(4px) !important;
+  display: none !important;
+}
+.cptt-v2-scope .cptt-new-customer-modal-overlay[style*="flex"],
+.cptt-new-customer-modal-overlay[style*="flex"] {
+  display: flex !important;
+}
+
+.cptt-v2-scope .cptt-new-customer-modal-dialog,
+.cptt-new-customer-modal-dialog {
+  background: #ffffff !important;
+  border-radius: 18px !important;
+  width: min(400px, 100%) !important;
+  padding: 24px !important;
+  box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25) !important;
+  border: 1px solid #e2e8f0 !important;
+  position: relative !important;
+  direction: rtl !important;
+  text-align: right !important;
+  animation: cpttModalIn 0.2s ease !important;
+}
+
+@keyframes cpttModalIn {
+  from { opacity: 0; transform: scale(0.95) translateY(-10px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* =========================================================
+   DELIVERY SECTION - manage form
+   ========================================================= */
+.cptt-v2-scope .cptt-delivery-section,
+.cptt-delivery-section {
+  margin-top: 6px !important;
+  padding: 14px !important;
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 12px !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 12px !important;
+}
+.cptt-v2-scope .cptt-delivery-section label,
+.cptt-delivery-section label {
+  margin: 0 !important;
+}
+
+/* =========================================================
+   FINANCE SUMMARY - manage form
+   ========================================================= */
+.cptt-v2-scope .cptt-manage-finance-summary,
+.cptt-manage-finance-summary {
+  margin-top: 6px !important;
+  padding: 14px !important;
+  background: linear-gradient(135deg,#f8fafc,#f0f4ff) !important;
+  border: 1px solid #e0e8ff !important;
+  border-radius: 12px !important;
+  grid-template-columns: repeat(auto-fit, minmax(120px,1fr)) !important;
+  gap: 10px !important;
+}
+
+.cptt-v2-scope .cptt-manage-fin-box,
+.cptt-manage-fin-box {
+  background: #ffffff !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 10px !important;
+  padding: 10px 12px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  align-items: center !important;
+  text-align: center !important;
+}
+.cptt-v2-scope .cptt-manage-fin-box span,
+.cptt-manage-fin-box span {
+  font-size: 11px !important;
+  color: #64748b !important;
+  font-weight: 600 !important;
+}
+.cptt-v2-scope .cptt-manage-fin-box strong,
+.cptt-manage-fin-box strong {
+  font-size: 15px !important;
+  font-weight: 900 !important;
+  color: #0f172a !important;
+  direction: ltr !important;
+}
+
+/* Delivery infoGrid rows */
+.cptt-v2-scope .cptt-expertCard__infoGrid > div[style*="grid-column:1/-1"],
+.cptt-expertCard__infoGrid > div[style*="grid-column:1/-1"] {
+  grid-column: 1 / -1 !important;
+}
+
+/* =========================================================
+   NEW CUSTOMER TRIGGER OPTION
+   ========================================================= */
+.cptt-v2-scope select option[value="new_customer_trigger"] {
+  font-weight: 700 !important;
+  color: #6366f1 !important;
+  background: #f0f0ff !important;
+}
+
+/* =========================================================
+   RESPONSIVE fixes for delivery/finance in manage form
+   ========================================================= */
+@media (max-width: 600px) {
+  .cptt-v2-scope .cptt-delivery-section,
+  .cptt-delivery-section {
+    grid-template-columns: 1fr !important;
+  }
+  .cptt-v2-scope .cptt-manage-finance-summary,
+  .cptt-manage-finance-summary {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+/* =========================================================
+   PUBLIC HUB MODAL (project detail + expert profile)
+   Fully isolated from theme
+   ========================================================= */
+.cptt-v2-scope .cptt-hubModal,
+.cptt-hubModal,
+.cptt-expertProfileModal {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483646 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 16px !important;
+}
+.cptt-v2-scope .cptt-hubModal[hidden],
+.cptt-hubModal[hidden],
+.cptt-expertProfileModal[hidden] {
+  display: none !important;
+}
+.cptt-v2-scope .cptt-hubModal__backdrop,
+.cptt-hubModal__backdrop,
+.cptt-stepExpertModal__backdrop {
+  position: absolute !important;
+  inset: 0 !important;
+  background: rgba(15,23,42,0.65) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+  backdrop-filter: blur(4px) !important;
+  cursor: pointer !important;
+}
+.cptt-v2-scope .cptt-hubModal__dialog,
+.cptt-hubModal__dialog,
+.cptt-stepExpertModal__dialog {
+  position: relative !important;
+  background: #ffffff !important;
+  border-radius: 20px !important;
+  width: min(680px, 100%) !important;
+  max-height: 85vh !important;
+  overflow-y: auto !important;
+  padding: 28px !important;
+  box-shadow: 0 25px 60px -10px rgba(15,23,42,0.35) !important;
+  border: 1px solid #e5e7eb !important;
+  animation: cpttFadeIn 0.22s ease !important;
+  direction: rtl !important;
+  text-align: right !important;
+}
+@keyframes cpttFadeIn {
+  from { opacity:0; transform:scale(0.96) translateY(-12px); }
+  to   { opacity:1; transform:scale(1) translateY(0); }
+}
+.cptt-v2-scope .cptt-hubModal__close,
+.cptt-hubModal__close,
+.cptt-stepExpertModal__close {
+  position: absolute !important;
+  top: 14px !important;
+  left: 14px !important;
+  background: #f1f5f9 !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 50% !important;
+  width: 36px !important;
+  height: 36px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 18px !important;
+  cursor: pointer !important;
+  color: #475569 !important;
+  line-height: 1 !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  margin: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+}
+.cptt-v2-scope .cptt-hubModal__close:hover,
+.cptt-hubModal__close:hover { background:#fee2e2 !important; color:#dc2626 !important; }
+
+.cptt-v2-scope .cptt-hubModal__title,
+.cptt-hubModal__title {
+  font-size: 18px !important;
+  font-weight: 900 !important;
+  color: #0f172a !important;
+  margin: 0 0 10px !important;
+  padding-left: 44px !important;
+}
+.cptt-v2-scope .cptt-hubModal__meta,
+.cptt-hubModal__meta {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  margin-bottom: 16px !important;
+}
+.cptt-v2-scope .cptt-hubModal__metaItem,
+.cptt-hubModal__metaItem {
+  background: #f1f5f9 !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 20px !important;
+  padding: 4px 12px !important;
+  font-size: 12px !important;
+  color: #475569 !important;
+  font-weight: 600 !important;
+}
+
+/* Hub Modal Steps */
+.cptt-v2-scope .cptt-hubModal__steps,
+.cptt-hubModal__steps {
+  display: grid !important;
+  gap: 10px !important;
+}
+.cptt-v2-scope .cptt-hubModal__step,
+.cptt-hubModal__step {
+  background: #f8fafc !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 12px !important;
+  padding: 12px 14px !important;
+}
+.cptt-v2-scope .cptt-hubModal__step--done,
+.cptt-hubModal__step--done { border-right: 3px solid #22c55e !important; }
+.cptt-v2-scope .cptt-hubModal__step--current,
+.cptt-hubModal__step--current { border-right: 3px solid #f59e0b !important; }
+.cptt-v2-scope .cptt-hubModal__stepHead,
+.cptt-hubModal__stepHead {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 10px !important;
+  flex-wrap: wrap !important;
+}
+.cptt-v2-scope .cptt-hubModal__stepHead strong,
+.cptt-hubModal__stepHead strong {
+  font-size: 14px !important;
+  font-weight: 800 !important;
+  color: #0f172a !important;
+}
+.cptt-v2-scope .cptt-hubModal__stepMeta,
+.cptt-hubModal__stepMeta {
+  font-size: 11px !important;
+  color: #64748b !important;
+  margin-top: 5px !important;
+}
+.cptt-v2-scope .cptt-hubModal__stepDesc,
+.cptt-hubModal__stepDesc {
+  font-size: 13px !important;
+  color: #334155 !important;
+  margin-top: 6px !important;
+}
+
+/* Expert Profile Modal */
+.cptt-v2-scope .cptt-expertProfile,
+.cptt-expertProfile {
+  display: flex !important;
+  gap: 20px !important;
+  align-items: flex-start !important;
+  flex-wrap: wrap !important;
+}
+.cptt-v2-scope .cptt-expertProfile__avatar img,
+.cptt-expertProfile__avatar img {
+  width: 90px !important;
+  height: 90px !important;
+  border-radius: 50% !important;
+  object-fit: cover !important;
+  border: 3px solid #e0ecff !important;
+  box-shadow: 0 8px 20px rgba(37,99,235,.15) !important;
+}
+.cptt-v2-scope .cptt-expertProfile__info,
+.cptt-expertProfile__info { flex: 1 !important; min-width: 200px !important; }
+.cptt-v2-scope .cptt-expertProfile__name,
+.cptt-expertProfile__name {
+  font-size: 20px !important;
+  font-weight: 900 !important;
+  color: #0f172a !important;
+  margin: 0 0 4px !important;
+}
+.cptt-v2-scope .cptt-expertProfile__title,
+.cptt-expertProfile__title {
+  font-size: 13px !important;
+  color: #6366f1 !important;
+  font-weight: 700 !important;
+  margin-bottom: 10px !important;
+}
+.cptt-v2-scope .cptt-expertProfile__bio,
+.cptt-expertProfile__bio {
+  font-size: 13px !important;
+  color: #334155 !important;
+  line-height: 1.8 !important;
+  margin-bottom: 12px !important;
+}
+.cptt-v2-scope .cptt-expertProfile__stats,
+.cptt-expertProfile__stats {
+  display: flex !important;
+  gap: 12px !important;
+  flex-wrap: wrap !important;
+  margin-bottom: 12px !important;
+}
+.cptt-v2-scope .cptt-expertProfile__stats > div,
+.cptt-expertProfile__stats > div {
+  background: #f1f5f9 !important;
+  border-radius: 10px !important;
+  padding: 8px 14px !important;
+  text-align: center !important;
+}
+.cptt-v2-scope .cptt-expertProfile__stats strong,
+.cptt-expertProfile__stats strong {
+  display: block !important;
+  font-size: 18px !important;
+  font-weight: 900 !important;
+  color: #6366f1 !important;
+}
+.cptt-v2-scope .cptt-expertProfile__stats span,
+.cptt-expertProfile__stats span {
+  font-size: 11px !important;
+  color: #64748b !important;
+}
+.cptt-v2-scope .cptt-expertProfile__skills,
+.cptt-expertProfile__skills {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+}
+.cptt-v2-scope .cptt-expertProfile__skill,
+.cptt-expertProfile__skill {
+  background: linear-gradient(135deg,#eef2ff,#f5f3ff) !important;
+  border: 1px solid #c7d2fe !important;
+  border-radius: 20px !important;
+  padding: 3px 10px !important;
+  font-size: 12px !important;
+  color: #4338ca !important;
+  font-weight: 700 !important;
+}
+
+/* =========================================================
+   STEP EXPERT MODAL
+   ========================================================= */
+.cptt-v2-scope #cptt-step-expert-modal,
+#cptt-step-expert-modal {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483645 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 16px !important;
+}
+#cptt-step-expert-modal[hidden] { display: none !important; }
+.cptt-v2-scope .cptt-stepExpertModal__dialog,
+.cptt-stepExpertModal__dialog {
+  width: min(380px, 100%) !important;
+  max-height: 70vh !important;
+  overflow-y: auto !important;
+  padding: 22px !important;
+}
+.cptt-v2-scope .cptt-stepExpertModal__title,
+.cptt-stepExpertModal__title {
+  font-size: 15px !important;
+  font-weight: 900 !important;
+  color: #0f172a !important;
+  margin-bottom: 14px !important;
+  padding-left: 36px !important;
+}
+.cptt-v2-scope .cptt-stepExpertModal__list,
+.cptt-stepExpertModal__list {
+  display: grid !important;
+  gap: 8px !important;
+}
+.cptt-v2-scope .cptt-sep-option,
+.cptt-sep-option {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 10px !important;
+  padding: 10px 14px !important;
+  cursor: pointer !important;
+  transition: border-color 0.15s, background 0.15s !important;
+}
+.cptt-v2-scope .cptt-sep-option:hover,
+.cptt-sep-option:hover { background: #eef2ff !important; border-color: #c7d2fe !important; }
+.cptt-v2-scope .cptt-sep-option label,
+.cptt-sep-option label {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  cursor: pointer !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  color: #334155 !important;
+  margin: 0 !important;
+}
+.cptt-v2-scope .cptt-sep-option input[type="radio"],
+.cptt-sep-option input[type="radio"] {
+  width: 16px !important;
+  height: 16px !important;
+  accent-color: #6366f1 !important;
+  cursor: pointer !important;
+}
+
+/* Step Expert Button in manage form */
+.cptt-v2-scope .cptt-step-expert-wrap,
+.cptt-step-expert-wrap {
+  margin-top: 8px !important;
+  padding-top: 8px !important;
+  border-top: 1px dashed #e2e8f0 !important;
+}
+.cptt-v2-scope .cptt-step-expert-btn,
+.cptt-step-expert-btn {
+  background: #f1f5f9 !important;
+  border: 1px dashed #cbd5e1 !important;
+  border-radius: 10px !important;
+  padding: 8px 14px !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: #475569 !important;
+  cursor: pointer !important;
+  width: 100% !important;
+  text-align: right !important;
+  transition: all 0.15s !important;
+  min-height: 0 !important;
+  box-shadow: none !important;
+  line-height: 1.4 !important;
+}
+.cptt-v2-scope .cptt-step-expert-btn:hover,
+.cptt-step-expert-btn:hover {
+  background: #eef2ff !important;
+  border-color: #6366f1 !important;
+  color: #4338ca !important;
+}
+.cptt-v2-scope .cptt-step-expert-btn.has-expert,
+.cptt-step-expert-btn.has-expert {
+  background: linear-gradient(135deg,#eef2ff,#f5f3ff) !important;
+  border-color: #c7d2fe !important;
+  border-style: solid !important;
+  color: #4338ca !important;
+}
+
+/* =========================================================
+   روزهای هفته
+   ========================================================= */
+.cptt-v2-scope .cptt-dow,
+.cptt-dow {
+  font-size: 11px !important;
+  opacity: 0.65 !important;
+  font-weight: 500 !important;
+  margin-right: 3px !important;
+}
+
+/* =========================================================
+   NEW CUSTOMER MODAL - popup fix (fields not overflowing)
+   ========================================================= */
+.cptt-new-customer-modal-dialog .cptt-createProjectGrid {
+  grid-template-columns: 1fr !important;
+  padding: 0 !important;
+}
+.cptt-new-customer-modal-dialog label {
+  margin: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+}
+.cptt-new-customer-modal-dialog input[type="text"] {
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+.cptt-new-customer-modal-dialog > div:last-child {
+  display: flex !important;
+  gap: 10px !important;
+  margin-top: 14px !important;
+}
+.cptt-new-customer-modal-dialog > div:last-child .cptt-btn {
+  flex: 1 !important;
+}
+
+/* Mobile */
+@media (max-width:600px) {
+  .cptt-hubModal__dialog,
+  .cptt-stepExpertModal__dialog,
+  .cptt-new-customer-modal-dialog {
+    padding: 18px 14px !important;
+    border-radius: 16px !important;
+  }
+  .cptt-expertProfile { flex-direction: column !important; align-items: center !important; }
+  .cptt-expertProfile__info { text-align: center !important; width: 100% !important; }
+  .cptt-expertProfile__stats { justify-content: center !important; }
+  .cptt-expertProfile__skills { justify-content: center !important; }
+}
+
+/* =========================================================
+   EDIT PROFILE MODAL - داشبورد کارشناس
+   ========================================================= */
+.cptt-v2-scope .cptt-editProfileModal,
+.cptt-editProfileModal {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483640 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 16px !important;
+}
+.cptt-editProfileModal[hidden] { display: none !important; }
+
+.cptt-editProfileModal__backdrop {
+  position: absolute !important;
+  inset: 0 !important;
+  background: rgba(15,23,42,0.65) !important;
+  backdrop-filter: blur(4px) !important;
+  cursor: pointer !important;
+}
+.cptt-editProfileModal__dialog {
+  position: relative !important;
+  background: #ffffff !important;
+  border-radius: 20px !important;
+  width: min(540px, 100%) !important;
+  max-height: 90vh !important;
+  overflow-y: auto !important;
+  box-shadow: 0 25px 60px rgba(15,23,42,0.3) !important;
+  direction: rtl !important;
+  animation: cpttFadeIn 0.2s ease !important;
+}
+.cptt-editProfileModal__header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 20px 24px 0 !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+  padding-bottom: 14px !important;
+}
+.cptt-editProfileModal__header h3 {
+  font-size: 17px !important;
+  font-weight: 900 !important;
+  color: #0f172a !important;
+  margin: 0 !important;
+}
+.cptt-editProfileModal__close {
+  background: #f1f5f9 !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 50% !important;
+  width: 34px !important;
+  height: 34px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 18px !important;
+  cursor: pointer !important;
+  color: #475569 !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  line-height: 1 !important;
+}
+.cptt-editProfileModal__close:hover { background: #fee2e2 !important; color: #dc2626 !important; }
+
+.cptt-editProfileForm {
+  padding: 20px 24px 24px !important;
+}
+.cptt-editProfile__avatarWrap {
+  display: flex !important;
+  align-items: center !important;
+  gap: 16px !important;
+  margin-bottom: 20px !important;
+  padding: 14px !important;
+  background: #f8fafc !important;
+  border-radius: 14px !important;
+  border: 1px solid #e2e8f0 !important;
+}
+.cptt-editProfile__avatarPreview {
+  width: 72px !important;
+  height: 72px !important;
+  border-radius: 50% !important;
+  overflow: hidden !important;
+  border: 3px solid #c7d2fe !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: #eff6ff !important;
+  font-size: 28px !important;
+  font-weight: 900 !important;
+  color: #4338ca !important;
+  flex-shrink: 0 !important;
+}
+.cptt-editProfile__avatarPreview img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
+.cptt-editProfile__grid {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 14px !important;
+}
+.cptt-editProfile__grid label {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 5px !important;
+  margin: 0 !important;
+}
+.cptt-editProfile__grid label span {
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  color: #475569 !important;
+}
+.cptt-editProfile__grid input,
+.cptt-editProfile__grid textarea,
+.cptt-editProfile__grid select {
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 10px !important;
+  padding: 10px 12px !important;
+  font-size: 13px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  background: #fff !important;
+  color: #0f172a !important;
+  font-family: inherit !important;
+  min-height: 42px !important;
+  box-shadow: none !important;
+}
+.cptt-editProfile__grid textarea { min-height: 80px !important; resize: vertical !important; }
+.cptt-editProfile__fullWidth { grid-column: 1 / -1 !important; }
+.cptt-editProfile__actions {
+  margin-top: 18px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  flex-wrap: wrap !important;
+}
+.cptt-editProfile__msg {
+  font-size: 13px !important;
+  font-weight: 700 !important;
+}
+
+/* =========================================================
+   HUB MODAL - بخش‌های جدید (پیشرفت + مالی + چک‌لیست)
+   ========================================================= */
+.cptt-hubModal__progress {
+  margin-bottom: 16px !important;
+}
+.cptt-hubModal__progressBar {
+  height: 8px !important;
+  background: #f1f5f9 !important;
+  border-radius: 999px !important;
+  overflow: hidden !important;
+  margin-bottom: 6px !important;
+}
+.cptt-hubModal__progressFill {
+  height: 100% !important;
+  background: linear-gradient(90deg, #6366f1, #8b5cf6) !important;
+  border-radius: 999px !important;
+  transition: width 0.4s ease !important;
+}
+.cptt-hubModal__progressLabel {
+  font-size: 12px !important;
+  color: #64748b !important;
+  font-weight: 700 !important;
+}
+.cptt-hubModal__finRow {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(100px,1fr)) !important;
+  gap: 8px !important;
+  margin-bottom: 16px !important;
+  padding: 12px !important;
+  background: #f8fafc !important;
+  border-radius: 12px !important;
+  border: 1px solid #e5e7eb !important;
+}
+.cptt-hubModal__finBox {
+  text-align: center !important;
+}
+.cptt-hubModal__finBox span {
+  display: block !important;
+  font-size: 10px !important;
+  color: #64748b !important;
+  font-weight: 600 !important;
+  margin-bottom: 3px !important;
+}
+.cptt-hubModal__finBox strong {
+  font-size: 15px !important;
+  font-weight: 900 !important;
+  direction: ltr !important;
+  display: block !important;
+}
+.cptt-hubModal__stepsTitle {
+  font-size: 14px !important;
+  font-weight: 900 !important;
+  color: #334155 !important;
+  margin-bottom: 10px !important;
+}
+.cptt-hubModal__stepChecklist {
+  margin-top: 8px !important;
+  font-size: 12px !important;
+  color: #475569 !important;
+  font-weight: 700 !important;
+}
+.cptt-hubModal__checkItems {
+  margin: 6px 0 0 0 !important;
+  padding: 0 18px 0 0 !important;
+  list-style: disc !important;
+}
+.cptt-hubModal__checkItems li {
+  font-size: 12px !important;
+  margin: 4px 0 !important;
+  color: #475569 !important;
+}
+.cptt-hubModal__checkItems li.is-done {
+  text-decoration: line-through !important;
+  color: #059669 !important;
+}
+.cptt-hubModal__checkItems a {
+  color: #6366f1 !important;
+  font-size: 11px !important;
+  margin-right: 8px !important;
+}
+
+/* =========================================================
+   EXPERT PROFILE MODAL - بهبود
+   ========================================================= */
+.cptt-expertProfile__header {
+  display: flex !important;
+  align-items: center !important;
+  gap: 18px !important;
+  margin-bottom: 20px !important;
+  padding-bottom: 16px !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+}
+.cptt-expertProfile__headerInfo { flex: 1 !important; }
+.cptt-expertProfile__avatarDefault {
+  width: 90px !important;
+  height: 90px !important;
+  border-radius: 50% !important;
+  background: linear-gradient(135deg,#6366f1,#8b5cf6) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 36px !important;
+  font-weight: 900 !important;
+  color: white !important;
+  flex-shrink: 0 !important;
+}
+.cptt-expertProfile__section {
+  margin-bottom: 16px !important;
+}
+.cptt-expertProfile__sectionTitle {
+  font-size: 13px !important;
+  font-weight: 900 !important;
+  color: #334155 !important;
+  margin-bottom: 8px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+.cptt-expertProfile__sectionTitle::after {
+  content: '' !important;
+  flex: 1 !important;
+  height: 1px !important;
+  background: #e5e7eb !important;
+}
+.cptt-expertProfile__statBox {
+  background: #f8fafc !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 12px !important;
+  padding: 10px 14px !important;
+  text-align: center !important;
+  min-width: 80px !important;
+}
+.cptt-expertProfile__statBox strong {
+  display: block !important;
+  font-size: 22px !important;
+  font-weight: 900 !important;
+  color: #6366f1 !important;
+}
+.cptt-expertProfile__statBox span {
+  font-size: 11px !important;
+  color: #64748b !important;
+}
+
+/* =========================================================
+   NEW CUSTOMER MODAL - بازطراحی کامل
+   ========================================================= */
+.cptt-new-customer-modal-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  background: rgba(15,23,42,0.65) !important;
+  z-index: 2147483647 !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 16px !important;
+  backdrop-filter: blur(4px) !important;
+  display: none !important;
+}
+.cptt-new-customer-modal-overlay[style*="flex"] { display: flex !important; }
+
+.cptt-new-customer-modal-dialog {
+  background: #ffffff !important;
+  border-radius: 20px !important;
+  width: min(420px, 100%) !important;
+  padding: 0 !important;
+  box-shadow: 0 25px 60px rgba(15,23,42,0.3) !important;
+  border: 1px solid #e2e8f0 !important;
+  direction: rtl !important;
+  text-align: right !important;
+  animation: cpttFadeIn 0.2s ease !important;
+  overflow: hidden !important;
+}
+.cptt-new-customer-modal-dialog .cptt-ncm-header {
+  padding: 20px 24px 16px !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+.cptt-new-customer-modal-dialog .cptt-ncm-header h3 {
+  font-size: 16px !important;
+  font-weight: 900 !important;
+  color: #0f172a !important;
+  margin: 0 !important;
+}
+.cptt-new-customer-modal-dialog .cptt-ncm-body {
+  padding: 20px 24px !important;
+  display: grid !important;
+  gap: 14px !important;
+}
+.cptt-new-customer-modal-dialog .cptt-ncm-field {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+}
+.cptt-new-customer-modal-dialog .cptt-ncm-field label {
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  color: #475569 !important;
+  margin: 0 !important;
+}
+.cptt-new-customer-modal-dialog .cptt-ncm-field input {
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 10px !important;
+  padding: 11px 14px !important;
+  font-size: 14px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  background: #fff !important;
+  color: #0f172a !important;
+  font-family: inherit !important;
+  min-height: 44px !important;
+  box-shadow: none !important;
+  outline: none !important;
+  transition: border-color 0.15s !important;
+}
+.cptt-new-customer-modal-dialog .cptt-ncm-field input:focus {
+  border-color: #6366f1 !important;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.1) !important;
+}
+.cptt-new-customer-modal-dialog .cptt-ncm-footer {
+  padding: 0 24px 20px !important;
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 10px !important;
+}
+.cptt-new-customer-modal-dialog .cptt-ncm-footer .cptt-btn {
+  width: 100% !important;
+  justify-content: center !important;
+  min-height: 44px !important;
+  font-size: 14px !important;
+}
+.cptt-new-customer-modal-dialog #cptt-cust-msg {
+  padding: 0 24px 12px !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  min-height: 20px !important;
+}
+
+/* Sep actions */
+.cptt-sep-actions {
+  margin-top: 14px !important;
+  text-align: center !important;
+}
+
+/* Sidebar user actions */
+.cptt-sidebar-userActions .cptt-btn {
+  font-size: 12px !important;
+  padding: 8px 10px !important;
+  min-height: 36px !important;
+}
+
+/* Mobile */
+@media (max-width: 600px) {
+  .cptt-editProfile__grid {
+    grid-template-columns: 1fr !important;
+  }
+  .cptt-hubModal__finRow {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}

@@ -1123,3 +1123,990 @@
   });
 
 })();
+
+/* =========================================================
+   MANAGE FORM: DELIVERY CHAIN (Province → City → Address)
+   Isolated per-card, no conflicts with create form
+   ========================================================= */
+(function() {
+  'use strict';
+
+  // Full provinces & cities map (same as create form)
+  var PC = {
+    "تهران": ["تهران","ورامین","شهریار","قدس","ملارد","پاکدشت","اسلامشهر","رباط کریم","فیروزکوه","دماوند","بومهن","پردیس","نسیم‌شهر","چهاردانگه","باغستان"],
+    "البرز": ["کرج","فردیس","نظرآباد","هشتگرد","طالقان","چهارباغ","اشتهارد","ماهدشت","گرمدره"],
+    "اصفهان": ["اصفهان","کاشان","خمینی‌شهر","نجف‌آباد","شهرضا","فلاورجان","مبارکه","زرین‌شهر","آران و بیدگل","اردستان","سمیرم","گلپایگان","تیران","شاهین‌شهر","دهاقان","نطنز","فریدن","برخوار","لنجان"],
+    "فارس": ["شیراز","مرودشت","جهرم","کازرون","فسا","داراب","لارستان","آباده","اقلید","ممسنی","نی‌ریز","فیروزآباد","سپیدان"],
+    "خراسان رضوی": ["مشهد","نیشابور","سبزوار","تربت حیدریه","قوچان","گناباد","کاشمر","تایباد","درگز","تربت جام","فریمان","خواف","چناران","جوین"],
+    "آذربایجان شرقی": ["تبریز","مراغه","میانه","اهر","مرند","سراب","هریس","بناب","ملکان","عجبشیر","بستان‌آباد","کلیبر","شبستر","اسکو"],
+    "آذربایجان غربی": ["ارومیه","خوی","مهاباد","بوکان","سلماس","میاندوآب","نقده","پیرانشهر","شاهین‌دژ","سردشت","اشنویه","تکاب","ماکو","چالدران"],
+    "کرمان": ["کرمان","رفسنجان","جیرفت","بم","زرند","سیرجان","بافت","شهربابک","انار","راور","کوهبنان","قلعه‌گنج","عنبرآباد","منوجان"],
+    "خوزستان": ["اهواز","آبادان","دزفول","خرمشهر","ماهشهر","شوشتر","ایذه","بهبهان","اندیمشک","مسجد سلیمان","امیدیه","رامهرمز","دشت‌آزادگان","حمیدیه","کارون"],
+    "مازندران": ["ساری","آمل","بابل","قائمشهر","نوشهر","چالوس","تنکابن","رامسر","بهشهر","نکا","جویبار","بابلسر","محمودآباد","فریدونکنار","گلوگاه"],
+    "گیلان": ["رشت","انزلی","لاهیجان","لنگرود","صومعه‌سرا","تالش","آستارا","رودبار","فومن","رودسر","آستانه اشرفیه","شفت","ماسال","سیاهکل","رضوانشهر"],
+    "هرمزگان": ["بندرعباس","میناب","قشم","بندرلنگه","حاجی‌آباد","رودان","جاسک","بشاگرد","سیریک","خمیر","پارسیان","بستک"],
+    "سیستان و بلوچستان": ["زاهدان","زابل","چابهار","ایرانشهر","سراوان","نیکشهر","خاش","سرباز","دلگان","هیرمند","قصرقند"],
+    "کرمانشاه": ["کرمانشاه","اسلام‌آباد","هرسین","کنگاور","سنقر","جوانرود","پاوه","دالاهو","قصرشیرین","گیلانغرب","روانسر"],
+    "گلستان": ["گرگان","گنبد کاووس","علی‌آباد","مینودشت","بندرگز","رامیان","آق‌قلا","ترکمن","کردکوی","گالیکش","کلاله","آزادشهر"],
+    "لرستان": ["خرم‌آباد","بروجرد","کوهدشت","دورود","الیگودرز","ازنا","نورآباد","پلدختر","سلسله"],
+    "همدان": ["همدان","ملایر","تویسرکان","نهاوند","بهار","رزن","اسدآباد","کبودرآهنگ","فامنین"],
+    "قم": ["قم","کهک","دستجرد","جعفریه"],
+    "قزوین": ["قزوین","البرز","بویین‌زهرا","تاکستان","آبیک","اقبالیه","محمدیه","شال","آوج"],
+    "زنجان": ["زنجان","ابهر","خرمدره","ایجرود","طارم","ماهنشان","سلطانیه"],
+    "اردبیل": ["اردبیل","مشکین‌شهر","پارس‌آباد","خلخال","بیله‌سوار","نمین","نیر","گرمی","سرعین"],
+    "بوشهر": ["بوشهر","برازجان","گناوه","دیلم","خورموج","عسلویه","جم","دشتی","تنگستان","دشتستان"],
+    "مرکزی": ["اراک","ساوه","محلات","خمین","دلیجان","تفرش","آشتیان","کمیجان","شازند","زرندیه"],
+    "ایلام": ["ایلام","مهران","دره‌شهر","آبدانان","دهلران","ایوان","سیروان","ملکشاهی","بدره"],
+    "کهگیلویه و بویراحمد": ["یاسوج","گچساران","دوگنبدان","دنا","بهمئی","لنده","چرام","باشت"],
+    "خراسان شمالی": ["بجنورد","شیروان","اسفراین","قوچان","مانه و سملقان","جاجرم","فاروج","گرمه","راز و جرگلان"],
+    "خراسان جنوبی": ["بیرجند","قاین","طبس","فردوس","بشرویه","درمیان","سربیشه","خوسف","نهبندان"],
+    "سمنان": ["سمنان","گرمسار","شاهرود","دامغان","مهدی‌شهر","سرخه","آرادان","میامی"],
+    "چهارمحال و بختیاری": ["شهرکرد","بروجن","فارسان","لردگان","سامان","کوهرنگ","کیار","اردل"],
+    "کردستان": ["سنندج","سقز","مریوان","بانه","قروه","کامیاران","دیواندره","بیجار","سروآباد","دهگلان"],
+    "یزد": ["یزد","میبد","اردکان","بافق","ابرکوه","تفت","خاتم","مهریز","بهاباد"]
+  };
+
+  function initManageDelivery(form) {
+    var deliverySelect = form.querySelector('.cptt-manage-delivery-method');
+    var provinceWrap = form.querySelector('.cptt-manage-province-wrap');
+    var provinceSelect = form.querySelector('.cptt-manage-province');
+    var cityWrap = form.querySelector('.cptt-manage-city-wrap');
+    var citySelect = form.querySelector('.cptt-manage-city');
+    var addressWrap = form.querySelector('.cptt-manage-address-wrap');
+
+    if (!deliverySelect) return;
+
+    // Populate cities based on saved province
+    function populateCities(prov, selectedCity) {
+      if (!citySelect) return;
+      citySelect.innerHTML = '<option value="">— انتخاب شهر —</option>';
+      if (prov && PC[prov]) {
+        PC[prov].forEach(function(city) {
+          var opt = document.createElement('option');
+          opt.value = city;
+          opt.textContent = city;
+          if (city === selectedCity) opt.selected = true;
+          citySelect.appendChild(opt);
+        });
+      }
+    }
+
+    // Populate provinces
+    if (provinceSelect) {
+      var currentProv = provinceSelect.value;
+      provinceSelect.innerHTML = '<option value="">— انتخاب استان —</option>';
+      Object.keys(PC).sort().forEach(function(prov) {
+        var opt = document.createElement('option');
+        opt.value = prov;
+        opt.textContent = prov;
+        if (prov === currentProv) opt.selected = true;
+        provinceSelect.appendChild(opt);
+      });
+
+      // If province already selected, populate cities
+      if (currentProv && PC[currentProv]) {
+        var savedCity = citySelect ? (citySelect.querySelector('option[selected]') || {value:''}).value : '';
+        populateCities(currentProv, savedCity);
+      }
+    }
+
+    // Province change → load cities
+    if (provinceSelect) {
+      provinceSelect.addEventListener('change', function() {
+        var prov = provinceSelect.value;
+        if (prov) {
+          populateCities(prov, '');
+          if (cityWrap) cityWrap.style.display = 'block';
+          if (addressWrap) addressWrap.style.display = 'none';
+        } else {
+          if (cityWrap) cityWrap.style.display = 'none';
+          if (addressWrap) addressWrap.style.display = 'none';
+        }
+      });
+    }
+
+    // City change → show address
+    if (citySelect) {
+      citySelect.addEventListener('change', function() {
+        if (citySelect.value) {
+          if (addressWrap) addressWrap.style.display = 'block';
+        } else {
+          if (addressWrap) addressWrap.style.display = 'none';
+        }
+      });
+    }
+
+    // Delivery method change
+    deliverySelect.addEventListener('change', function() {
+      if (deliverySelect.value === 'shipping') {
+        if (provinceWrap) provinceWrap.style.display = 'block';
+        if (provinceSelect && provinceSelect.value) {
+          if (cityWrap) cityWrap.style.display = 'block';
+        }
+      } else {
+        if (provinceWrap) provinceWrap.style.display = 'none';
+        if (cityWrap) cityWrap.style.display = 'none';
+        if (addressWrap) addressWrap.style.display = 'none';
+      }
+    });
+
+    // Initialize visibility on load
+    if (deliverySelect.value === 'shipping') {
+      if (provinceWrap) provinceWrap.style.display = 'block';
+      if (provinceSelect && provinceSelect.value && cityWrap) cityWrap.style.display = 'block';
+      if (citySelect && citySelect.value && addressWrap) addressWrap.style.display = 'block';
+    }
+  }
+
+  /* =========================================================
+     NEW CUSTOMER MODAL - works for BOTH create & manage forms
+     ========================================================= */
+  function initNewCustomerModals() {
+    // For create form: inject trigger option into client selects
+    document.querySelectorAll('.cptt-expert-create-form select[name="client_user_id"]').forEach(function(sel) {
+      if (!sel.querySelector('option[value="new_customer_trigger"]')) {
+        var opt = document.createElement('option');
+        opt.value = 'new_customer_trigger';
+        opt.textContent = '+ ثبت مشتری جدید —';
+        opt.style.fontWeight = 'bold';
+        opt.style.color = '#6366f1';
+        sel.insertBefore(opt, sel.firstChild);
+      }
+      sel.addEventListener('change', function() {
+        if (sel.value === 'new_customer_trigger') {
+          openNewCustomerModal(sel);
+          sel.value = '';
+        }
+      });
+    });
+
+    // For manage forms: inject trigger option into client selects
+    document.querySelectorAll('.cptt-expert-project-form select[name="client_user_id"]').forEach(function(sel) {
+      if (!sel.querySelector('option[value="new_customer_trigger"]')) {
+        var opt = document.createElement('option');
+        opt.value = 'new_customer_trigger';
+        opt.textContent = '+ ثبت مشتری جدید —';
+        opt.style.fontWeight = 'bold';
+        opt.style.color = '#6366f1';
+        sel.insertBefore(opt, sel.firstChild);
+      }
+      sel.addEventListener('change', function() {
+        if (sel.value === 'new_customer_trigger') {
+          openNewCustomerModal(sel);
+          sel.value = '';
+        }
+      });
+    });
+  }
+
+  var _activeClientSelect = null;
+
+  function openNewCustomerModal(triggerSelect) {
+    _activeClientSelect = triggerSelect;
+    var modal = document.getElementById('cptt-new-customer-modal');
+    if (modal) {
+      modal.style.display = 'flex';
+      var fnInput = document.getElementById('cptt-cust-fullname');
+      if (fnInput) fnInput.focus();
+    }
+  }
+
+  function bindNewCustomerSubmit() {
+    var custSubmit = document.getElementById('cptt-cust-submit');
+    var custClose = document.getElementById('cptt-cust-close');
+    var custModal = document.getElementById('cptt-new-customer-modal');
+    if (!custSubmit || !custModal) return;
+
+    if (custClose) {
+      custClose.addEventListener('click', function() {
+        custModal.style.display = 'none';
+        _activeClientSelect = null;
+      });
+    }
+
+    // Close on backdrop click
+    custModal.addEventListener('click', function(e) {
+      if (e.target === custModal) {
+        custModal.style.display = 'none';
+        _activeClientSelect = null;
+      }
+    });
+
+    custSubmit.addEventListener('click', function() {
+      var fullname = (document.getElementById('cptt-cust-fullname') || {}).value;
+      var phone = (document.getElementById('cptt-cust-phone') || {}).value;
+      var msg = document.getElementById('cptt-cust-msg');
+      if (fullname) fullname = fullname.trim();
+      if (phone) phone = phone.trim();
+
+      if (!fullname || !phone) {
+        if (msg) { msg.textContent = 'نام و شماره موبایل الزامی است.'; msg.style.color = '#ef4444'; }
+        return;
+      }
+      if (msg) { msg.textContent = 'در حال ثبت...'; msg.style.color = '#475569'; }
+
+      var ajax = (window.CPTT_EXPERT && CPTT_EXPERT.ajax) ? CPTT_EXPERT.ajax : '';
+      var nonce = (window.CPTT_EXPERT && CPTT_EXPERT.nonce) ? CPTT_EXPERT.nonce : '';
+
+      var fd = new FormData();
+      fd.append('action', 'cptt_expert_create_customer');
+      fd.append('nonce', nonce);
+      fd.append('full_name', fullname);
+      fd.append('phone', phone);
+
+      fetch(ajax, { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+          if (res.success) {
+            if (msg) { msg.textContent = 'مشتری با موفقیت ثبت شد!'; msg.style.color = '#047857'; }
+
+            // Add to ALL client selects on page
+            document.querySelectorAll('select[name="client_user_id"]').forEach(function(sel) {
+              // Remove trigger option temporarily
+              var existing = sel.querySelector('option[value="' + res.data.ID + '"]');
+              if (!existing) {
+                var opt = document.createElement('option');
+                opt.value = res.data.ID;
+                opt.textContent = res.data.display_name + ' (' + res.data.user_email + ')';
+                sel.appendChild(opt);
+              }
+            });
+
+            // Select in triggering select
+            if (_activeClientSelect) {
+              _activeClientSelect.value = res.data.ID;
+            }
+
+            setTimeout(function() {
+              custModal.style.display = 'none';
+              var fn = document.getElementById('cptt-cust-fullname');
+              var ph = document.getElementById('cptt-cust-phone');
+              if (fn) fn.value = '';
+              if (ph) ph.value = '';
+              if (msg) msg.textContent = '';
+              _activeClientSelect = null;
+            }, 1200);
+          } else {
+            if (msg) { msg.textContent = (res.data || 'خطا در ثبت مشتری'); msg.style.color = '#ef4444'; }
+          }
+        })
+        .catch(function() {
+          if (msg) { msg.textContent = 'خطای شبکه'; msg.style.color = '#ef4444'; }
+        });
+    });
+  }
+
+  /* =========================================================
+     MANAGE FORM: FINANCE SUMMARY (live update)
+     ========================================================= */
+  function updateManageFinanceSummary(form) {
+    var costEl = form.querySelector('.cptt-manage-fin-cost');
+    var paidEl = form.querySelector('.cptt-manage-fin-paid');
+    var remainEl = form.querySelector('.cptt-manage-fin-remain');
+    if (!costEl || !paidEl || !remainEl) return;
+
+    var totalCost = 0, totalPaid = 0;
+    form.querySelectorAll('.cptt-currency-input[name*="[cost]"]').forEach(function(inp) {
+      totalCost += parseFloat(inp.value.replace(/,/g,'')) || 0;
+    });
+    form.querySelectorAll('.cptt-currency-input[name*="[paid]"]').forEach(function(inp) {
+      totalPaid += parseFloat(inp.value.replace(/,/g,'')) || 0;
+    });
+
+    var remain = totalCost - totalPaid;
+    costEl.textContent = totalCost.toLocaleString('en');
+    paidEl.textContent = totalPaid.toLocaleString('en');
+    remainEl.textContent = remain.toLocaleString('en');
+    remainEl.style.color = remain > 0 ? '#dc2626' : '#059669';
+  }
+
+  /* =========================================================
+     DOMContentLoaded INIT
+     ========================================================= */
+  document.addEventListener('DOMContentLoaded', function() {
+
+    // Init delivery for all manage forms already in DOM
+    document.querySelectorAll('.cptt-expert-project-form').forEach(function(form) {
+      initManageDelivery(form);
+    });
+
+    // Init new customer modal trigger for existing forms
+    initNewCustomerModals();
+    bindNewCustomerSubmit();
+
+    // Watch for dynamically opened project cards (delegation)
+    var expertGrid = document.getElementById('cptt-expert-grid');
+    if (expertGrid) {
+      var observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(m) {
+          m.addedNodes.forEach(function(node) {
+            if (node.nodeType !== 1) return;
+            node.querySelectorAll && node.querySelectorAll('.cptt-expert-project-form').forEach(function(form) {
+              initManageDelivery(form);
+            });
+            // Re-init new customer triggers
+            if (node.querySelector && node.querySelector('select[name="client_user_id"]')) {
+              initNewCustomerModals();
+            }
+          });
+        });
+      });
+      observer.observe(expertGrid, { childList: true, subtree: true });
+    }
+
+    // Live finance summary update on step cost/paid change
+    document.addEventListener('input', function(e) {
+      if (e.target.classList.contains('cptt-currency-input')) {
+        var form = e.target.closest('.cptt-expert-project-form');
+        if (form) updateManageFinanceSummary(form);
+      }
+    });
+
+    // Finance update after project form save
+    document.addEventListener('cptt:projectSaved', function(e) {
+      if (e.detail && e.detail.projectId) {
+        var card = document.querySelector('.cptt-expertCard[data-project-id="' + e.detail.projectId + '"]');
+        if (card) {
+          var form = card.querySelector('.cptt-expert-project-form');
+          if (form) updateManageFinanceSummary(form);
+        }
+      }
+    });
+
+  });
+
+})();
+
+/* =========================================================
+   PUBLIC HUB: Expert Badge Modal + Project Detail Modal
+   + Filters + روزهای هفته فارسی
+   ========================================================= */
+(function () {
+  'use strict';
+
+  /** UTF-8 safe base64 decode - fixes Persian/Arabic garbled text */
+  function b64DecodeUtf8(b64) {
+    try {
+      var bin = atob(b64);
+      var bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      if (window.TextDecoder) return new TextDecoder('utf-8').decode(bytes);
+      // fallback for very old browsers
+      return decodeURIComponent(escape(bin));
+    } catch(e) { return ''; }
+  }
+
+  var PERSIAN_DAYS = ['یکشنبه','دوشنبه','سه‌شنبه','چهارشنبه','پنج‌شنبه','جمعه','شنبه'];
+
+  /* ---------- Jalali helpers (mini) ---------- */
+  function j2g(jy,jm,jd){
+    jy=parseInt(jy,10)+1595;
+    var days=-355668+(365*jy)+Math.floor(jy/33)*8+Math.floor(((jy%33)+3)/4)+parseInt(jd,10);
+    days+=(jm<7)?((jm-1)*31):(((jm-7)*30)+186);
+    var gy=400*Math.floor(days/146097);days%=146097;
+    if(days>36524){gy+=100*Math.floor(--days/36524);days%=36524;if(days>=365)days++;}
+    gy+=4*Math.floor(days/1461);days%=1461;
+    if(days>365){gy+=Math.floor((days-1)/365);days=(days-1)%365;}
+    var gd=days+1;
+    var sal=[0,31,((gy%4===0&&gy%100!==0)||(gy%400===0))?29:28,31,30,31,30,31,31,30,31,30,31];
+    var gm=1;for(;gm<=12;gm++){if(gd<=sal[gm])break;gd-=sal[gm];}
+    return [gy,gm,gd];
+  }
+
+  function toEn(s){
+    var fa='۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩',en='01234567890123456789';
+    return String(s||'').replace(/[۰-۹٠-٩]/g,function(c){return en[fa.indexOf(c)]||c;});
+  }
+
+  /** Extract day-of-week from a jalali datetime string like "۱۴۰۳/۰۲/۱۵ ۱۴:۳۰" */
+  function jalaliDayOfWeek(faDateStr) {
+    if (!faDateStr) return '';
+    var s = toEn(String(faDateStr));
+    var m = s.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+    if (!m) return '';
+    var jy=parseInt(m[1],10), jm=parseInt(m[2],10), jd=parseInt(m[3],10);
+    var g = j2g(jy,jm,jd);
+    var date = new Date(g[0], g[1]-1, g[2]);
+    return PERSIAN_DAYS[date.getDay()] || '';
+  }
+
+  /** Append day-of-week to all date elements with class cptt-show-day */
+  function appendDaysOfWeek() {
+    document.querySelectorAll('.cptt-show-day').forEach(function(el) {
+      var txt = el.getAttribute('data-date') || el.textContent;
+      var day = jalaliDayOfWeek(txt);
+      if (day && !el.querySelector('.cptt-dow')) {
+        var span = document.createElement('span');
+        span.className = 'cptt-dow';
+        span.textContent = ' (' + day + ')';
+        span.style.cssText = 'font-size:11px;opacity:0.7;font-weight:500;';
+        el.appendChild(span);
+      }
+    });
+  }
+
+  /* =========================================================
+     HUB MODAL for Project Details
+     ========================================================= */
+  function initHubProjectModal() {
+    var modal = document.getElementById('cptt-hub-modal');
+    if (!modal) return;
+
+    var backdrop = modal.querySelector('.cptt-hubModal__backdrop');
+    var closeBtn = modal.querySelector('.cptt-hubModal__close');
+    var titleEl  = modal.querySelector('#cptt-hub-modal-title');
+    var metaEl   = modal.querySelector('#cptt-hub-modal-meta');
+    var bodyEl   = modal.querySelector('#cptt-hub-modal-body');
+
+    function openModal(project) {
+      if (titleEl) titleEl.textContent = project.title || '';
+
+      // Meta chips
+      var meta = [];
+      if (project.customer) meta.push('👤 مشتری: ' + project.customer);
+      if (project.experts && project.experts.length) meta.push('🧑‍💼 کارشناسان: ' + project.experts.join('، '));
+      if (project.deadline) {
+        var dlDay = jalaliDayOfWeek(project.deadline);
+        meta.push('📅 مهلت: ' + project.deadline + (dlDay?' ('+dlDay+')':''));
+      }
+      if (project.product) meta.push('📦 محصول: ' + project.product);
+      if (project.categories && project.categories.length) meta.push('🏷 دسته‌بندی: ' + project.categories.join('، '));
+      if (metaEl) metaEl.innerHTML = meta.map(function(m){ return '<span class="cptt-hubModal__metaItem">' + escH(m) + '</span>'; }).join('');
+
+      var html = '';
+
+      // پیشرفت کلی
+      var progress = project.progress || {};
+      var pct = progress.percent || 0;
+      html += '<div class="cptt-hubModal__progress">';
+      html += '<div class="cptt-hubModal__progressBar"><div class="cptt-hubModal__progressFill" style="width:'+escH(String(pct))+'%"></div></div>';
+      html += '<div class="cptt-hubModal__progressLabel">'+escH(String(pct))+'% پیشرفت — '+escH(progress.done||0)+'/'+escH(progress.total||0)+' مرحله</div>';
+      html += '</div>';
+
+      // خلاصه مالی (اگر full_details)
+      if (project.full_details && project.financial) {
+        var fin = project.financial;
+        if (fin.cost > 0) {
+          html += '<div class="cptt-hubModal__finRow">';
+          html += '<div class="cptt-hubModal__finBox"><span>جمع هزینه</span><strong>'+escH(Number(fin.cost).toLocaleString('en'))+'</strong></div>';
+          html += '<div class="cptt-hubModal__finBox"><span>دریافتی</span><strong style="color:#059669">'+escH(Number(fin.paid).toLocaleString('en'))+'</strong></div>';
+          html += '<div class="cptt-hubModal__finBox"><span>مانده</span><strong style="color:'+(fin.remain>0?'#dc2626':'#059669')+'">'+escH(Number(fin.remain).toLocaleString('en'))+'</strong></div>';
+          if (project.settled) html += '<div class="cptt-hubModal__finBox"><span>وضعیت</span><strong style="color:#059669">تسویه شده</strong></div>';
+          html += '</div>';
+        }
+      }
+
+      // مراحل
+      var steps = (project.steps && Array.isArray(project.steps)) ? project.steps : [];
+      if (steps.length) {
+        html += '<div class="cptt-hubModal__stepsTitle">مراحل پروژه</div>';
+        html += '<div class="cptt-hubModal__steps">';
+        steps.forEach(function(s) {
+          var st = s.status || 'todo';
+          var stLabel = st==='done'?'انجام‌شده':st==='current'?'در حال انجام':'انجام‌نشده';
+          var updDay = jalaliDayOfWeek(s.updated_at_fa || '');
+          var dueDay = jalaliDayOfWeek(s.due_fa || '');
+
+          html += '<div class="cptt-hubModal__step cptt-hubModal__step--'+escH(st)+'">';
+          html += '<div class="cptt-hubModal__stepHead">';
+          html += '<strong>'+escH(s.index||'')+'&nbsp;'+escH(s.title||'')+'</strong>';
+          html += '<span class="cptt-expertStatusBadge cptt-expertStatusBadge--'+escH(st)+'">'+escH(stLabel)+'</span>';
+          html += '</div>';
+
+          if (s.due_fa)
+            html += '<div class="cptt-hubModal__stepMeta">📅 مهلت: '+escH(s.due_fa+(dueDay?' ('+dueDay+')':''))+'</div>';
+          if (s.updated_at_fa)
+            html += '<div class="cptt-hubModal__stepMeta">🕐 آخرین بروزرسانی: '+escH(s.updated_at_fa+(updDay?' ('+updDay+')':''))+'</div>';
+          if (s.desc)
+            html += '<div class="cptt-hubModal__stepDesc">'+escH(s.desc)+'</div>';
+
+          // چک‌لیست
+          if (s.checklist_total > 0) {
+            html += '<div class="cptt-hubModal__stepChecklist">';
+            html += '<span>✅ چک‌لیست: '+escH(String(s.checklist_done))+'/'+escH(String(s.checklist_total))+'</span>';
+            if (s.checklist_items && s.checklist_items.length) {
+              html += '<ul class="cptt-hubModal__checkItems">';
+              s.checklist_items.forEach(function(ci) {
+                html += '<li class="'+(ci.done?'is-done':'')+'">';
+                html += escH(ci.text||'');
+                if (ci.done && ci.url) html += ' <a href="'+escH(ci.url)+'" target="_blank" rel="noopener">مشاهده نتیجه</a>';
+                html += '</li>';
+              });
+              html += '</ul>';
+            }
+            html += '</div>';
+          }
+
+          // تسک مشتری
+          if (s.user_tasks_total > 0) {
+            html += '<div class="cptt-hubModal__stepChecklist">';
+            html += '<span>📋 تسک مشتری: '+escH(String(s.user_tasks_done))+'/'+escH(String(s.user_tasks_total))+'</span>';
+            html += '</div>';
+          }
+
+          html += '</div>';
+        });
+        html += '</div>';
+      } else {
+        html += '<div class="cptt-empty">جزئیات مراحل در دسترس نیست.</div>';
+      }
+
+      if (bodyEl) bodyEl.innerHTML = html;
+      modal.removeAttribute('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeModal() {
+      modal.setAttribute('hidden', '');
+      document.body.style.overflow = '';
+    }
+
+    if (backdrop) backdrop.addEventListener('click', closeModal);
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeModal(); });
+
+    // Delegate clicks for project open buttons
+    document.addEventListener('click', function(e) {
+      var btn = e.target.closest('.cptt-publicProject__open');
+      if (!btn) return;
+      var b64 = btn.getAttribute('data-project');
+      if (!b64) return;
+      try {
+        var project = JSON.parse(b64DecodeUtf8(b64));
+        openModal(project);
+      } catch(ex) { console.error('CPTT hub modal parse error', ex); }
+    });
+  }
+
+  /* =========================================================
+     HUB MODAL for Expert Profile
+     ========================================================= */
+  function initHubExpertModal() {
+    // Create expert modal if not exists
+    var existingModal = document.getElementById('cptt-expert-profile-modal');
+    if (!existingModal) {
+      var m = document.createElement('div');
+      m.id = 'cptt-expert-profile-modal';
+      m.className = 'cptt-hubModal cptt-expertProfileModal';
+      m.setAttribute('hidden', '');
+      m.innerHTML = '<div class="cptt-hubModal__backdrop"></div>' +
+        '<div class="cptt-hubModal__dialog" role="dialog" aria-modal="true">' +
+          '<button type="button" class="cptt-hubModal__close" aria-label="بستن">×</button>' +
+          '<div class="cptt-expertProfileModal__inner" id="cptt-expert-profile-content"></div>' +
+        '</div>';
+      document.body.appendChild(m);
+      existingModal = m;
+    }
+
+    var modal = existingModal;
+    var backdrop = modal.querySelector('.cptt-hubModal__backdrop');
+    var closeBtn = modal.querySelector('.cptt-hubModal__close');
+    var content  = modal.querySelector('#cptt-expert-profile-content');
+
+    function openExpertModal(expert) {
+      var html = '<div class="cptt-expertProfile">';
+      
+      // بخش بالا: آواتار + اسم + سمت
+      html += '<div class="cptt-expertProfile__header">';
+      html += '<div class="cptt-expertProfile__avatar">';
+      var avatarSrc = expert.avatar || expert.avatar_url || '';
+      if (avatarSrc) {
+        html += '<img src="'+escH(avatarSrc)+'" alt="'+escH(expert.name||'')+'" loading="lazy">';
+      } else {
+        html += '<div class="cptt-expertProfile__avatarDefault">'+escH((expert.name||'?').charAt(0))+'</div>';
+      }
+      html += '</div>';
+      html += '<div class="cptt-expertProfile__headerInfo">';
+      html += '<h2 class="cptt-expertProfile__name">'+escH(expert.name||'کارشناس')+'</h2>';
+      var title = expert.title || '';
+      if (title) html += '<div class="cptt-expertProfile__title">'+escH(title)+'</div>';
+      html += '</div></div>';
+
+      // بیوگرافی
+      var bio = expert.bio || '';
+      if (bio) {
+        html += '<div class="cptt-expertProfile__section">';
+        html += '<div class="cptt-expertProfile__sectionTitle">درباره من</div>';
+        html += '<div class="cptt-expertProfile__bio">'+escH(bio)+'</div>';
+        html += '</div>';
+      }
+
+      // آمار پروژه‌ها
+      var hasStats = (expert.active_projects !== undefined || expert.completed_projects !== undefined || expert.done_steps !== undefined);
+      if (hasStats) {
+        html += '<div class="cptt-expertProfile__section">';
+        html += '<div class="cptt-expertProfile__sectionTitle">آمار پروژه‌ها</div>';
+        html += '<div class="cptt-expertProfile__stats">';
+        if (expert.active_projects !== undefined)
+          html += '<div class="cptt-expertProfile__statBox"><strong>'+escH(String(expert.active_projects))+'</strong><span>پروژه فعال</span></div>';
+        if (expert.completed_projects !== undefined)
+          html += '<div class="cptt-expertProfile__statBox"><strong>'+escH(String(expert.completed_projects))+'</strong><span>پروژه تکمیل‌شده</span></div>';
+        if (expert.done_steps !== undefined)
+          html += '<div class="cptt-expertProfile__statBox"><strong>'+escH(String(expert.done_steps))+'</strong><span>مرحله انجام‌شده</span></div>';
+        html += '</div></div>';
+      }
+
+      // تخصص‌ها
+      var skills = expert.specialties || expert.skills || [];
+      if (skills && skills.length) {
+        html += '<div class="cptt-expertProfile__section">';
+        html += '<div class="cptt-expertProfile__sectionTitle">تخصص‌ها</div>';
+        html += '<div class="cptt-expertProfile__skills">';
+        skills.forEach(function(sk){
+          if (sk) html += '<span class="cptt-expertProfile__skill">'+escH(String(sk))+'</span>';
+        });
+        html += '</div></div>';
+      }
+
+      html += '</div>'; // end cptt-expertProfile
+
+      if (content) content.innerHTML = html;
+      modal.removeAttribute('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeModal() {
+      modal.setAttribute('hidden','');
+      document.body.style.overflow = '';
+    }
+
+    if (backdrop) backdrop.addEventListener('click', closeModal);
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+
+    // Delegate for expert badge clicks
+    document.addEventListener('click', function(e) {
+      var btn = e.target.closest('.cptt-expertBadge');
+      if (!btn) return;
+      var b64 = btn.getAttribute('data-expert');
+      if (!b64) return;
+      try {
+        var expert = JSON.parse(b64DecodeUtf8(b64));
+        openExpertModal(expert);
+      } catch(ex) { console.error('CPTT expert modal parse error', ex); }
+    });
+  }
+
+  /* =========================================================
+     HUB FILTERS (search, expert, product, cat, deadline)
+     ========================================================= */
+  function initHubFilters() {
+    var grid   = document.getElementById('cptt-hub-grid');
+    var empty  = document.getElementById('cptt-hub-empty');
+    var count  = document.getElementById('cptt-hub-count');
+    var search = document.getElementById('cptt-hub-search');
+    var selExp = document.getElementById('cptt-hub-expert');
+    var selProd= document.getElementById('cptt-hub-product');
+    var selCat = document.getElementById('cptt-hub-cat');
+    var selDl  = document.getElementById('cptt-hub-deadline');
+    var reset  = document.getElementById('cptt-hub-reset');
+
+    if (!grid) return;
+
+    function filter() {
+      var cards = Array.prototype.slice.call(grid.querySelectorAll('.cptt-publicProject'));
+      var q   = search ? search.value.toLowerCase() : '';
+      var exp = selExp  ? selExp.value  : '';
+      var prod= selProd ? selProd.value : '';
+      var cat = selCat  ? selCat.value  : '';
+      var dl  = selDl   ? selDl.value   : '';
+      var vis = 0;
+
+      cards.forEach(function(c) {
+        var show = true;
+        if (q && !(c.getAttribute('data-search')||'').toLowerCase().includes(q)) show = false;
+        if (show && exp  && !(c.getAttribute('data-experts')||'').includes(','+exp+',')) show = false;
+        if (show && prod && c.getAttribute('data-product') !== prod) show = false;
+        if (show && cat  && !(c.getAttribute('data-cats')||'').includes(','+cat+',')) show = false;
+        if (show && dl   && c.getAttribute('data-deadline') !== dl) show = false;
+        c.style.display = show ? '' : 'none';
+        if (show) vis++;
+      });
+
+      if (count) count.textContent = vis;
+      if (empty) empty[vis === 0 ? 'removeAttribute' : 'setAttribute']('hidden','');
+    }
+
+    [search, selExp, selProd, selCat, selDl].forEach(function(el){
+      if (el) el.addEventListener('input', filter);
+    });
+
+    if (reset) {
+      reset.addEventListener('click', function() {
+        [search, selExp, selProd, selCat, selDl].forEach(function(el){ if(el) el.value=''; });
+        filter();
+      });
+    }
+  }
+
+  /* =========================================================
+     روزهای هفته در کارت‌های پروژه داشبورد کارشناس
+     ========================================================= */
+  function injectDaysOfWeekInCards() {
+    // Expert dashboard cards
+    document.querySelectorAll('.cptt-expertCard__infoGrid [data-date], .cptt-expertCard__meta[data-date]').forEach(function(el){
+      var txt = el.getAttribute('data-date') || el.textContent;
+      var day = jalaliDayOfWeek(txt);
+      if (day && !el.querySelector('.cptt-dow')) {
+        var sp = document.createElement('span');
+        sp.className = 'cptt-dow';
+        sp.textContent = ' (' + day + ')';
+        el.appendChild(sp);
+      }
+    });
+
+    // Public hub project cards
+    document.querySelectorAll('.cptt-project__meta[data-date], .cptt-publicProject__meta[data-date]').forEach(function(el){
+      var txt = el.getAttribute('data-date') || el.textContent;
+      var day = jalaliDayOfWeek(txt);
+      if (day && !el.querySelector('.cptt-dow')) {
+        var sp = document.createElement('span');
+        sp.className = 'cptt-dow';
+        sp.textContent = ' (' + day + ')';
+        el.appendChild(sp);
+      }
+    });
+  }
+
+  /* =========================================================
+     STEP ASSIGNED EXPERT MODAL
+     ========================================================= */
+  function initStepExpertModal() {
+    if (!document.getElementById('cptt-step-expert-modal')) {
+      var m = document.createElement('div');
+      m.id = 'cptt-step-expert-modal';
+      m.setAttribute('hidden','');
+      m.innerHTML =
+        '<div class="cptt-stepExpertModal__backdrop"></div>' +
+        '<div class="cptt-stepExpertModal__dialog">' +
+          '<button type="button" class="cptt-stepExpertModal__close" aria-label="بستن">×</button>' +
+          '<div class="cptt-stepExpertModal__title">انتخاب کارشناس مسئول مرحله</div>' +
+          '<div class="cptt-stepExpertModal__list" id="cptt-sep-list"></div>' +
+        '</div>';
+      document.body.appendChild(m);
+      var bd = m.querySelector('.cptt-stepExpertModal__backdrop');
+      var cl = m.querySelector('.cptt-stepExpertModal__close');
+      function closeModal(){ m.setAttribute('hidden',''); document.body.style.overflow=''; m._hiddenInput=null; m._stepEl=null; m._experts=[]; }
+      if (bd) bd.addEventListener('click', closeModal);
+      if (cl) cl.addEventListener('click', closeModal);
+    }
+
+    document.addEventListener('click', function(e) {
+      var btn = e.target.closest('.cptt-step-expert-btn');
+      if (!btn) return;
+
+      var stepEl = btn.closest('[data-step-id]');
+      if (!stepEl) return;
+      var stepId = stepEl.getAttribute('data-step-id');
+
+      // hidden input با نام صحیح
+      var hiddenInput = stepEl.querySelector('input[name*="[assigned_expert_id]"]');
+      var currentVal = hiddenInput ? hiddenInput.value : '';
+
+      // گرفتن لیست کارشناسان از article card
+      var card = btn.closest('[data-project-experts]');
+      var experts = [];
+      if (card) {
+        var b64 = card.getAttribute('data-project-experts');
+        if (b64) {
+          try { experts = JSON.parse(b64DecodeUtf8(b64)); } catch(e) {}
+        }
+      }
+
+      // fallback: از checkboxهای کارشناس در همان فرم
+      if (!experts.length) {
+        var form = btn.closest('form');
+        if (form) {
+          form.querySelectorAll('input[name="expert_user_ids[]"]').forEach(function(cb) {
+            var lbl = cb.closest('label');
+            var nm = lbl ? (lbl.querySelector('span')||{textContent:cb.value}).textContent.trim() : cb.value;
+            experts.push({ id: String(cb.value), name: nm });
+          });
+        }
+      }
+
+      if (!experts.length) {
+        alert('هیچ کارشناسی برای این پروژه تعیین نشده است.');
+        return;
+      }
+
+      var modal = document.getElementById('cptt-step-expert-modal');
+      var listEl = document.getElementById('cptt-sep-list');
+
+      var html = '';
+      // گزینه «بدون کارشناس»
+      html += '<div class="cptt-sep-option"><label>' +
+        '<input type="radio" name="sep_choice" value=""' + (currentVal===''?' checked':'') + '> ' +
+        '<span>بدون کارشناس مشخص</span></label></div>';
+
+      experts.forEach(function(ex) {
+        var chk = (String(ex.id) === String(currentVal)) ? ' checked' : '';
+        html += '<div class="cptt-sep-option">' +
+          '<label><input type="radio" name="sep_choice" value="'+escH(String(ex.id))+'"'+chk+'> ' +
+          '<span>'+escH(ex.name||String(ex.id))+'</span></label>' +
+          '</div>';
+      });
+
+      html += '<div class="cptt-sep-actions"><button type="button" class="cptt-btn cptt-btn--primary cptt-sep-confirm">✔ تأیید انتخاب</button></div>';
+
+      if (listEl) listEl.innerHTML = html;
+      modal._hiddenInput = hiddenInput;
+      modal._stepEl = stepEl;
+      modal._stepId = stepId;
+      modal._experts = experts;
+      modal.removeAttribute('hidden');
+      document.body.style.overflow = 'hidden';
+    });
+
+    // تأیید انتخاب
+    document.addEventListener('click', function(e) {
+      if (!e.target.classList.contains('cptt-sep-confirm')) return;
+      var modal = document.getElementById('cptt-step-expert-modal');
+      if (!modal) return;
+      var checked = modal.querySelector('input[name="sep_choice"]:checked');
+      var val = checked ? checked.value : '';
+      var experts = modal._experts || [];
+
+      // ذخیره در hidden input
+      if (modal._hiddenInput) {
+        modal._hiddenInput.value = val;
+      }
+
+      // آپدیت متن دکمه
+      if (modal._stepEl) {
+        var dispBtn = modal._stepEl.querySelector('.cptt-step-expert-btn');
+        if (dispBtn) {
+          if (val) {
+            var found = experts.filter(function(ex){ return String(ex.id)===String(val); });
+            var nm = found.length ? found[0].name : val;
+            dispBtn.textContent = '👤 ' + nm;
+            dispBtn.classList.add('has-expert');
+          } else {
+            dispBtn.textContent = '👤 انتخاب کارشناس مرحله';
+            dispBtn.classList.remove('has-expert');
+          }
+        }
+      }
+
+      modal.setAttribute('hidden','');
+      document.body.style.overflow='';
+    });
+  }
+
+  function escH(s) {
+    return String(s||'').replace(/[&<>"']/g,function(c){
+      return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[c];
+    });
+  }
+
+  /* =========================================================
+     DOMContentLoaded
+     ========================================================= */
+  document.addEventListener('DOMContentLoaded', function() {
+    initHubProjectModal();
+    initHubExpertModal();
+    initHubFilters();
+    initStepExpertModal();
+    injectDaysOfWeekInCards();
+    appendDaysOfWeek();
+
+    // Re-run on card expand (MutationObserver for dynamic content)
+    var grid = document.getElementById('cptt-expert-grid');
+    if (grid) {
+      var obs = new MutationObserver(function(muts) {
+        muts.forEach(function(m) {
+          if (m.type === 'attributes' && m.attributeName === 'hidden') {
+            injectDaysOfWeekInCards();
+          }
+          if (m.type === 'childList') injectDaysOfWeekInCards();
+        });
+      });
+      obs.observe(grid, { attributes: true, childList: true, subtree: true });
+    }
+  });
+
+})();
+
+/* =========================================================
+   EDIT PROFILE MODAL - داشبورد کارشناس
+   ========================================================= */
+(function() {
+  'use strict';
+
+  document.addEventListener('DOMContentLoaded', function() {
+    var modal = document.getElementById('cptt-edit-profile-modal');
+    if (!modal) return;
+
+    var backdrop = document.getElementById('cptt-edit-profile-backdrop');
+    var closeBtn = modal.querySelector('.cptt-editProfileModal__close');
+    var form = document.getElementById('cptt-edit-profile-form');
+    var msgEl = document.getElementById('cptt-ep-msg');
+
+    function openModal() {
+      modal.removeAttribute('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeModal() {
+      modal.setAttribute('hidden', '');
+      document.body.style.overflow = '';
+    }
+
+    if (backdrop) backdrop.addEventListener('click', closeModal);
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeModal(); });
+
+    // دکمه ویرایش پروفایل در sidebar
+    document.querySelectorAll('[href*="cptt_edit_profile=1"], .cptt-open-edit-profile').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        openModal();
+      });
+    });
+
+    // آپلود آواتار
+    var avatarBtn = document.getElementById('cptt-ep-avatar-btn');
+    if (avatarBtn && window.wp && window.wp.media) {
+      var frame;
+      avatarBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (!frame) {
+          frame = wp.media({ title: 'انتخاب عکس پروفایل', button: { text: 'انتخاب' }, multiple: false });
+          frame.on('select', function() {
+            var att = frame.state().get('selection').first().toJSON();
+            document.getElementById('cptt-ep-avatar-id').value = att.id;
+            var preview = document.getElementById('cptt-ep-avatar-preview');
+            if (preview) {
+              preview.innerHTML = '<img src="' + att.url + '" alt="avatar" style="width:100%;height:100%;object-fit:cover;">';
+            }
+          });
+        }
+        frame.open();
+      });
+    }
+
+    // ارسال فرم
+    if (form) {
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        if (msgEl) { msgEl.textContent = 'در حال ذخیره...'; msgEl.style.color = '#6366f1'; }
+
+        var fd = new FormData(form);
+        fd.append('action', 'cptt_expert_save_profile');
+        fd.append('nonce', window.CPTT_EXPERT ? CPTT_EXPERT.nonce : '');
+
+        fetch(window.CPTT_EXPERT ? CPTT_EXPERT.ajax : '', { method: 'POST', body: fd })
+          .then(function(r){ return r.json(); })
+          .then(function(res) {
+            if (res.success) {
+              if (msgEl) { msgEl.textContent = '✓ ' + (res.data.message || 'ذخیره شد!'); msgEl.style.color = '#059669'; }
+              setTimeout(function() { closeModal(); }, 1500);
+            } else {
+              if (msgEl) { msgEl.textContent = '✗ ' + (res.data || 'خطا در ذخیره'); msgEl.style.color = '#dc2626'; }
+            }
+          })
+          .catch(function() {
+            if (msgEl) { msgEl.textContent = '✗ خطای شبکه'; msgEl.style.color = '#dc2626'; }
+          });
+      });
+    }
+  });
+})();

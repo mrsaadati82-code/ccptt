@@ -50,6 +50,7 @@ class CPTT_Expert {
 
 		add_action('wp_ajax_cptt_expert_delete_project', [$this, 'ajax_delete_project']);
 		add_action('wp_ajax_cptt_expert_delete_step', [$this, 'ajax_delete_step']);
+		add_action('wp_ajax_cptt_expert_save_profile', [$this, 'ajax_save_own_profile']);
 		add_action('admin_init', [$this, 'redirect_experts_from_admin'], 1);
 		add_filter('body_class', [$this, 'add_isolation_body_class']);
 	}
@@ -408,6 +409,7 @@ class CPTT_Expert {
 				'paid' => isset($row['paid']) ? (float)str_replace(",", "", (string)$row['paid']) : 0,
 				'checklist' => $checklist,
 				'user_tasks' => $user_tasks,
+				'assigned_expert_id' => isset($row['assigned_expert_id']) ? absint($row['assigned_expert_id']) : 0,
 			];
 		}
 		return $out;
@@ -447,7 +449,7 @@ class CPTT_Expert {
 		return $fallback_status;
 	}
 
-		private function save_expert_project($project_id, $posted_steps, $note, $meta = []) {
+	private function save_expert_project($project_id, $posted_steps, $note, $meta = []) {
 		$old_experts = self::get_existing_experts($project_id);
 
 		$project_id = (int) $project_id;
@@ -648,6 +650,7 @@ class CPTT_Expert {
 					'paid' => $paid,
 					'checklist' => $checklist,
 					'user_tasks' => $user_tasks,
+					'assigned_expert_id' => isset($row['assigned_expert_id']) ? absint($row['assigned_expert_id']) : ($old_step ? (int)($old_step['assigned_expert_id'] ?? 0) : 0),
 				];
 
 				$due_local = trim((string)($row['due_at_local'] ?? ''));
@@ -753,6 +756,8 @@ class CPTT_Expert {
 				}
 			}
 		}
+		$delivery_method_raw = (string)get_post_meta($project_id, '_cptt_delivery_method', true);
+		$delivery_method_label = $delivery_method_raw === 'shipping' ? 'ارسال' : ($delivery_method_raw === 'in_person' ? 'حضوری' : '—');
 		return [
 			'progress' => $progress,
 			'financial' => $this->financial_data($project_id),
@@ -772,6 +777,11 @@ class CPTT_Expert {
 			'user_tasks_done' => $user_tasks_done,
 			'notes' => $this->get_recent_notes($project_id, 4),
 			'messages' => $this->get_recent_messages($project_id, 8),
+			'delivery_method' => $delivery_method_raw,
+			'delivery_method_label' => $delivery_method_label,
+			'delivery_province' => (string)get_post_meta($project_id, '_cptt_delivery_province', true),
+			'delivery_city' => (string)get_post_meta($project_id, '_cptt_delivery_city', true),
+			'delivery_address' => (string)get_post_meta($project_id, '_cptt_delivery_address', true),
 		];
 	}
 
@@ -950,6 +960,22 @@ class CPTT_Expert {
 								<input type="text" name="steps[<?php echo esc_attr($step_id); ?>][paid]" class="cptt-currency-input" value="<?php echo esc_attr(number_format($step['paid'] ?? 0)); ?>">
 							</label>
 						</div>
+						<?php
+						$_proj_expert_ids_step = CPTT_Core::get_project_expert_ids($project_id);
+						$_assigned_expert_id_step = (int)($step['assigned_expert_id'] ?? 0);
+						$_assigned_expert_name_step = '';
+						if ($_assigned_expert_id_step) {
+							$_ae_u = get_user_by('id', $_assigned_expert_id_step);
+							if ($_ae_u) $_assigned_expert_name_step = $_ae_u->display_name;
+						}
+						if (count($_proj_expert_ids_step) > 1): ?>
+						<div class="cptt-step-expert-wrap">
+							<input type="hidden" name="steps[<?php echo esc_attr($step_id); ?>][assigned_expert_id]" value="<?php echo esc_attr((string)$_assigned_expert_id_step); ?>">
+							<button type="button" class="cptt-step-expert-btn <?php echo $_assigned_expert_id_step ? 'has-expert' : ''; ?>">
+								👤 <?php echo $_assigned_expert_name_step ? esc_html($_assigned_expert_name_step) : 'انتخاب کارشناس مرحله'; ?>
+							</button>
+						</div>
+						<?php endif; ?>
 
 						<!-- Step Description -->
 						<label class="cptt-expert-noteField">
@@ -1013,6 +1039,72 @@ class CPTT_Expert {
 				<?php endforeach; ?>
 			</div>
             <button type="button" class="cptt-btn cptt-expert-add-step" style="margin: 20px 0; width:100%; background:#f1f5f9; color:#334155; border:2px dashed #cbd5e1; padding:12px; border-radius:12px;">+ افزودن مرحله جدید</button>
+
+			<!-- Delivery Section in manage form -->
+			<?php
+			$mgmt_delivery_method = (string)get_post_meta($project_id, '_cptt_delivery_method', true);
+			$mgmt_delivery_province = (string)get_post_meta($project_id, '_cptt_delivery_province', true);
+			$mgmt_delivery_city = (string)get_post_meta($project_id, '_cptt_delivery_city', true);
+			$mgmt_delivery_address = (string)get_post_meta($project_id, '_cptt_delivery_address', true);
+			?>
+			<div class="cptt-expert-sectionTitle" style="margin-top:16px;">روش تحویل و آدرس ارسال</div>
+			<div class="cptt-createProjectGrid cptt-delivery-section" data-project-id="<?php echo esc_attr($project_id); ?>">
+				<label>
+					<span>روش تحویل</span>
+					<select name="delivery_method" class="cptt-manage-delivery-method" style="width:100%;">
+						<option value="in_person" <?php selected($mgmt_delivery_method, 'in_person'); ?>>حضوری</option>
+						<option value="shipping" <?php selected($mgmt_delivery_method, 'shipping'); ?>>ارسال</option>
+					</select>
+				</label>
+				<label class="cptt-manage-province-wrap" style="<?php echo $mgmt_delivery_method === 'shipping' ? '' : 'display:none;'; ?>">
+					<span>استان</span>
+					<select name="delivery_province" class="cptt-manage-province" style="width:100%;">
+						<option value="">— انتخاب استان —</option>
+						<?php
+						$all_provinces = ['تهران','البرز','اصفهان','آذربایجان شرقی','آذربایجان غربی','اردبیل','بوشهر','چهارمحال و بختیاری','فارس','گیلان','گلستان','همدان','هرمزگان','ایلام','کرمان','کرمانشاه','خراسان شمالی','خراسان رضوی','خراسان جنوبی','خوزستان','کهگیلویه و بویراحمد','کردستان','لرستان','مازندران','مرکزی','قم','قزوین','سمنان','سیستان و بلوچستان','خراسان','زنجان','یزد'];
+						sort($all_provinces);
+						foreach ($all_provinces as $prov):
+						?>
+						<option value="<?php echo esc_attr($prov); ?>" <?php selected($mgmt_delivery_province, $prov); ?>><?php echo esc_html($prov); ?></option>
+						<?php endforeach; ?>
+					</select>
+				</label>
+				<label class="cptt-manage-city-wrap" style="<?php echo ($mgmt_delivery_method === 'shipping' && $mgmt_delivery_province) ? '' : 'display:none;'; ?>">
+					<span>شهر</span>
+					<select name="delivery_city" class="cptt-manage-city" style="width:100%;">
+						<option value="">— انتخاب شهر —</option>
+						<?php if ($mgmt_delivery_province): ?>
+						<option value="<?php echo esc_attr($mgmt_delivery_city); ?>" selected><?php echo esc_html($mgmt_delivery_city); ?></option>
+						<?php endif; ?>
+					</select>
+				</label>
+				<label class="cptt-manage-address-wrap" style="grid-column:1/-1; <?php echo ($mgmt_delivery_method === 'shipping' && $mgmt_delivery_city) ? '' : 'display:none;'; ?>">
+					<span>آدرس تکمیلی</span>
+					<textarea name="delivery_address" rows="2" placeholder="خیابان، کوچه، پلاک، واحد..."><?php echo esc_textarea($mgmt_delivery_address); ?></textarea>
+				</label>
+			</div>
+
+			<!-- Financial Summary in manage form -->
+			<?php $mgmt_fin = $this->financial_data($project_id); ?>
+			<div class="cptt-expert-sectionTitle" style="margin-top:16px;">خلاصه حساب و کتاب پروژه</div>
+			<div class="cptt-createProjectGrid cptt-manage-finance-summary">
+				<div class="cptt-manage-fin-box">
+					<span>جمع هزینه‌ها (ریال)</span>
+					<strong class="cptt-manage-fin-cost"><?php echo esc_html(number_format((int)$mgmt_fin['cost'])); ?></strong>
+				</div>
+				<div class="cptt-manage-fin-box">
+					<span>دریافت‌شده (ریال)</span>
+					<strong class="cptt-manage-fin-paid" style="color:#059669;"><?php echo esc_html(number_format((int)$mgmt_fin['paid'])); ?></strong>
+				</div>
+				<div class="cptt-manage-fin-box">
+					<span>مانده (ریال)</span>
+					<strong class="cptt-manage-fin-remain" style="color:<?php echo $mgmt_fin['remain'] > 0 ? '#dc2626' : '#059669'; ?>"><?php echo esc_html(number_format((int)$mgmt_fin['remain'])); ?></strong>
+				</div>
+				<div class="cptt-manage-fin-box">
+					<span>درصد پرداخت</span>
+					<strong><?php echo esc_html($mgmt_fin['percent']); ?>%</strong>
+				</div>
+			</div>
 
 			<!-- Form Footer -->
 			<div class="cptt-expert-formFooter">
@@ -1177,6 +1269,23 @@ class CPTT_Expert {
 
 	private function handle_manage_expert_submission() {
 		if (!current_user_can('manage_options')) return null;
+		// حذف کارشناس
+		if (!empty($_GET['delete_expert_id'])) {
+			$del_id = absint($_GET['delete_expert_id']);
+			if ($del_id && check_admin_referer('cptt_delete_expert_' . $del_id)) {
+				$user = get_user_by('id', $del_id);
+				if ($user) {
+					$user->remove_role('cptt_expert');
+					// اگر نقش دیگری نداره حذف کامل کن
+					$remaining = array_filter((array)$user->roles, function($r){ return $r !== 'cptt_expert'; });
+					if (empty($remaining)) {
+						require_once ABSPATH . 'wp-admin/includes/user.php';
+						wp_delete_user($del_id);
+					}
+				}
+				return ['type' => 'success', 'message' => 'کارشناس با موفقیت حذف شد.'];
+			}
+		}
 		if ($_SERVER['REQUEST_METHOD'] !== 'POST') return null;
 		if (empty($_POST['cptt_expert_manage_submit'])) return null;
 		check_admin_referer('cptt_expert_manage_action', 'cptt_expert_manage_nonce');
@@ -1325,7 +1434,10 @@ class CPTT_Expert {
 									<div class="cptt-adminExperts__stats"><span>فعال: <?php echo esc_html((string) ($profile['active_projects'] ?? 0)); ?></span><span>تکمیل‌شده: <?php echo esc_html((string) ($profile['completed_projects'] ?? 0)); ?></span></div>
 									<?php if (!empty($profile['specialties'])): ?><div class="cptt-adminExperts__tags"><?php foreach ((array) $profile['specialties'] as $tag): ?><span><?php echo esc_html($tag); ?></span><?php endforeach; ?></div><?php endif; ?>
 								</div>
-								<a class="button" href="<?php echo esc_url(add_query_arg(['post_type' => 'cptt_project', 'page' => 'cptt-experts-manage', 'expert_id' => $expert->ID], admin_url('edit.php'))); ?>">ویرایش</a>
+								<div style="display:flex;gap:6px;flex-direction:column;">
+									<a class="button button-primary" href="<?php echo esc_url(add_query_arg(['post_type' => 'cptt_project', 'page' => 'cptt-experts-manage', 'expert_id' => $expert->ID], admin_url('edit.php'))); ?>">✏️ ویرایش</a>
+									<a class="button button-link-delete" href="<?php echo esc_url(wp_nonce_url(add_query_arg(['post_type' => 'cptt_project', 'page' => 'cptt-experts-manage', 'delete_expert_id' => $expert->ID], admin_url('edit.php')), 'cptt_delete_expert_' . $expert->ID)); ?>" onclick="return confirm('آیا از حذف این کارشناس مطمئنید؟ این کار قابل برگشت نیست.');" style="color:#b91c1c;text-align:center;">🗑 حذف</a>
+								</div>
 							</div>
 						<?php endforeach; endif; ?>
 					</div>
@@ -1581,8 +1693,8 @@ class CPTT_Expert {
 			<div class="cptt-publicProject__top">
 				<div>
 					<h3><?php echo esc_html($project['title']); ?></h3>
-					<div class="cptt-project__meta">تاریخ شروع: <?php echo esc_html($project['start_fa'] ?: '—'); ?></div>
-					<?php if ($project['last_update']): ?><div class="cptt-project__meta">آخرین بروزرسانی: <?php echo esc_html($project['last_update']); ?></div><?php endif; ?>
+					<div class="cptt-project__meta cptt-show-day" data-date="<?php echo esc_attr($project['start_fa'] ?: ''); ?>">تاریخ شروع: <?php echo esc_html($project['start_fa'] ?: '—'); ?></div>
+					<?php if ($project['last_update']): ?><div class="cptt-project__meta cptt-show-day" data-date="<?php echo esc_attr($project['last_update']); ?>">آخرین بروزرسانی: <?php echo esc_html($project['last_update']); ?></div><?php endif; ?>
 				</div>
 				<div class="cptt-publicProject__statusWrap">
 					<span class="cptt-expertStatusBadge cptt-expertStatusBadge--<?php echo esc_attr($project['progress']['status']); ?>"><?php echo esc_html($project['progress']['label']); ?></span>
@@ -2410,7 +2522,7 @@ class CPTT_Expert {
 
 				<?php if (($vis['delivery'] ?? '1') === '1'): ?>
 				<!-- Delivery Section inside popup -->
-				<div id="cptt-create-address-wrap" style="grid-column: 1 / -1; display:none; border-top: 1px dashed #cbd5e1; padding-top: 15px; margin-top: 10px;">
+				<div id="cptt-create-address-wrap" style="grid-column: 1 / -1; border-top: 1px dashed #cbd5e1; padding-top: 15px; margin-top: 10px;">
 					<span style="font-size: 13px; font-weight: 900; color: #475569; display: block; margin-bottom: 6px;">روش و آدرس تحویل پروژه</span>
 					<div class="cptt-createProjectGrid" style="grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px; padding:0;">
 						<label style="margin:0;">
@@ -2427,14 +2539,14 @@ class CPTT_Expert {
 							</select>
 						</label>
 					</div>
-					<div class="cptt-createProjectGrid" style="grid-template-columns: 1fr; gap:10px; padding:0;">
+					<div class="cptt-createProjectGrid" style="grid-template-columns: 1fr 1fr; gap:10px; padding:0;">
 						<label id="cptt-create-city-wrap" style="display:none; margin:0;">
 							<span>شهر</span>
 							<select name="delivery_city" id="cptt-create-city" style="width:100%;">
 								<option value="">— انتخاب شهر —</option>
 							</select>
 						</label>
-						<label id="cptt-create-detail-address-wrap" style="display:none; margin:0;">
+						<label id="cptt-create-detail-address-wrap" style="display:none; margin:0; grid-column:1/-1;">
 							<span>آدرس تکمیلی</span>
 							<textarea name="delivery_address" id="cptt-create-detail-address" rows="2" placeholder="خیابان، کوچه، پلاک، واحد..."></textarea>
 						</label>
@@ -2450,23 +2562,26 @@ class CPTT_Expert {
 		</form>
 
 		<!-- Nested New Customer Modal -->
-		<div id="cptt-new-customer-modal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.6); z-index:10000000000; align-items:center; justify-content:center; padding:15px; backdrop-filter:blur(3px);">
-			<div style="background:#ffffff; border-radius:18px; width:min(400px, 100%); padding:20px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.1); border:1px solid #e2e8f0; position:relative; direction:rtl; text-align:right;">
-				<span style="font-size:14px; font-weight:bold; color:#0f172a; display:block; margin-bottom:12px;">ثبت مشتری جدید</span>
-				<div class="cptt-createProjectGrid" style="grid-template-columns:1fr; gap:10px; padding:0;">
-					<label style="margin:0;">
-						<span>نام و نام خانوادگی</span>
-						<input type="text" id="cptt-cust-fullname" placeholder="مثال: علیرضا محمدی" style="width:100%;">
-					</label>
-					<label style="margin:0;">
-						<span>شماره موبایل</span>
-						<input type="text" id="cptt-cust-phone" placeholder="مثال: ۰۹۱۲۳۴۵۶۷۸۹" style="width:100%;">
-					</label>
-					<div style="display:flex; gap:10px; margin-top:10px;">
-						<button type="button" id="cptt-cust-submit" class="cptt-btn cptt-btn--primary" style="flex:1;">ثبت مشتری</button>
-						<button type="button" id="cptt-cust-close" class="cptt-btn" style="flex:1; background:#f1f5f9; color:#475569;">انصراف</button>
+		<div id="cptt-new-customer-modal" class="cptt-new-customer-modal-overlay" style="display:none;">
+			<div class="cptt-new-customer-modal-dialog">
+				<div class="cptt-ncm-header">
+					<h3>👤 ثبت مشتری جدید</h3>
+					<button type="button" id="cptt-cust-close" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;color:#475569;padding:0;box-shadow:none;min-width:0;margin:0;line-height:1;">×</button>
+				</div>
+				<div class="cptt-ncm-body">
+					<div class="cptt-ncm-field">
+						<label for="cptt-cust-fullname">نام و نام خانوادگی <span style="color:#ef4444">*</span></label>
+						<input type="text" id="cptt-cust-fullname" placeholder="مثال: علیرضا محمدی" autocomplete="name">
 					</div>
-					<div id="cptt-cust-msg" style="font-size:12px; margin-top:5px; text-align:center;"></div>
+					<div class="cptt-ncm-field">
+						<label for="cptt-cust-phone">شماره موبایل <span style="color:#ef4444">*</span></label>
+						<input type="tel" id="cptt-cust-phone" placeholder="مثال: ۰۹۱۲۳۴۵۶۷۸۹" autocomplete="tel">
+					</div>
+				</div>
+				<div id="cptt-cust-msg"></div>
+				<div class="cptt-ncm-footer">
+					<button type="button" id="cptt-cust-submit" class="cptt-btn cptt-btn--primary">✔ ثبت مشتری</button>
+					<button type="button" class="cptt-btn" style="background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;" onclick="document.getElementById('cptt-new-customer-modal').style.display='none';">انصراف</button>
 				</div>
 			</div>
 		</div>
@@ -2474,37 +2589,41 @@ class CPTT_Expert {
 		<script>
 		(function() {
 			var provincesAndCities = {
-				"تهران": ["تهران", "ورامین", "شهریار", "قدس", "ملارد", "صالحیه", "پاکدشت", "اسلامشهر", "ری", "دماوند"],
-				"اصفهان": ["اصفهان", "کاشان", "خمینی‌شهر", "نجف‌آباد", "شاهین‌شهر", "شهرضا", "فولادشهر", "تیران", "گلپایگان"],
-				"خراسان رضوی": ["مشهد", "سبزوار", "نیشابور", "تربت حیدریه", "قوچان", "کاشمر", "چناران", "سرخس", "درگز"],
-				"فارس": ["شیراز", "مرودشت", "جهرم", "فسا", "داراب", "فیروزآباد", "لار", "کازرون", "آباده"],
-				"خوزستان": ["اهواز", "دزفول", "آبادان", "خرمشهر", "اندیمشک", "ایذه", "شوشتر", "بهبهان", "ماهشهر"],
-				"آذربایجان شرقی": ["تبریز", "مراغه", "مرند", "میانه", "اهر", "بناب", "سراب", "ملکان", "جلفا"],
-				"آذربایجان غربی": ["ارومیه", "خوی", "بوکان", "مهاباد", "میاندوآب", "سلماس", "پیرانشهر", "نقده", "تکاب"],
-				"مازندران": ["ساری", "بابل", "آمل", "قائم‌شهر", "بهشهر", "چالوس", "نوشهر", "تنکابن", "رامسر"],
-				"گیلان": ["رشت", "بندر انزلی", "لاهیجان", "لنگرود", "هشتپر", "آستارا", "صومعه‌سرا", "رودسر", "فومن"],
-				"کرمان": ["کرمان", "سیرجان", "رفسنجان", "جیرفت", "بم", "زرند", "کهنوج", "شهربابک"],
-				"سیستان و بلوچستان": ["زاهدان", "زابل", "ایرانشهر", "چابهار", "سراوان", "خاش", "کنارک"],
-				"البرز": ["کرج", "فردیس", "کمال‌شهر", "نظرآباد", "محمدشهر", "هشتگرد", "اشتهارد"],
-				"کرمانشاه": ["کرمانشاه", "اسلام‌آباد غرب", "کنگاور", "جوانرود", "سرپل ذهاب", "سنقر", "هرسین"],
-				"همدان": ["همدان", "ملایر", "نهاوند", "تویسرکان", "اسدآباد", "کبودرآهنگ", "بهار"],
-				"یزد": ["یزد", "میبد", "اردکان", "بافق", "مهریز", "ابرکوه", "تفت"],
-				"کردستان": ["سنندج", "سقز", "مریوان", "بانه", "قروه", "کامیاران", "بیجار", "دیواندره"],
-				"هرمزگان": ["بندرعباس", "میناب", "دهبارز", "قشم", "کیش", "بندر لنگه", "جاسک"],
-				"گلستان": ["گرگان", "گنبد کاووس", "بندر ترکمن", "علی‌آباد کتول", "کردکوی", "کلاله", "آزادشهر"],
-				"لرستان": ["خرم‌آباد", "بروجرد", "دورود", "کوهدشت", "دلفان", "الیگودرز", "الشتر", "ازنا"],
-				"مرکزی": ["اراک", "ساوه", "خمینی", "محلات", "دلیجان", "شازند", "تفرش"],
-				"اردبیل": ["اردبیل", "پارس‌آباد", "مشگین‌شهر", "خلخال", "گرمی", "نمین"],
-				"قزوین": ["قزوین", "الوند", "تاکستان", "آبیک", "اقبالیه", "محمدیه"],
-				"قم": ["قم", "قنوات", "جعفریه"],
-				"sمنان": ["سمنان", "شاهرود", "دامغان", "گرمسار", "مهدی‌شهر", "سرخه"],
-				"بوشهر": ["بوشهر", "برازجان", "گناوه", "کنگان", "خورموج", "دیلم", "عسلویه"],
-				"زنجان": ["زنجان", "ابهر", "خرمدره", "قیدار", "آب‌بر"],
-				"چهارمحال و بختیاری": ["شهرکرد", "بروجن", "لردگان", "فارسان", "اردل"],
-				"خراسان شمالی": ["بجنورد", "شیروان", "اسفراین", "آشخانه", "جاجرم"],
-				"خراسان جنوبی": ["بیرجند", "قائن", "طبس", "فردوس", "نهبندان"],
-				"کهگیلویه و بویراحمد": ["یاسوج", "دوگنبدان", "دهدشت", "لیکک", "سی‌سخت"],
-				"ایلام": ["ایلام", "ایوان", "دهلران", "آبدانان", "مهران"]
+				"تهران": ["تهران","ورامین","شهریار","قدس","ملارد","پاکدشت","اسلامشهر","رباط کریم","فیروزکوه","دماوند","بومهن","پردیس","نسیم‌شهر","چهاردانگه","باغستان"],
+				"البرز": ["کرج","فردیس","نظرآباد","هشتگرد","طالقان","چهارباغ","اشتهارد","ماهدشت","گرمدره","شهر جدید هشتگرد"],
+				"اصفهان": ["اصفهان","کاشان","خمینی‌شهر","نجف‌آباد","شهرضا","فلاورجان","مبارکه","زرین‌شهر","آران و بیدگل","اردستان","سمیرم","گلپایگان","تیران","شاهین‌شهر","دهاقان","نطنز","آران","فریدن","چادگان","برخوار","لنجان"],
+				"فارس": ["شیراز","مرودشت","جهرم","کازرون","فسا","داراب","لارستان","آباده","اقلید","ممسنی","خرامه","نی‌ریز","اوز","خفر","فیروزآباد","سپیدان"],
+				"خراسان رضوی": ["مشهد","نیشابور","سبزوار","تربت حیدریه","قوچان","گناباد","کاشمر","تایباد","درگز","تربت جام","فریمان","خواف","رشتخوار","مه‌ولات","بردسکن","چناران","جوین"],
+				"آذربایجان شرقی": ["تبریز","مراغه","میانه","اهر","مرند","سراب","هریس","بناب","ملکان","عجبشیر","بستان‌آباد","کلیبر","چاراویماق","ورزقان","شبستر","اسکو","ترکمانچای"],
+				"آذربایجان غربی": ["ارومیه","خوی","مهاباد","بوکان","سلماس","میاندوآب","نقده","پیرانشهر","شاهین‌دژ","سردشت","اشنویه","تکاب","ماکو","چالدران","پلدشت"],
+				"کرمان": ["کرمان","رفسنجان","جیرفت","بم","زرند","سیرجان","بافت","شهربابک","انار","راور","کوهبنان","رودبار جنوب","قلعه‌گنج","ریگان","عنبرآباد","منوجان"],
+				"خوزستان": ["اهواز","آبادان","دزفول","خرمشهر","ماهشهر","شوشتر","ایذه","بهبهان","اندیمشک","مسجد سلیمان","امیدیه","رامهرمز","دشت‌آزادگان","هندیجان","اغاجاری","لالی","حمیدیه","کارون"],
+				"مازندران": ["ساری","آمل","بابل","قائمشهر","نوشهر","چالوس","تنکابن","رامسر","بهشهر","نکا","جویبار","سیمرغ","بابلسر","محمودآباد","فریدونکنار","گلوگاه","مرزیکلا"],
+				"گیلان": ["رشت","انزلی","لاهیجان","لنگرود","صومعه‌سرا","تالش","آستارا","رودبار","فومن","رودسر","آستانه اشرفیه","شفت","ماسال","سیاهکل","رضوانشهر","بندرانزلی"],
+				"هرمزگان": ["بندرعباس","میناب","قشم","بندرلنگه","حاجی‌آباد","رودان","جاسک","ابوموسی","بشاگرد","کهنوج","سیریک","خمیر","پارسیان","بستک"],
+				"سیستان و بلوچستان": ["زاهدان","زابل","چابهار","ایرانشهر","سراوان","نیکشهر","خاش","سرباز","دلگان","هیرمند","هامون","مهرستان","قصرقند"],
+				"کرمانشاه": ["کرمانشاه","اسلام‌آباد","هرسین","کنگاور","سنقر","جوانرود","پاوه","دالاهو","ثلاث‌باباجانی","قصرشیرین","گیلانغرب","روانسر"],
+				"گلستان": ["گرگان","گنبد کاووس","علی‌آباد","مینودشت","بندرگز","رامیان","آق‌قلا","ترکمن","کردکوی","گالیکش","کلاله","آزادشهر","مراوه‌تپه"],
+				"لرستان": ["خرم‌آباد","بروجرد","کوهدشت","دورود","الیگودرز","ازنا","نورآباد","پلدختر","سلسله","رومشکان"],
+				"همدان": ["همدان","ملایر","تویسرکان","نهاوند","بهار","رزن","اسدآباد","کبودرآهنگ","فامنین","قروه‌درجزین"],
+				"قم": ["قم","کهک","دستجرد","جعفریه"],
+				"قزوین": ["قزوین","البرز","بویین‌زهرا","تاکستان","آبیک","اقبالیه","محمدیه","شال","آوج"],
+				"زنجان": ["زنجان","ابهر","خرمدره","ایجرود","طارم","ماهنشان","سلطانیه"],
+				"اردبیل": ["اردبیل","مشکین‌شهر","پارس‌آباد","خلخال","بیله‌سوار","نمین","نیر","کوثر","گرمی","سرعین"],
+				"بوشهر": ["بوشهر","برازجان","گناوه","دیلم","خورموج","عسلویه","جم","دشتی","تنگستان","دشتستان"],
+				"مرکزی": ["اراک","ساوه","محلات","خمین","دلیجان","تفرش","آشتیان","کمیجان","شازند","زرندیه"],
+				"ایلام": ["ایلام","مهران","دره‌شهر","آبدانان","دهلران","ایوان","سیروان","ملکشاهی","بدره"],
+				"کهگیلویه و بویراحمد": ["یاسوج","گچساران","دوگنبدان","دنا","بهمئی","لنده","چرام","باشت"],
+				"خراسان شمالی": ["بجنورد","شیروان","اسفراین","قوچان","مانه و سملقان","جاجرم","فاروج","گرمه","راز و جرگلان"],
+				"خراسان جنوبی": ["بیرجند","قاین","طبس","فردوس","بشرویه","درمیان","سربیشه","خوسف","نهبندان"],
+				"سمنان": ["سمنان","گرمسار","شاهرود","دامغان","مهدی‌شهر","سرخه","آرادان","میامی","شاهرود"],
+				"چهارمحال و بختیاری": ["شهرکرد","بروجن","فارسان","لردگان","سامان","کوهرنگ","کیار","اردل"],
+				"کردستان": ["سنندج","سقز","مریوان","بانه","قروه","کامیاران","دیواندره","بیجار","سروآباد","دهگلان"],
+				"یزد": ["یزد","میبد","اردکان","بافق","ابرکوه","تفت","خاتم","مهریز","بهاباد"],
+				"خراسان": ["مشهد","نیشابور","سبزوار","قوچان","درگز","گناباد","فریمان"],
+				"خراسان جنوبی": ["بیرجند","قاین","طبس","فردوس","بشرویه"],
+				"گیلان": ["رشت","انزلی","لاهیجان","لنگرود","صومعه‌سرا","تالش"],
+				"سیستان و بلوچستان": ["زاهدان","زابل","چابهار","ایرانشهر","سراوان"]
 			};
 
 			function escapeHtml(text) {
@@ -2533,17 +2652,19 @@ class CPTT_Expert {
 				var remainingInput = document.getElementById('cptt-create-remaining');
 				var financeStatus = document.getElementById('cptt-create-finance-status');
 				
+				// Delivery chain for CREATE form
 				var deliverySelect = document.getElementById('cptt-create-delivery-method');
-				var addressWrap = document.getElementById('cptt-create-address-wrap');
 				var provinceWrap = document.getElementById('cptt-create-province-wrap');
 				var provinceSelect = document.getElementById('cptt-create-province');
 				var citySelect = document.getElementById('cptt-create-city');
 				var cityWrap = document.getElementById('cptt-create-city-wrap');
 				var detailAddressWrap = document.getElementById('cptt-create-detail-address-wrap');
 
-				var clientSelect = document.querySelector('select[name="client_user_id"]');
+				// target ONLY the create form's client select (first match inside create form)
+				var createForm = document.querySelector('.cptt-expert-create-form');
+				var clientSelect = createForm ? createForm.querySelector('select[name="client_user_id"]') : null;
 
-				// Populate provinces dropdown
+				// Populate provinces dropdown for create form
 				if (provinceSelect) {
 					provinceSelect.innerHTML = '<option value="">— انتخاب استان —</option>';
 					Object.keys(provincesAndCities).sort().forEach(function(prov) {
@@ -2565,6 +2686,7 @@ class CPTT_Expert {
 									citySelect.appendChild(opt);
 								});
 							}
+							if (cityWrap) { cityWrap.style.display = 'block'; cityWrap.style.removeProperty('display'); cityWrap.removeAttribute('style'); cityWrap.style.display = ''; }
 							if (cityWrap) cityWrap.style.display = 'block';
 						} else {
 							if (cityWrap) cityWrap.style.display = 'none';
@@ -2583,13 +2705,12 @@ class CPTT_Expert {
 					});
 				}
 
-				if (deliverySelect && addressWrap) {
+				// Delivery method toggle for CREATE form (province/city chain)
+				if (deliverySelect) {
 					deliverySelect.addEventListener('change', function() {
 						if (deliverySelect.value === 'shipping') {
-							addressWrap.style.display = 'block';
 							if (provinceWrap) provinceWrap.style.display = 'block';
 						} else {
-							addressWrap.style.display = 'none';
 							if (provinceWrap) provinceWrap.style.display = 'none';
 							if (cityWrap) cityWrap.style.display = 'none';
 							if (detailAddressWrap) detailAddressWrap.style.display = 'none';
@@ -2739,95 +2860,12 @@ class CPTT_Expert {
 					});
 				}
 
-				// Trigger customer creation modal
-				if (clientSelect) {
-					var hasTrigger = false;
-					for (var i = 0; i < clientSelect.options.length; i++) {
-						if (clientSelect.options[i].value === 'new_customer_trigger') {
-							hasTrigger = true; break;
-						}
-					}
-					if (!hasTrigger) {
-						var newOpt = document.createElement('option');
-						newOpt.value = 'new_customer_trigger';
-						newOpt.style.fontWeight = 'bold';
-						newOpt.style.color = '#6366f1';
-						newOpt.textContent = '+ ثبت مشتری جدید —';
-						clientSelect.insertBefore(newOpt, clientSelect.firstChild);
-					}
-
-					clientSelect.addEventListener('change', function() {
-						if (clientSelect.value === 'new_customer_trigger') {
-							var custModal = document.getElementById('cptt-new-customer-modal');
-							if (custModal) {
-								custModal.style.display = 'flex';
-							}
-							clientSelect.value = '';
-						}
-					});
-				}
-
+				// New customer trigger is handled by expert.js initNewCustomerModals()
 				// Generate default first row
 				rebuildStepsFinanceList([]);
 			}
 
-			// New Customer Submission
-			var custSubmit = document.getElementById('cptt-cust-submit');
-			var custClose = document.getElementById('cptt-cust-close');
-			var custModal = document.getElementById('cptt-new-customer-modal');
-			if (custSubmit && custClose && custModal) {
-				custClose.addEventListener('click', function() {
-					custModal.style.display = 'none';
-				});
-
-				custSubmit.addEventListener('click', function() {
-					var fullname = document.getElementById('cptt-cust-fullname').value.trim();
-					var phone = document.getElementById('cptt-cust-phone').value.trim();
-					var msg = document.getElementById('cptt-cust-msg');
-
-					if (!fullname || !phone) {
-						if (msg) { msg.textContent = 'نام و شماره موبایل الزامی است.'; msg.style.color = '#ef4444'; }
-						return;
-					}
-
-					if (msg) { msg.textContent = 'در حال ثبت...'; msg.style.color = '#475569'; }
-
-					var fd = new FormData();
-					fd.append('action', 'cptt_expert_create_customer');
-					fd.append('nonce', (window.CPTT_EXPERT && CPTT_EXPERT.nonce) ? CPTT_EXPERT.nonce : '');
-					fd.append('full_name', fullname);
-					fd.append('phone', phone);
-
-					fetch((window.CPTT_EXPERT && CPTT_EXPERT.ajax) ? CPTT_EXPERT.ajax : '', {
-						method: 'POST',
-						body: fd
-					}).then(r => r.json()).then(res => {
-						if (res.success) {
-							if (msg) { msg.textContent = 'مشتری با موفقیت ثبت شد.'; msg.style.color = '#047857'; }
-							
-							var select = document.querySelector('select[name="client_user_id"]');
-							if (select) {
-								var opt = document.createElement('option');
-								opt.value = res.data.ID;
-								opt.textContent = res.data.display_name + ' (' + res.data.user_email + ')';
-								select.appendChild(opt);
-								select.value = res.data.ID;
-							}
-
-							setTimeout(function() {
-								custModal.style.display = 'none';
-								document.getElementById('cptt-cust-fullname').value = '';
-								document.getElementById('cptt-cust-phone').value = '';
-								if (msg) msg.textContent = '';
-							}, 1000);
-						} else {
-							if (msg) { msg.textContent = res.data || 'خطا در ثبت مشتری'; msg.style.color = '#ef4444'; }
-						}
-					}).catch(err => {
-						if (msg) { msg.textContent = 'خطای شبکه در ثبت مشتری'; msg.style.color = '#ef4444'; }
-					});
-				});
-			}
+			// New Customer modal is handled by expert.js (bindNewCustomerSubmit)
 			
 			if (document.readyState === 'loading') {
 				document.addEventListener('DOMContentLoaded', setupCreateFinance);
@@ -2837,6 +2875,30 @@ class CPTT_Expert {
 		})();
 		</script>
 		<?php
+	}
+
+	public function ajax_save_own_profile() {
+		if (!is_user_logged_in()) wp_send_json_error('login_required', 401);
+		check_ajax_referer('cptt_expert_nonce', 'nonce');
+		if (!$this->current_user_can_view_dashboard()) wp_send_json_error('no_access', 403);
+		$uid = get_current_user_id();
+		$display_name = sanitize_text_field($_POST['display_name'] ?? '');
+		$title = sanitize_text_field($_POST['title'] ?? '');
+		$bio = sanitize_textarea_field($_POST['bio'] ?? '');
+		$specialties = sanitize_text_field($_POST['specialties'] ?? '');
+		$email = sanitize_email($_POST['email'] ?? '');
+		$avatar_id = absint($_POST['avatar_id'] ?? 0);
+		$password = $_POST['password'] ?? '';
+		$update = ['ID' => $uid];
+		if ($display_name) $update['display_name'] = $display_name;
+		if ($email && is_email($email)) $update['user_email'] = $email;
+		if ($password !== '') $update['user_pass'] = $password;
+		wp_update_user($update);
+		update_user_meta($uid, 'cptt_expert_title', $title);
+		update_user_meta($uid, 'cptt_expert_short_bio', $bio);
+		update_user_meta($uid, 'cptt_expert_specialties', $specialties);
+		if ($avatar_id) update_user_meta($uid, 'cptt_expert_avatar_id', $avatar_id);
+		wp_send_json_success(['message' => 'پروفایل با موفقیت ذخیره شد.']);
 	}
 
 	public function shortcode_dashboard($atts) {
@@ -2867,6 +2929,12 @@ class CPTT_Expert {
 		<div class="cptt-wrap cptt-expertWrap cptt-v2-scope" dir="rtl">
 			<div class="cptt-expertLayout">
 				<aside class="cptt-expertSidebar">
+
+					<!-- دکمه‌های ویرایش پروفایل و خروج -->
+					<div class="cptt-sidebar-userActions" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+						<a href="<?php echo esc_url(wp_nonce_url(self::dashboard_url() . '&cptt_edit_profile=1', 'cptt_edit_profile')); ?>" class="cptt-btn cptt-btn--secondary" style="flex:1;font-size:12px;padding:8px 10px;min-height:36px;text-align:center;">✏️ ویرایش پروفایل</a>
+						<a href="<?php echo esc_url(wp_logout_url(home_url('/'))); ?>" class="cptt-btn" style="flex:1;font-size:12px;padding:8px 10px;min-height:36px;text-align:center;background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;" onclick="return confirm('از حساب کاربری خارج می‌شوید؟');">🚪 خروج</a>
+					</div>
 
 					<div class="cptt-sidebar-controls desktop-only" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; background: #fff; padding: 12px; border-radius: 16px; border: 1px solid #e6ebf2; box-shadow: 0 4px 10px rgba(0,0,0,0.03); position:relative; z-index: 10000000 !important;">
 						<button type="button" class="cptt-dark-toggle-icon" title="تغییر حالت شب/روز" style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:50%;width:42px;height:42px;display:flex;align-items:center;justify-content:center;cursor:pointer;">
@@ -3119,7 +3187,21 @@ class CPTT_Expert {
 					$data = $this->project_card_data($p->ID);
 					$search = strtolower(get_the_title($p->ID) . ' ' . $data['customer'] . ' ' . $data['product'] . ' ' . implode(' ', $data['experts']));
 				?>
-				<article class="cptt-expertCard" data-project-id="<?php echo esc_attr($p->ID); ?>" data-search="<?php echo esc_attr($search); ?>" data-status="<?php echo esc_attr($data['progress']['status']); ?>" data-settled="<?php echo esc_attr((string)$data['settled']); ?>" data-client="<?php echo esc_attr((string)$data['customer_id']); ?>" data-product="<?php echo esc_attr((string)$data['product_id']); ?>" data-cats=",<?php echo esc_attr(implode(',', array_map('intval', (array)$data['term_ids']))); ?>,">
+				<?php
+				$_card_experts_for_step = [];
+				foreach ((array)$data['experts'] as $_exp_name) {
+					// match name to ID via expert_ids from card
+				}
+				// build expert list for step-expert modal
+				$_step_experts_raw = CPTT_Core::get_project_expert_ids($p->ID);
+				$_step_experts_list = [];
+				foreach ($_step_experts_raw as $_se_id) {
+					$_se_user = get_user_by('id', (int)$_se_id);
+					if ($_se_user) $_step_experts_list[] = ['id' => (int)$_se_id, 'name' => $_se_user->display_name];
+				}
+				$_step_experts_b64 = base64_encode(wp_json_encode($_step_experts_list, JSON_UNESCAPED_UNICODE));
+			?>
+			<article class="cptt-expertCard" data-project-id="<?php echo esc_attr($p->ID); ?>" data-search="<?php echo esc_attr($search); ?>" data-status="<?php echo esc_attr($data['progress']['status']); ?>" data-settled="<?php echo esc_attr((string)$data['settled']); ?>" data-client="<?php echo esc_attr((string)$data['customer_id']); ?>" data-product="<?php echo esc_attr((string)$data['product_id']); ?>" data-cats=",<?php echo esc_attr(implode(',', array_map('intval', (array)$data['term_ids']))); ?>," data-project-experts="<?php echo esc_attr($_step_experts_b64); ?>">
 					<div class="cptt-expertCard__top">
 						<div>
 							<h3><?php echo esc_html(get_the_title($p->ID)); ?></h3>
@@ -3136,10 +3218,17 @@ class CPTT_Expert {
 						<div><strong><?php echo esc_html(number_format_i18n((int)$data['financial']['remain'])); ?></strong><span>مانده مالی</span></div>
 					</div>
 					<div class="cptt-expertCard__infoGrid">
-						<div><span>مهلت پروژه</span><strong><?php echo esc_html($data['deadline'] ?: '—'); ?></strong></div>
-						<div><span>آخرین بروزرسانی</span><strong class="cptt-expert-last-update"><?php echo esc_html($data['last_update'] ?: '—'); ?></strong></div>
+						<div><span>مهلت پروژه</span><strong class="cptt-show-day" data-date="<?php echo esc_attr($data['deadline']); ?>"><?php echo esc_html($data['deadline'] ?: '—'); ?></strong></div>
+						<div><span>آخرین بروزرسانی</span><strong class="cptt-expert-last-update cptt-show-day" data-date="<?php echo esc_attr($data['last_update']); ?>"><?php echo esc_html($data['last_update'] ?: '—'); ?></strong></div>
 						<div><span>وضعیت مالی</span><strong><?php echo $data['settled'] ? 'تسویه شده' : 'تسویه نشده'; ?></strong></div>
 						<div><span>هزینه / دریافتی</span><strong><?php echo esc_html(number_format_i18n((int)$data['financial']['cost']) . ' / ' . number_format_i18n((int)$data['financial']['paid'])); ?></strong></div>
+						<div><span>روش تحویل</span><strong><?php echo esc_html($data['delivery_method_label'] ?: '—'); ?></strong></div>
+						<?php if (!empty($data['delivery_province'])): ?>
+						<div><span>استان / شهر</span><strong><?php echo esc_html($data['delivery_province'] . ($data['delivery_city'] ? ' / ' . $data['delivery_city'] : '')); ?></strong></div>
+						<?php endif; ?>
+						<?php if (!empty($data['delivery_address'])): ?>
+						<div style="grid-column:1/-1;"><span>آدرس ارسال</span><strong><?php echo esc_html($data['delivery_address']); ?></strong></div>
+						<?php endif; ?>
 					</div>
 					<div class="cptt-expertCard__actions">
 						<button type="button" class="cptt-btn cptt-btn--primary cptt-expert-toggleProject">مدیریت پروژه</button>
@@ -3206,6 +3295,48 @@ class CPTT_Expert {
 				<?php endforeach; endif; ?>
 			</div>
 			<div class="cptt-dashboard__empty" id="cptt-expert-empty" hidden>هیچ پروژه‌ای با این فیلترها پیدا نشد.</div>
+				</div>
+			</div>
+
+			<!-- ========== EDIT PROFILE MODAL ========== -->
+			<?php
+			$cur_user = wp_get_current_user();
+			$cur_title = (string)get_user_meta($current_user->ID, 'cptt_expert_title', true);
+			$cur_bio = (string)get_user_meta($current_user->ID, 'cptt_expert_short_bio', true);
+			$cur_specialties = (string)get_user_meta($current_user->ID, 'cptt_expert_specialties', true);
+			$cur_avatar_id = (int)get_user_meta($current_user->ID, 'cptt_expert_avatar_id', true);
+			$cur_avatar_url = $cur_avatar_id ? wp_get_attachment_image_url($cur_avatar_id, 'medium') : $this->get_expert_avatar_url($current_user->ID, 80);
+			?>
+			<div class="cptt-editProfileModal" id="cptt-edit-profile-modal" hidden>
+				<div class="cptt-editProfileModal__backdrop" id="cptt-edit-profile-backdrop"></div>
+				<div class="cptt-editProfileModal__dialog" role="dialog" aria-modal="true" aria-labelledby="cptt-ep-title">
+					<div class="cptt-editProfileModal__header">
+						<h3 id="cptt-ep-title">ویرایش پروفایل</h3>
+						<button type="button" class="cptt-editProfileModal__close" aria-label="بستن">×</button>
+					</div>
+					<form class="cptt-editProfileForm" id="cptt-edit-profile-form">
+						<div class="cptt-editProfile__avatarWrap">
+							<div class="cptt-editProfile__avatarPreview" id="cptt-ep-avatar-preview">
+								<?php if ($cur_avatar_url): ?><img src="<?php echo esc_url($cur_avatar_url); ?>" alt="avatar"><?php else: ?><span><?php echo esc_html(mb_substr($current_user->display_name,0,1)); ?></span><?php endif; ?>
+							</div>
+							<div>
+								<input type="hidden" id="cptt-ep-avatar-id" name="avatar_id" value="<?php echo esc_attr((string)$cur_avatar_id); ?>">
+								<button type="button" class="cptt-btn cptt-btn--secondary" id="cptt-ep-avatar-btn" style="font-size:12px;padding:6px 12px;min-height:32px;">📷 تغییر عکس</button>
+							</div>
+						</div>
+						<div class="cptt-editProfile__grid">
+							<label><span>نام نمایشی</span><input type="text" name="display_name" value="<?php echo esc_attr($current_user->display_name); ?>"></label>
+							<label><span>ایمیل</span><input type="email" name="email" value="<?php echo esc_attr($current_user->user_email); ?>"></label>
+							<label><span>سمت / عنوان</span><input type="text" name="title" value="<?php echo esc_attr($cur_title); ?>" placeholder="مثلاً کارشناس طراحی سایت"></label>
+							<label><span>تخصص‌ها (با کاما جدا کنید)</span><input type="text" name="specialties" value="<?php echo esc_attr($cur_specialties); ?>" placeholder="طراحی سایت، سئو، پشتیبانی"></label>
+							<label class="cptt-editProfile__fullWidth"><span>بیوگرافی کوتاه</span><textarea name="bio" rows="3" placeholder="چند جمله درباره خودتان..."><?php echo esc_textarea($cur_bio); ?></textarea></label>
+							<label class="cptt-editProfile__fullWidth"><span>رمز عبور جدید (اگر نمی‌خواهید تغییر دهید خالی بگذارید)</span><input type="password" name="password" value="" autocomplete="new-password"></label>
+						</div>
+						<div class="cptt-editProfile__actions">
+							<button type="submit" class="cptt-btn cptt-btn--primary">💾 ذخیره تغییرات</button>
+							<div class="cptt-editProfile__msg" id="cptt-ep-msg" aria-live="polite"></div>
+						</div>
+					</form>
 				</div>
 			</div>
 
