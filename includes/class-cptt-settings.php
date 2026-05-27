@@ -17,6 +17,41 @@ class CPTT_Settings {
 		add_action('admin_head', [$this, 'inject_dynamic_css'], 5);
 	}
 
+	public static function get() {
+		$opt = get_option('cptt_branding', []);
+		return array_merge([
+			'brand_name'    => get_bloginfo('name'),
+			'site_url'      => home_url('/'),
+			'primary_color' => '#6366f1',
+			'footer_text'   => 'این گزارش به صورت خودکار تولید شده است.',
+			'logo_id'       => 0,
+			'sign_id'       => 0,
+			'stamp_id'      => 0,
+			'manager_name'  => '',
+			'manager_title' => '',
+		], is_array($opt) ? $opt : []);
+	}
+
+	public static function get_branding_toggles() {
+		$opt = get_option('cptt_branding_toggles', []);
+		return array_merge([
+			'report_show_logo' => '1',
+			'report_show_client' => '1',
+			'report_show_experts' => '1',
+			'report_show_dates' => '1',
+			'report_show_checklist' => '1',
+			'report_show_usertasks' => '1',
+			'report_show_sign_stamp' => '1',
+			
+			'invoice_show_logo' => '1',
+			'invoice_show_client' => '1',
+			'invoice_show_experts' => '1',
+			'invoice_show_dates' => '1',
+			'invoice_show_sign_stamp' => '1',
+			'invoice_show_step_breakdown' => '1',
+		], is_array($opt) ? $opt : []);
+	}
+
 	public static function get_styles() {
 		$opt = get_option('cptt_styles', []);
 		return array_merge([
@@ -57,6 +92,8 @@ class CPTT_Settings {
 		register_setting('cptt_settings_group', 'cptt_styles');
 		register_setting('cptt_settings_group', 'cptt_advanced');
 		register_setting('cptt_settings_group', 'cptt_fields');
+		register_setting('cptt_settings_group', 'cptt_branding_toggles');
+		register_setting('cptt_settings_group', 'cptt_bale_settings');
 	}
 
 	public function assets($hook) {
@@ -805,11 +842,12 @@ class CPTT_Settings {
 
 	public function page() {
 		$style = self::get_styles();
+		$brand = self::get();
 		$tab = $_GET['tab'] ?? 'style';
 		?>
 		<div class="cptt-settings-wrap cptt-v2-scope" dir="rtl">
 			<header class="cptt-set-header">
-				<div class="cptt-set-logo"><h1>تنظیمات CPTT v5.2.0</h1></div>
+				<div class="cptt-set-logo"><h1>تنظیمات هماهنگ v5.4.2</h1></div>
 				<button type="submit" form="cptt-settings-form" class="cptt-btn-primary">ذخیره تغییرات</button>
 			</header>
 			<div class="cptt-set-body">
@@ -818,6 +856,7 @@ class CPTT_Settings {
 					<a href="?post_type=cptt_project&page=cptt-settings&tab=branding" class="<?php echo $tab==='branding'?'is-active':'';?>">برندینگ</a>
 					<a href="?post_type=cptt_project&page=cptt-settings&tab=fields" class="<?php echo $tab==='fields'?'is-active':'';?>">تنظیمات فیلدها</a>
 					<a href="?post_type=cptt_project&page=cptt-settings&tab=advanced" class="<?php echo $tab==='advanced'?'is-active':'';?>">تنظیمات سیستمی</a>
+					<a href="?post_type=cptt_project&page=cptt-settings&tab=bale" class="<?php echo $tab==='bale'?'is-active':'';?>">ربات بله</a>
 				</aside>
 				<main class="cptt-set-main">
 					<form method="post" action="options.php" id="cptt-settings-form">
@@ -839,6 +878,199 @@ class CPTT_Settings {
 								<div class="cptt-set-field"><label>گردی گوشه‌ها</label><input type="number" name="cptt_styles[border_radius]" value="<?php echo esc_attr($style['border_radius']); ?>" /></div>
 								<div class="cptt-set-field"><label>سایز متن پایه</label><input type="number" name="cptt_styles[font_size_base]" value="<?php echo esc_attr($style['font_size_base']); ?>" /></div>
 								<div class="cptt-set-field"><label>سایز تیتر فیلدها</label><input type="number" name="cptt_styles[label_size]" value="<?php echo esc_attr($style['label_size']); ?>" /></div>
+							</div>
+						<?php elseif ($tab === 'branding'): 
+							$toggles = self::get_branding_toggles();
+						?>
+							<div class="cptt-set-grid">
+								<div class="cptt-set-field">
+									<label>نام برند / عنوان سایت</label>
+									<input type="text" name="cptt_branding[brand_name]" value="<?php echo esc_attr($brand['brand_name']); ?>" />
+								</div>
+								<div class="cptt-set-field">
+									<label>آدرس سایت</label>
+									<input type="url" name="cptt_branding[site_url]" value="<?php echo esc_attr($brand['site_url']); ?>" />
+								</div>
+								<div class="cptt-set-field">
+									<label>رنگ برند اصلی</label>
+									<input type="text" class="cptt-color-picker" name="cptt_branding[primary_color]" value="<?php echo esc_attr($brand['primary_color']); ?>" />
+								</div>
+								<div class="cptt-set-field">
+									<label>نام مدیر عامل / مسئول</label>
+									<input type="text" name="cptt_branding[manager_name]" value="<?php echo esc_attr($brand['manager_name']); ?>" />
+								</div>
+								<div class="cptt-set-field">
+									<label>سمت مدیر / مسئول</label>
+									<input type="text" name="cptt_branding[manager_title]" value="<?php echo esc_attr($brand['manager_title']); ?>" />
+								</div>
+								<div class="cptt-set-field full">
+									<label>متن فوتر گزارش</label>
+									<input type="text" name="cptt_branding[footer_text]" value="<?php echo esc_attr($brand['footer_text']); ?>" style="width:100%;" />
+								</div>
+
+								<!-- Logo Upload -->
+								<div class="cptt-set-field">
+									<label>لوگو برند</label>
+									<div class="cptt-media-preview" style="margin-bottom:10px; max-width:150px;">
+										<?php if ($brand['logo_id']): ?>
+											<img src="<?php echo esc_url(wp_get_attachment_image_url($brand['logo_id'], 'medium')); ?>" style="max-width:100%; height:auto;" />
+										<?php else: ?>
+											<span class="dashicons dashicons-format-image" style="font-size:40px; width:40px; height:40px;"></span>
+										<?php endif; ?>
+									</div>
+									<input type="hidden" name="cptt_branding[logo_id]" value="<?php echo esc_attr($brand['logo_id']); ?>" />
+									<button type="button" class="button cptt-media-select">انتخاب تصویر</button>
+									<button type="button" class="button cptt-media-remove">حذف</button>
+								</div>
+
+								<!-- Signature Upload -->
+								<div class="cptt-set-field">
+									<label>تصویر امضا</label>
+									<div class="cptt-media-preview" style="margin-bottom:10px; max-width:150px;">
+										<?php if ($brand['sign_id']): ?>
+											<img src="<?php echo esc_url(wp_get_attachment_image_url($brand['sign_id'], 'medium')); ?>" style="max-width:100%; height:auto;" />
+										<?php else: ?>
+											<span class="dashicons dashicons-format-image" style="font-size:40px; width:40px; height:40px;"></span>
+										<?php endif; ?>
+									</div>
+									<input type="hidden" name="cptt_branding[sign_id]" value="<?php echo esc_attr($brand['sign_id']); ?>" />
+									<button type="button" class="button cptt-media-select">انتخاب تصویر</button>
+									<button type="button" class="button cptt-media-remove">حذف</button>
+								</div>
+
+								<!-- Stamp Upload -->
+								<div class="cptt-set-field">
+									<label>تصویر مهر</label>
+									<div class="cptt-media-preview" style="margin-bottom:10px; max-width:150px;">
+										<?php if ($brand['stamp_id']): ?>
+											<img src="<?php echo esc_url(wp_get_attachment_image_url($brand['stamp_id'], 'medium')); ?>" style="max-width:100%; height:auto;" />
+										<?php else: ?>
+											<span class="dashicons dashicons-format-image" style="font-size:40px; width:40px; height:40px;"></span>
+										<?php endif; ?>
+									</div>
+									<input type="hidden" name="cptt_branding[stamp_id]" value="<?php echo esc_attr($brand['stamp_id']); ?>" />
+									<button type="button" class="button cptt-media-select">انتخاب تصویر</button>
+									<button type="button" class="button cptt-media-remove">حذف</button>
+								</div>
+							</div>
+
+							<!-- branding toggles (switches) -->
+							<div class="cptt-settings-fields-tab" style="margin-top:40px; border-top:1px solid #cbd5e1; padding-top:20px;">
+								<span style="font-size:14px;font-weight:bold;margin-bottom:15px;display:block;color:#0f172a;">تنظیمات فعال/غیرفعال‌سازی نمایش بخش‌های گزارش نهایی و پیش‌فاکتور:</span>
+								
+								<style>
+								.cptt-switch-container {
+									display: grid;
+									grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+									gap: 14px;
+									margin-top: 15px;
+								}
+								.cptt-switch-item {
+									display: flex;
+									justify-content: space-between;
+									align-items: center;
+									background: #ffffff;
+									border: 1px solid #e2e8f0;
+									padding: 12px 16px;
+									border-radius: 12px;
+									box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+								}
+								.cptt-switch-item label {
+									font-weight: 700;
+									color: #334155;
+									margin: 0;
+								}
+								.cptt-switch {
+									position: relative;
+									display: inline-block;
+									width: 50px;
+									height: 26px;
+								}
+								.cptt-switch input {
+									opacity: 0;
+									width: 0;
+									height: 0;
+								}
+								.cptt-slider {
+									position: absolute;
+									cursor: pointer;
+									top: 0;
+									left: 0;
+									right: 0;
+									bottom: 0;
+									background-color: #cbd5e1;
+									transition: .3s;
+									border-radius: 34px;
+								}
+								.cptt-slider:before {
+									position: absolute;
+									content: "";
+									height: 20px;
+									width: 20px;
+									left: 3px;
+									bottom: 3px;
+									background-color: white;
+									transition: .3s;
+									border-radius: 50%;
+								}
+								.cptt-switch input:checked + .cptt-slider {
+									background-color: #6366f1;
+								}
+								.cptt-switch input:checked + .cptt-slider:before {
+									transform: translateX(24px);
+								}
+								</style>
+
+								<h3 style="margin-top:20px; font-weight:900; color:#1e3a8a;">📋 گزارش نهایی پروژه</h3>
+								<div class="cptt-switch-container">
+									<?php 
+									$rep_labels = [
+										'report_show_logo' => 'نمایش لوگوی برند',
+										'report_show_client' => 'نمایش نام مشتری',
+										'report_show_experts' => 'نمایش نام کارشناسان',
+										'report_show_dates' => 'نمایش تاریخ تولید گزارش و بروزرسانی',
+										'report_show_checklist' => 'نمایش آیتم‌های چک‌لیست مراحل',
+										'report_show_usertasks' => 'نمایش تسک‌های سمت مشتری',
+										'report_show_sign_stamp' => 'نمایش امضا و مهر تایید نهایی',
+									];
+									foreach ($rep_labels as $key => $lbl):
+										$val = $toggles[$key] ?? '1';
+									?>
+									<div class="cptt-switch-item">
+										<label><?php echo esc_html($lbl); ?></label>
+										<label class="cptt-switch">
+											<input type="hidden" name="cptt_branding_toggles[<?php echo esc_attr($key); ?>]" value="0" />
+											<input type="checkbox" name="cptt_branding_toggles[<?php echo esc_attr($key); ?>]" value="1" <?php checked($val, '1'); ?> />
+											<span class="cptt-slider"></span>
+										</label>
+									</div>
+									<?php endforeach; ?>
+								</div>
+
+								<h3 style="margin-top:30px; font-weight:900; color:#1e3a8a;">📄 پیش‌فاکتور پروژه</h3>
+								<div class="cptt-switch-container">
+									<?php 
+									$inv_labels = [
+										'invoice_show_logo' => 'نمایش لوگوی برند',
+										'invoice_show_client' => 'نمایش نام مشتری و موبایل',
+										'invoice_show_experts' => 'نمایش نام کارشناسان',
+										'invoice_show_dates' => 'نمایش تاریخ صدور پیش‌فاکتور',
+										'invoice_show_sign_stamp' => 'نمایش امضا و مهر تایید',
+										'invoice_show_step_breakdown' => 'نمایش جدول ریز قیمت مراحل',
+									];
+									foreach ($inv_labels as $key => $lbl):
+										$val = $toggles[$key] ?? '1';
+									?>
+									<div class="cptt-switch-item">
+										<label><?php echo esc_html($lbl); ?></label>
+										<label class="cptt-switch">
+											<input type="hidden" name="cptt_branding_toggles[<?php echo esc_attr($key); ?>]" value="0" />
+											<input type="checkbox" name="cptt_branding_toggles[<?php echo esc_attr($key); ?>]" value="1" <?php checked($val, '1'); ?> />
+											<span class="cptt-slider"></span>
+										</label>
+									</div>
+									<?php endforeach; ?>
+								</div>
 							</div>
 						<?php elseif ($tab === 'fields'): 
 							$fields = self::get_fields_visibility();
@@ -939,6 +1171,64 @@ class CPTT_Settings {
 							<div class="cptt-set-field full">
 								<label>CSS سفارشی</label>
 								<textarea name="cptt_advanced[custom_css]" style="height:300px;"><?php echo esc_textarea(get_option('cptt_advanced')['custom_css'] ?? ''); ?></textarea>
+							</div>
+						<?php elseif ($tab === 'bale'): 
+							$bale = get_option('cptt_bale_settings', []);
+							$webhook_url = admin_url('admin-ajax.php?action=cptt_bale_webhook');
+						?>
+							<!-- Settings fields for token and admin ID -->
+							<div class="cptt-set-grid">
+								<div class="cptt-set-field">
+									<label>توکن ربات بله (Bale Bot Token)</label>
+									<input type="text" name="cptt_bale_settings[token]" value="<?php echo esc_attr($bale['token'] ?? ''); ?>" placeholder="123456789:ABCdefGhI..." style="width:100%;" />
+								</div>
+								<div class="cptt-set-field">
+									<label>آیدی عددی ادمین (Admin Chat ID)</label>
+									<input type="text" name="cptt_bale_settings[admin_id]" value="<?php echo esc_attr($bale['admin_id'] ?? ''); ?>" placeholder="e.g. 987654321" />
+								</div>
+								<div class="cptt-set-field full" style="margin-top:20px; background:#f8fafc; padding:15px; border-radius:12px; border:1px solid #e2e8f0; width:100%;">
+									<h4 style="margin:0 0 10px; color:#1e3a8a;">🔗 آدرس وب‌هوک ربات شما:</h4>
+									<code style="display:block; background:#fff; padding:10px; border-radius:8px; border:1px solid #cbd5e1; direction:ltr; text-align:left; font-size:12px;"><?php echo esc_html($webhook_url); ?></code>
+									<p style="margin-top:10px; font-size:12px; color:#64748b; font-family:sans-serif;">پس از ذخیره توکن، افزونه به صورت خودکار وب‌هوک ربات بله شما را تنظیم خواهد کرد.</p>
+								</div>
+							</div>
+
+							<!-- Toggles for Bale notifications -->
+							<div class="cptt-settings-fields-tab" style="margin-top:40px; border-top:1px solid #cbd5e1; padding-top:20px;">
+								<span style="font-size:14px;font-weight:bold;margin-bottom:15px;display:block;color:#0f172a;">تنظیمات فعال/غیرفعال‌سازی ارسال پیام‌های ربات بله:</span>
+								
+								<div class="cptt-switch-container">
+									<?php 
+									$bale_labels = [
+										'expert_assign' => 'ارسال پیام در واگذاری پروژه به کارشناس',
+										'expert_chat' => 'ارسال پیام بابت چت جدید به کارشناس',
+										'expert_payout' => 'ارسال پیام بابت تسویه حساب به کارشناس',
+										'client_complete' => 'ارسال پیام بابت تکمیل پروژه به مشتری',
+										'client_task' => 'ارسال پیام بابت تسک مشتری جدید به مشتری',
+									];
+									foreach ($bale_labels as $key => $lbl):
+										$val = $bale[$key] ?? '1';
+									?>
+									<div class="cptt-switch-item">
+										<label><?php echo esc_html($lbl); ?></label>
+										<label class="cptt-switch">
+											<input type="hidden" name="cptt_bale_settings[<?php echo esc_attr($key); ?>]" value="0" />
+											<input type="checkbox" name="cptt_bale_settings[<?php echo esc_attr($key); ?>]" value="1" <?php checked($val, '1'); ?> />
+											<span class="cptt-slider"></span>
+										</label>
+									</div>
+									<?php endforeach; ?>
+								</div>
+							</div>
+
+							<!-- Manual Webhook Actions -->
+							<div class="cptt-settings-fields-tab" style="margin-top:30px; border-top:1px solid #cbd5e1; padding-top:20px;">
+								<span style="font-size:14px;font-weight:bold;margin-bottom:15px;display:block;color:#0f172a;">عملیات دستی ربات بله:</span>
+								<div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
+									<a href="<?php echo esc_url(add_query_arg('bale_action', 'set_webhook')); ?>" class="button button-primary" style="background:#2271b1; border-color:#2271b1; color:#fff; padding:6px 14px; font-weight:bold; text-decoration:none; border-radius:4px;">تنظیم مجدد وب‌هوک</a>
+									<a href="<?php echo esc_url(add_query_arg('bale_action', 'delete_webhook')); ?>" class="button" style="color:#b91c1c; border-color:#b91c1c; padding:6px 14px; text-decoration:none; border-radius:4px;">حذف وب‌هوک ربات</a>
+									<a href="<?php echo esc_url(add_query_arg('bale_action', 'test_connection')); ?>" class="button" style="padding:6px 14px; text-decoration:none; border-radius:4px;">تست اتصال ربات (getMe)</a>
+								</div>
 							</div>
 						<?php endif; ?>
 					</form>

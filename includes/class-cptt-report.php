@@ -12,6 +12,7 @@ class CPTT_Report {
 
 	private function __construct() {
 		add_action('admin_post_cptt_view_report', [$this, 'render_report_page']);
+		add_action('admin_post_cptt_view_invoice', [$this, 'render_invoice_page']);
 	}
 
 	public static function is_project_complete($project_id) {
@@ -47,7 +48,6 @@ class CPTT_Report {
 	}
 
 	private function branding() {
-		// اگر قبلاً CPTT_Settings را اضافه کرده‌ای استفاده می‌کنیم، وگرنه fallback
 		if (class_exists('CPTT_Settings') && method_exists('CPTT_Settings', 'get')) {
 			return CPTT_Settings::get();
 		}
@@ -55,7 +55,7 @@ class CPTT_Report {
 		return [
 			'brand_name'    => get_bloginfo('name'),
 			'site_url'      => home_url('/'),
-			'primary_color' => '#22c55e',
+			'primary_color' => '#6366f1',
 			'footer_text'   => 'این گزارش به صورت خودکار تولید شده است.',
 			'logo_id'       => 0,
 			'sign_id'       => 0,
@@ -84,7 +84,7 @@ class CPTT_Report {
 		if (!self::is_project_complete($project_id)) wp_die('گزارش فقط پس از تکمیل پروژه قابل مشاهده است.');
 
 		$brand = $this->branding();
-		$primary = $brand['primary_color'] ?: '#22c55e';
+		$primary = $brand['primary_color'] ?: '#6366f1';
 
 		$title = get_the_title($project_id);
 		$created_fa = class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime((int) current_time('timestamp', true)) : date('Y-m-d H:i');
@@ -110,9 +110,10 @@ class CPTT_Report {
 		$sign = $this->att_url($brand['sign_id'] ?? 0);
 		$stamp = $this->att_url($brand['stamp_id'] ?? 0);
 
-		// خروجی HTML مستقل (بدون قالب وردپرس) برای چاپ تمیز
-		header('Content-Type: text/html; charset=utf-8');
+		// Get toggles
+		$toggles = class_exists('CPTT_Settings') && method_exists('CPTT_Settings', 'get_branding_toggles') ? CPTT_Settings::get_branding_toggles() : [];
 
+		header('Content-Type: text/html; charset=utf-8');
 		?>
 <!doctype html>
 <html lang="fa" dir="rtl">
@@ -120,510 +121,917 @@ class CPTT_Report {
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title><?php echo esc_html('گزارش پروژه - ' . $title); ?></title>
-
 	<style>
 		:root{
 			--primary: <?php echo esc_html($primary); ?>;
-			--text: #0f172a;
-			--muted: #64748b;
-			--border: #e5e7eb;
+			--primary-light: rgba(99, 102, 241, 0.08);
+			--text: #1e293b;
+			--muted: #475569;
+			--border: #cbd5e1;
 			--bg: #f8fafc;
+			--white: #ffffff;
 		}
-		*{ box-sizing:border-box; }
+		*{ box-sizing:border-box; margin: 0; padding: 0; }
 		body{
-			margin:0;
 			background: var(--bg);
 			color: var(--text);
-			font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;
-			line-height: 1.9;
+			font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+			font-size: 13px;
+			line-height: 1.7;
+			padding: 20px 10px;
 		}
 		.wrap{
-			max-width: 980px;
-			margin: 24px auto;
-			padding: 0 14px;
-		}
-		.topbar{
-			position: relative;
-			display:flex;
-			align-items:center;
-			justify-content: center;
-			gap: 12px;
-			margin-bottom: 14px;
-		}
-		.brand{
-			display:flex;
-			align-items:center;
-			justify-content:center;
-			gap: 10px;
-			width: 100%;
-		}
-
-			.brandCenter{
-			justify-content:center;
-		}
-		.brand img{
-			max-height: 44px;
-			max-width: 160px;
-			object-fit: contain;
-			background: #fff;
-			border: 1px solid var(--border);
-			border-radius: 10px;
-			padding: 6px;
-		}
-		.brandTitle{
-			font-weight: 900;
-			font-size: 16px;
-		}
-		.brandUrl{
-			color: var(--muted);
-			font-size: 12px;
-		}
-
-		.actions{
-			position: absolute;
-			left: 0;
-			top: 0;
-
-			display:flex;
-			gap: 8px;
-			flex-wrap: wrap;
-		}
-		.btn{
-			border: 1px solid var(--border);
-			background: #fff;
-			padding: 10px 12px;
-			border-radius: 12px;
-			cursor: pointer;
-			font-weight: 800;
-			text-decoration:none;
-			color: var(--text);
-		}
-		.btnPrimary{
-			border-color: rgba(34,197,94,0.25);
-			background: rgba(34,197,94,0.12);
-		}
-		/* ===== Header text blocks ===== */
-		.autoText{
-		margin-top: 6px;
-		color: var(--muted);
-		font-size: 13px;
-		}
-
-		.siteBlock{
-		margin-top: 6px;
-		text-align: center;
-		}
-
-		.siteBlock .brandTitle{
-		font-size: 14px;
-		font-weight: 950;
-		}
-
-		.siteBlock .brandUrl{
-		font-size: 12px;
-		color: var(--muted);
-		}
-
-		/* ===== PDF Hint ===== */
-		.pdfHint{
-		margin: 10px 0 0;
-		padding: 10px 12px;
-		background: #fff7ed;
-		border: 1px solid #fed7aa;
-		border-radius: 14px;
-		color: #9a3412;
-		font-weight: 800;
-		font-size: 13px;
-		}
-
-		/* ===== Step layout (new order) ===== */
-		.stepTitle{
-		font-weight: 950;
-		font-size: 15px;
-		margin: 0; /* قبلاً margin داشت */
-		}
-
-		.stepDesc{
-		margin-top: 6px;
-		color: #111827;
-		font-size: 13px;
-		}
-
-		.stepMeta{
-		margin-top: 10px;
-		padding-top: 8px;
-		border-top: 1px dashed #eef2f7;
-		}
-
-		/* ===== Mobile: actions sticky at bottom ===== */
-		@media (max-width: 640px){
-		.wrap{
-			margin: 14px auto;
-			padding-bottom: 92px; /* جا برای نوار دکمه‌ها */
-		}
-
-		.actions{
-			position: fixed;
-			left: 0;
-			right: 0;
-			bottom: 0;
-			top: auto;
-
-			padding: 10px 14px;
-			background: #fff;
-			border-top: 1px solid var(--border);
-			box-shadow: 0 -10px 25px rgba(15,23,42,.08);
-
-			flex-wrap: nowrap;
-			z-index: 999;
-		}
-
-		.actions .btn{
-			flex: 1;
-			text-align: center;
-		}
-		}
-
-		/* ===== Final confirmation box (signBox) responsive + print safe ===== */
-		.signBox > div{
-		flex: 1 1 280px;
-		}
-
-		.signBox img{
-		max-width: 100%;
-		height: auto;
-		}
-
-		@media (max-width: 520px){
-		.signBox{
-			flex-direction: column;
-			align-items: stretch;
-		}
-
-		.signBox img{
-			max-height: 90px;
-		}
-		}
-
-		@media print{
-		.pdfHint{ display:none !important; }
-
-		.signBox{
-			flex-wrap: nowrap;
-			align-items: flex-start;
-		}
-
-		.signBox > div{
-			width: 50%;
-		}
-
-		.signBox img{
-			max-height: 95px;
-		}
-
-		.signCard{
-			break-inside: avoid;
-			page-break-inside: avoid;
-		}
-		}
-		.card{
-			background:#fff;
-			border: 1px solid var(--border);
+			max-width: 800px;
+			margin: 0 auto;
+			background: var(--white);
+			border: 2px solid var(--border);
 			border-radius: 16px;
-			padding: 14px;
-			box-shadow: 0 14px 36px rgba(15,23,42,.06);
-			margin-bottom: 14px;
+			box-shadow: 0 10px 30px rgba(0,0,0,0.03);
+			overflow: hidden;
 		}
-
-		.h1{
+		.print-header {
+			background: linear-gradient(135deg, var(--primary), #4f46e5);
+			color: var(--white);
+			padding: 20px 24px;
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			flex-wrap: wrap;
+			gap: 15px;
+		}
+		.brand-info {
+			display: flex;
+			align-items: center;
+			gap: 14px;
+		}
+		.brand-logo-img {
+			max-height: 50px;
+			max-width: 150px;
+			object-fit: contain;
+			background: var(--white);
+			border-radius: 8px;
+			padding: 4px;
+		}
+		.brand-title {
+			font-size: 16px;
+			font-weight: 950;
+		}
+		.brand-url {
+			font-size: 11px;
+			opacity: 0.85;
+		}
+		.document-title-box {
+			text-align: left;
+		}
+		.document-title {
 			font-size: 18px;
 			font-weight: 950;
-			margin: 0 0 6px;
+			letter-spacing: -0.5px;
 		}
-		.meta{
-			color: var(--muted);
-			font-size: 13px;
+		.document-date {
+			font-size: 11px;
+			opacity: 0.9;
+			margin-top: 4px;
 		}
-
-		.grid2{
-			display:grid;
-			grid-template-columns: 1fr 1fr;
-			gap: 12px;
-			margin-top: 10px;
-		}
-		@media (max-width: 720px){
-			.grid2{ grid-template-columns: 1fr; }
-		}
-
-		.kv{
-			border: 1px solid #f1f5f9;
-			background: #fbfdff;
-			border-radius: 14px;
-			padding: 10px 12px;
-		}
-		.kv b{ font-weight: 900; }
-
-		.step{
-			border: 1px solid #eef2f7;
-			border-radius: 16px;
-			padding: 12px;
-			margin-top: 12px;
-		}
-		.stepHead{
-			display:flex;
-			align-items:center;
+		.actions-bar {
+			background: #f1f5f9;
+			border-bottom: 1px solid var(--border);
+			padding: 10px 24px;
+			display: flex;
 			justify-content: space-between;
+			align-items: center;
 			gap: 10px;
 			flex-wrap: wrap;
 		}
-		.badge{
-			display:inline-flex;
+		.btn {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			padding: 8px 14px;
+			font-size: 12px;
+			font-weight: 800;
+			color: #334155;
+			background: var(--white);
+			border: 1px solid #cbd5e1;
+			border-radius: 8px;
+			cursor: pointer;
+			text-decoration: none;
+			transition: all 0.15s ease;
+		}
+		.btn:hover {
+			background: #e2e8f0;
+			border-color: #94a3b8;
+		}
+		.btn-primary {
+			background: var(--primary);
+			color: var(--white);
+			border-color: transparent;
+		}
+		.btn-primary:hover {
+			background: #4f46e5;
+			color: var(--white);
+		}
+		.main-content {
+			padding: 24px;
+		}
+		.metadata-grid {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 12px;
+			margin-bottom: 20px;
+		}
+		@media (max-width: 580px) {
+			.metadata-grid {
+				grid-template-columns: 1fr;
+			}
+		}
+		.metadata-box {
+			border: 1px solid #e2e8f0;
+			background: #f8fafc;
+			border-radius: 12px;
+			padding: 12px 16px;
+		}
+		.metadata-item {
+			margin-bottom: 8px;
+			font-size: 13px;
+		}
+		.metadata-item:last-child {
+			margin-bottom: 0;
+		}
+		.metadata-item b {
+			color: #0f172a;
+			font-weight: 900;
+		}
+		.section-title {
+			font-size: 15px;
+			font-weight: 950;
+			color: #0f172a;
+			margin-bottom: 14px;
+			padding-bottom: 6px;
+			border-bottom: 2px solid var(--primary);
+			display: inline-block;
+		}
+		.step-card {
+			border: 1px solid #e2e8f0;
+			border-radius: 12px;
+			padding: 14px 18px;
+			margin-bottom: 12px;
+			background: var(--white);
+		}
+		.step-card:last-child {
+			margin-bottom: 0;
+		}
+		.step-header {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			flex-wrap: wrap;
+			gap: 10px;
+			margin-bottom: 8px;
+		}
+		.step-name {
+			font-size: 14px;
+			font-weight: 950;
+			color: #0f172a;
+		}
+		.badge {
+			display: inline-flex;
 			padding: 4px 10px;
 			border-radius: 999px;
-			font-size: 12px;
+			font-size: 11px;
 			font-weight: 900;
 			border: 1px solid transparent;
 		}
-		.badgeDone{ background: rgba(34,197,94,0.12); color:#065f46; border-color: rgba(34,197,94,0.25); }
-		.badgeCur{ background: rgba(245,158,11,0.12); color:#92400e; border-color: rgba(245,158,11,0.25); }
-		.badgeTodo{ background: rgba(148,163,184,0.18); color:#475569; border-color: rgba(148,163,184,0.25); }
-
-		.stepTitle{ font-weight: 950; font-size: 15px; margin: 8px 0 6px; }
-		.small{ color: var(--muted); font-size: 12px; }
-
-		.hr{ height:1px; background:#eef2f7; margin: 10px 0; }
-
-		.cl{
-			margin: 0;
-			padding: 0 18px 0 0;
+		.badge-done { background: rgba(34,197,94,0.12); color:#065f46; border-color: rgba(34,197,94,0.2); }
+		.badge-current { background: rgba(245,158,11,0.12); color:#92400e; border-color: rgba(245,158,11,0.2); }
+		.badge-todo { background: rgba(148,163,184,0.14); color:#475569; border-color: rgba(148,163,184,0.2); }
+		
+		.step-desc {
+			color: #334155;
+			font-size: 12.5px;
+			margin: 8px 0;
+			background: #f8fafc;
+			padding: 10px 14px;
+			border-radius: 8px;
+			border-right: 3px solid #cbd5e1;
 		}
-		.cl li{ margin: 6px 0; }
-		.done{ text-decoration: line-through; color:#065f46; }
-
-		.cl a{
-			color: #2563eb;
-			text-decoration: underline;
-			margin-right: 8px;
-			font-weight: 800;
-		}
-
-		.signBox{
-			display:flex;
-			align-items:flex-start;
-			justify-content: space-between;
-			gap: 12px;
-			flex-wrap: wrap;
-		}
-		.signBox img{
-			max-height: 120px;
-			max-width: 260px;
-			object-fit: contain;
-		}
-		.signMeta{
+		.step-meta-row {
+			font-size: 11.5px;
 			color: var(--muted);
+			margin-top: 6px;
+		}
+		.list-title {
+			font-weight: 900;
 			font-size: 12px;
+			color: #334155;
+			margin: 12px 0 6px;
+			display: flex;
+			align-items: center;
+			gap: 6px;
+		}
+		.items-list {
+			list-style: none;
+			padding: 0;
+			margin: 0;
+			display: grid;
+			gap: 6px;
+		}
+		.items-list li {
+			padding: 8px 12px;
+			background: #fafafa;
+			border: 1px solid #f1f5f9;
+			border-radius: 8px;
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			flex-wrap: wrap;
+			gap: 10px;
+		}
+		.items-list li.done-item {
+			background: #f0fdf4;
+			border-color: #d1fae5;
+			color: #065f46;
+		}
+		.item-text {
+			font-weight: 700;
+			font-size: 12.5px;
+		}
+		.item-meta {
+			font-size: 11px;
+			color: var(--muted);
+		}
+		.item-link {
+			color: var(--primary);
+			text-decoration: underline;
+			font-weight: 800;
+			font-size: 11px;
+			margin-right: 6px;
+		}
+		.final-sign-box {
+			margin-top: 24px;
+			border: 1px solid #e2e8f0;
+			border-radius: 12px;
+			padding: 16px 20px;
+			background: #f8fafc;
+		}
+		.sign-stamp-grid {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			flex-wrap: wrap;
+			gap: 20px;
+		}
+		.sign-stamp-grid > div {
+			flex: 1 1 200px;
+			text-align: center;
+		}
+		.sign-img, .stamp-img {
+			max-height: 80px;
+			max-width: 180px;
+			object-fit: contain;
+			margin: 0 auto;
+			display: block;
+		}
+		.sign-label {
+			font-size: 12px;
+			font-weight: bold;
+			color: #334155;
 			margin-top: 8px;
 		}
-
-		.footer{
+		.sign-title {
+			font-size: 11px;
 			color: var(--muted);
-			font-size: 12px;
-			text-align: center;
-			padding: 8px 0 20px;
+			margin-top: 2px;
 		}
-
-		/* ===== Print ===== */
-		@page { size: A4; margin: 12mm; }
-		@media print{
-			body{ background:#fff; }
-			.wrap{ max-width: none; margin:0; padding:0; }
-			.actions{ display:none !important; }
-			.card{ box-shadow:none; }
-			a{ color:#000; text-decoration: none; }
-			.step{ break-inside: avoid; page-break-inside: avoid; }
+		.print-footer {
+			text-align: center;
+			padding: 15px 24px;
+			background: #f8fafc;
+			border-top: 1px solid var(--border);
+			font-size: 11px;
+			color: var(--muted);
+		}
+		@media print {
+			body { background: #fff; padding: 0; }
+			.wrap { border: none; box-shadow: none; max-width: 100%; border-radius: 0; }
+			.actions-bar { display: none !important; }
+			.step-card { break-inside: avoid; page-break-inside: avoid; }
+			.final-sign-box { break-inside: avoid; page-break-inside: avoid; }
 		}
 	</style>
 </head>
 <body>
 	<div class="wrap">
-		<div class="topbar">
-		<div class="brand brandCenter">
-			<?php if ($logo): ?>
-			<img src="<?php echo esc_url($logo); ?>" alt="logo">
-			<?php else: ?>
-			<div class="brandTitle"><?php echo esc_html($brand['brand_name'] ?? get_bloginfo('name')); ?></div>
+		<!-- Header -->
+		<div class="print-header">
+			<div class="brand-info">
+				<?php if ($logo && ($toggles['report_show_logo'] ?? '1') === '1'): ?>
+					<img src="<?php echo esc_url($logo); ?>" class="brand-logo-img" alt="logo" />
+				<?php endif; ?>
+				<div>
+					<div class="brand-title"><?php echo esc_html($brand['brand_name'] ?? get_bloginfo('name')); ?></div>
+					<div class="brand-url"><?php echo esc_html($brand['site_url'] ?? home_url('/')); ?></div>
+				</div>
+			</div>
+			<div class="document-title-box">
+				<div class="document-title">گزارش نهایی پروژه</div>
+				<?php if (($toggles['report_show_dates'] ?? '1') === '1'): ?>
+					<div class="document-date">تاریخ صدور: <?php echo esc_html($created_fa); ?></div>
+				<?php endif; ?>
+			</div>
+		</div>
+
+		<!-- Actions -->
+		<div class="actions-bar">
+			<a class="btn" href="<?php echo esc_url(wp_get_referer() ?: home_url('/')); ?>">◀ بازگشت</a>
+			<div>
+				<button class="btn btn-primary" type="button" onclick="window.print()">🖨 چاپ گزارش</button>
+			</div>
+		</div>
+
+		<!-- Main -->
+		<div class="main-content">
+			<!-- Meta details -->
+			<div class="metadata-grid">
+				<div class="metadata-box">
+					<div class="metadata-item"><b>عنوان پروژه:</b> <?php echo esc_html($title); ?></div>
+					<?php if ($client_name && ($toggles['report_show_client'] ?? '1') === '1'): ?>
+						<div class="metadata-item"><b>مشتری:</b> <?php echo esc_html($client_name); ?></div>
+					<?php endif; ?>
+				</div>
+				<div class="metadata-box">
+					<?php if (!empty($expert_names) && ($toggles['report_show_experts'] ?? '1') === '1'): ?>
+						<div class="metadata-item"><b>کارشناسان:</b> <?php echo esc_html(implode('، ', $expert_names)); ?></div>
+					<?php endif; ?>
+					<?php if ($last_update && (($toggles['report_show_dates'] ?? '1') === '1')): ?>
+						<div class="metadata-item"><b>آخرین تغییر:</b> <?php echo esc_html($last_update); ?></div>
+					<?php endif; ?>
+				</div>
+			</div>
+
+			<!-- Steps -->
+			<div class="section-title">روند انجام مراحل پروژه</div>
+			<div class="steps-container">
+				<?php foreach ($steps as $idx => $s):
+					$st = $s['status'] ?? 'todo';
+					$badgeClass = $st === 'done' ? 'badge-done' : ($st === 'current' ? 'badge-current' : 'badge-todo');
+					$badgeText  = $st === 'done' ? 'انجام‌شده' : ($st === 'current' ? 'در حال انجام' : 'انجام‌نشده');
+
+					$step_due_fa = (string)($s['due_at_fa'] ?? '');
+					$desc = trim(wp_strip_all_tags((string)($s['desc'] ?? '')));
+
+					$cl = isset($s['checklist']) && is_array($s['checklist']) ? $s['checklist'] : [];
+					$uts = isset($s['user_tasks']) && is_array($s['user_tasks']) ? $s['user_tasks'] : [];
+				?>
+					<div class="step-card">
+						<div class="step-header">
+							<div class="step-name"><?php echo esc_html(($idx+1) . '. ' . ($s['title'] ?? '')); ?></div>
+							<span class="badge <?php echo esc_attr($badgeClass); ?>"><?php echo esc_html($badgeText); ?></span>
+						</div>
+
+						<?php if ($step_due_fa && (($toggles['report_show_dates'] ?? '1') === '1')): ?>
+							<div class="step-meta-row">📅 <b>مهلت مرحله:</b> <?php echo esc_html($step_due_fa); ?></div>
+						<?php endif; ?>
+
+						<?php if ($desc !== ''): ?>
+							<div class="step-desc"><?php echo esc_html($desc); ?></div>
+						<?php endif; ?>
+
+						<!-- Checklist -->
+						<?php if (!empty($cl) && ($toggles['report_show_checklist'] ?? '1') === '1'): ?>
+							<div class="list-title">📋 چک‌لیست مرحله:</div>
+							<ul class="items-list">
+								<?php foreach ($cl as $it):
+									$text = (string)($it['text'] ?? '');
+									if ($text === '') continue;
+
+									$done = !empty($it['done']);
+									$done_at = (string)($it['done_at_fa'] ?? '');
+									$url = trim((string)($it['url'] ?? ''));
+								?>
+									<li class="<?php echo $done ? 'done-item' : ''; ?>">
+										<span class="item-text"><?php echo esc_html($text); ?></span>
+										<div class="item-meta">
+											<?php if ($done): ?>
+												<span>✓ انجام شد</span>
+												<?php if ($done_at && (($toggles['report_show_dates'] ?? '1') === '1')): ?>
+													<span>(<?php echo esc_html($done_at); ?>)</span>
+												<?php endif; ?>
+												<?php if ($url && (strpos($url, 'http') === 0)): ?>
+													<a href="<?php echo esc_url($url); ?>" class="item-link" target="_blank" rel="noopener">دانلود نتیجه</a>
+												<?php endif; ?>
+											<?php else: ?>
+												<span>—</span>
+											<?php endif; ?>
+										</div>
+									</li>
+								<?php endforeach; ?>
+							</ul>
+						<?php endif; ?>
+
+						<!-- Customer Tasks -->
+						<?php if (!empty($uts) && ($toggles['report_show_usertasks'] ?? '1') === '1'): ?>
+							<div class="list-title">👤 تسک‌های سمت مشتری:</div>
+							<ul class="items-list">
+								<?php foreach ($uts as $ut):
+									$ut_title = (string)($ut['title'] ?? '');
+									if ($ut_title === '') continue;
+									$ut_done = !empty($ut['done']);
+									$ut_resp = (string)($ut['response'] ?? '');
+									$ut_completed = (string)($ut['completed_at_fa'] ?? '');
+									$ut_file_url = trim((string)($ut['response_file_url'] ?? ''));
+									$ut_files = isset($ut['response_files']) && is_array($ut['response_files']) ? $ut['response_files'] : [];
+								?>
+									<li class="<?php echo $ut_done ? 'done-item' : ''; ?>">
+										<div>
+											<span class="item-text"><?php echo esc_html($ut_title); ?></span>
+											<?php if ($ut_resp): ?><div style="font-size:11px; margin-top:3px; opacity:0.8;"><?php echo esc_html($ut_resp); ?></div><?php endif; ?>
+										</div>
+										<div class="item-meta">
+											<?php if ($ut_done): ?>
+												<span>✓ تکمیل شد</span>
+												<?php if ($ut_completed && (($toggles['report_show_dates'] ?? '1') === '1')): ?>
+													<span>(<?php echo esc_html($ut_completed); ?>)</span>
+												<?php endif; ?>
+												<?php if ($ut_file_url && (strpos($ut_file_url, 'http') === 0)): ?>
+													<a href="<?php echo esc_url($ut_file_url); ?>" class="item-link" target="_blank" rel="noopener">مشاهده فایل</a>
+												<?php endif; ?>
+												<?php if (!empty($ut_files)): foreach ($ut_files as $rf): if (empty($rf['url'])) continue; ?>
+													<a href="<?php echo esc_url($rf['url']); ?>" class="item-link" target="_blank" rel="noopener"><?php echo esc_html(!empty($rf['name']) ? $rf['name'] : 'فایل ارسالی'); ?></a>
+												<?php endforeach; endif; ?>
+											<?php else: ?>
+												<span>در انتظار اقدام مشتری</span>
+											<?php endif; ?>
+										</div>
+									</li>
+								<?php endforeach; ?>
+							</ul>
+						<?php endif; ?>
+					</div>
+				<?php endforeach; ?>
+			</div>
+
+			<!-- Approvals sign/stamp -->
+			<?php if ((($toggles['report_show_sign_stamp'] ?? '1') === '1') && ($sign || $stamp || !empty($brand['manager_name']) || !empty($brand['manager_title']))): ?>
+				<div class="final-sign-box">
+					<div class="sign-stamp-grid">
+						<div>
+							<?php if ($sign): ?>
+								<img src="<?php echo esc_url($sign); ?>" class="sign-img" alt="signature" />
+							<?php endif; ?>
+							<div class="sign-label"><?php echo esc_html($brand['manager_name'] ?: 'امضا مدیر مسئول'); ?></div>
+							<?php if (!empty($brand['manager_title'])): ?>
+								<div class="sign-title"><?php echo esc_html($brand['manager_title']); ?></div>
+							<?php endif; ?>
+						</div>
+						<div>
+							<?php if ($stamp): ?>
+								<img src="<?php echo esc_url($stamp); ?>" class="stamp-img" alt="stamp" />
+							<?php endif; ?>
+						</div>
+					</div>
+				</div>
 			<?php endif; ?>
 		</div>
 
-		<div class="actions" role="group" aria-label="عملیات گزارش">
-			<button class="btn btnPrimary" type="button" onclick="window.print()">چاپ گزارش</button>
-
-			<button class="btn" type="button" onclick="cpttSaveAsPdf()">ذخیره PDF</button>
-
-			<a class="btn" href="<?php echo esc_url( wp_get_referer() ?: home_url('/') ); ?>">بازگشت</a>
+		<!-- Footer -->
+		<div class="print-footer">
+			<?php echo esc_html($brand['footer_text'] ?? ''); ?>
 		</div>
-		</div>
+	</div>
+</body>
+</html>
+		<?php
+		exit;
+	}
 
-		<div class="pdfHint" id="cpttPdfHint" style="display:none;">
-		برای ذخیره PDF، در پنجره چاپ مقصد (Destination) را روی «Save as PDF» قرار دهید.
-		</div>
+	public function render_invoice_page() {
+		if (!is_user_logged_in()) wp_die('برای مشاهده پیش‌فاکتور باید وارد شوید.');
 
-		<script>
-		function cpttSaveAsPdf(){
-		var el = document.getElementById('cpttPdfHint');
-		if (el) el.style.display = 'block';
-		window.print();
+		$project_id = isset($_GET['project_id']) ? absint($_GET['project_id']) : 0;
+		if (!$project_id || get_post_type($project_id) !== 'cptt_project') wp_die('پروژه معتبر نیست.');
+
+		check_admin_referer('cptt_view_invoice_' . $project_id);
+
+		if (!self::user_can_access($project_id, get_current_user_id())) wp_die('شما به این پیش‌فاکتور دسترسی ندارید.');
+
+		$brand = $this->branding();
+		$primary = $brand['primary_color'] ?: '#6366f1';
+
+		$title = get_the_title($project_id);
+		$created_fa = class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime((int) current_time('timestamp', true)) : date('Y-m-d H:i');
+
+		$client_id = (int)get_post_meta($project_id, '_cptt_client_user_id', true);
+		$client_name = $client_id ? $this->user_name($client_id) : '';
+		$client_phone = $client_id ? get_user_meta($client_id, 'billing_phone', true) : '';
+
+		$expert_names = [];
+		if (class_exists('CPTT_Core') && method_exists('CPTT_Core', 'get_project_expert_ids')) {
+			$ids = CPTT_Core::get_project_expert_ids($project_id);
+			foreach ($ids as $id) {
+				$n = $this->user_name($id);
+				if ($n) $expert_names[] = $n;
+			}
 		}
-		</script>
 
-		<div class="card">
-			<div class="h1">گزارش نهایی پروژه</div>
+		$steps = get_post_meta($project_id, '_cptt_steps', true);
+		if (!is_array($steps)) $steps = [];
 
-			<div class="autoText">
-			<?php echo esc_html($brand['footer_text'] ?? 'این گزارش به صورت خودکار تولید شده است.'); ?>
-			</div>
+		$logo = $this->att_url($brand['logo_id'] ?? 0);
+		$sign = $this->att_url($brand['sign_id'] ?? 0);
+		$stamp = $this->att_url($brand['stamp_id'] ?? 0);
 
-			<div class="siteBlock">
-			<div class="brandTitle"><?php echo esc_html($brand['brand_name'] ?? get_bloginfo('name')); ?></div>
-			<div class="brandUrl"><?php echo esc_html($brand['site_url'] ?? home_url('/')); ?></div>
-			</div>
+		// Get delivery details
+		$delivery_method = (string)get_post_meta($project_id, '_cptt_delivery_method', true);
+		$delivery_method_label = $delivery_method === 'shipping' ? 'ارسال با پست/باربری' : ($delivery_method === 'in_person' ? 'تحویل حضوری' : '—');
+		$delivery_province = (string)get_post_meta($project_id, '_cptt_delivery_province', true);
+		$delivery_city = (string)get_post_meta($project_id, '_cptt_delivery_city', true);
+		$delivery_address = (string)get_post_meta($project_id, '_cptt_delivery_address', true);
 
-			<div class="meta">تاریخ تولید گزارش: <?php echo esc_html($created_fa); ?></div>
+		// Get toggles
+		$toggles = class_exists('CPTT_Settings') && method_exists('CPTT_Settings', 'get_branding_toggles') ? CPTT_Settings::get_branding_toggles() : [];
 
-			<div class="grid2">
-				<div class="kv">
-					<div><b>عنوان پروژه:</b> <?php echo esc_html($title); ?></div>
-					<div class="small" style="margin-top:6px;"><b>مشتری:</b> <?php echo esc_html($client_name ?: '—'); ?></div>
+		header('Content-Type: text/html; charset=utf-8');
+		?>
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title><?php echo esc_html('پیش‌فاکتور - ' . $title); ?></title>
+	<style>
+		:root{
+			--primary: <?php echo esc_html($primary); ?>;
+			--text: #1e293b;
+			--muted: #475569;
+			--border: #cbd5e1;
+			--bg: #f8fafc;
+			--white: #ffffff;
+		}
+		*{ box-sizing:border-box; margin: 0; padding: 0; }
+		body{
+			background: var(--bg);
+			color: var(--text);
+			font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+			font-size: 13px;
+			line-height: 1.7;
+			padding: 20px 10px;
+		}
+		.wrap{
+			max-width: 800px;
+			margin: 0 auto;
+			background: var(--white);
+			border: 2px solid var(--border);
+			border-radius: 16px;
+			box-shadow: 0 10px 30px rgba(0,0,0,0.03);
+			overflow: hidden;
+		}
+		.print-header {
+			background: linear-gradient(135deg, var(--primary), #4f46e5);
+			color: var(--white);
+			padding: 20px 24px;
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			flex-wrap: wrap;
+			gap: 15px;
+		}
+		.brand-info {
+			display: flex;
+			align-items: center;
+			gap: 14px;
+		}
+		.brand-logo-img {
+			max-height: 50px;
+			max-width: 150px;
+			object-fit: contain;
+			background: var(--white);
+			border-radius: 8px;
+			padding: 4px;
+		}
+		.brand-title {
+			font-size: 16px;
+			font-weight: 950;
+		}
+		.brand-url {
+			font-size: 11px;
+			opacity: 0.85;
+		}
+		.document-title-box {
+			text-align: left;
+		}
+		.document-title {
+			font-size: 18px;
+			font-weight: 950;
+			letter-spacing: -0.5px;
+		}
+		.document-date {
+			font-size: 11px;
+			opacity: 0.9;
+			margin-top: 4px;
+		}
+		.actions-bar {
+			background: #f1f5f9;
+			border-bottom: 1px solid var(--border);
+			padding: 10px 24px;
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			gap: 10px;
+			flex-wrap: wrap;
+		}
+		.btn {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			padding: 8px 14px;
+			font-size: 12px;
+			font-weight: 800;
+			color: #334155;
+			background: var(--white);
+			border: 1px solid #cbd5e1;
+			border-radius: 8px;
+			cursor: pointer;
+			text-decoration: none;
+			transition: all 0.15s ease;
+		}
+		.btn:hover {
+			background: #e2e8f0;
+			border-color: #94a3b8;
+		}
+		.btn-primary {
+			background: var(--primary);
+			color: var(--white);
+			border-color: transparent;
+		}
+		.btn-primary:hover {
+			background: #4f46e5;
+			color: var(--white);
+		}
+		.main-content {
+			padding: 24px;
+		}
+		.metadata-grid {
+			display: grid;
+			grid-template-columns: 1.2fr 0.8fr;
+			gap: 12px;
+			margin-bottom: 20px;
+		}
+		@media (max-width: 580px) {
+			.metadata-grid {
+				grid-template-columns: 1fr;
+			}
+		}
+		.metadata-box {
+			border: 1px solid #e2e8f0;
+			background: #f8fafc;
+			border-radius: 12px;
+			padding: 12px 16px;
+		}
+		.metadata-item {
+			margin-bottom: 6px;
+			font-size: 13px;
+		}
+		.metadata-item:last-child {
+			margin-bottom: 0;
+		}
+		.metadata-item b {
+			color: #0f172a;
+			font-weight: 900;
+		}
+		.invoice-table {
+			width: 100%;
+			border-collapse: collapse;
+			margin: 20px 0;
+		}
+		.invoice-table th, .invoice-table td {
+			border: 1px solid var(--border);
+			padding: 10px 14px;
+			text-align: right;
+		}
+		.invoice-table th {
+			background: #f1f5f9;
+			font-weight: 900;
+			color: #0f172a;
+		}
+		.text-left { text-align: left !important; }
+		.text-center { text-align: center !important; }
+		.totals-row {
+			font-weight: bold;
+			background: #f8fafc;
+		}
+		.totals-row td {
+			font-size: 13.5px;
+			border-top: 2px solid var(--primary);
+		}
+		.final-sign-box {
+			margin-top: 24px;
+			border: 1px solid #e2e8f0;
+			border-radius: 12px;
+			padding: 16px 20px;
+			background: #f8fafc;
+		}
+		.sign-stamp-grid {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			flex-wrap: wrap;
+			gap: 20px;
+		}
+		.sign-stamp-grid > div {
+			flex: 1 1 200px;
+			text-align: center;
+		}
+		.sign-img, .stamp-img {
+			max-height: 80px;
+			max-width: 180px;
+			object-fit: contain;
+			margin: 0 auto;
+			display: block;
+		}
+		.sign-label {
+			font-size: 12px;
+			font-weight: bold;
+			color: #334155;
+			margin-top: 8px;
+		}
+		.sign-title {
+			font-size: 11px;
+			color: var(--muted);
+			margin-top: 2px;
+		}
+		.print-footer {
+			text-align: center;
+			padding: 15px 24px;
+			background: #f8fafc;
+			border-top: 1px solid var(--border);
+			font-size: 11px;
+			color: var(--muted);
+		}
+		@media print {
+			body { background: #fff; padding: 0; }
+			.wrap { border: none; box-shadow: none; max-width: 100%; border-radius: 0; }
+			.actions-bar { display: none !important; }
+			.invoice-table { break-inside: avoid; page-break-inside: avoid; }
+			.final-sign-box { break-inside: avoid; page-break-inside: avoid; }
+		}
+	</style>
+</head>
+<body>
+	<div class="wrap">
+		<!-- Header -->
+		<div class="print-header">
+			<div class="brand-info">
+				<?php if ($logo && ($toggles['invoice_show_logo'] ?? '1') === '1'): ?>
+					<img src="<?php echo esc_url($logo); ?>" class="brand-logo-img" alt="logo" />
+				<?php endif; ?>
+				<div>
+					<div class="brand-title"><?php echo esc_html($brand['brand_name'] ?? get_bloginfo('name')); ?></div>
+					<div class="brand-url"><?php echo esc_html($brand['site_url'] ?? home_url('/')); ?></div>
 				</div>
-				<div class="kv">
-					<div><b>کارشناسان:</b> <?php echo esc_html($expert_names ? implode('، ', $expert_names) : '—'); ?></div>
-					<div class="small" style="margin-top:6px;"><b>آخرین بروزرسانی:</b> <?php echo esc_html($last_update ?: '—'); ?></div>
-				</div>
+			</div>
+			<div class="document-title-box">
+				<div class="document-title">پیش‌فاکتور پروژه</div>
+				<?php if (($toggles['invoice_show_dates'] ?? '1') === '1'): ?>
+					<div class="document-date">تاریخ صدور: <?php echo esc_html($created_fa); ?></div>
+				<?php endif; ?>
 			</div>
 		</div>
 
-		<div class="card">
-			<div class="h1" style="font-size:16px;">روند پروژه</div>
+		<!-- Actions -->
+		<div class="actions-bar">
+			<a class="btn" href="<?php echo esc_url(wp_get_referer() ?: home_url('/')); ?>">◀ بازگشت</a>
+			<div>
+				<button class="btn btn-primary" type="button" onclick="window.print()">🖨 چاپ پیش‌فاکتور</button>
+			</div>
+		</div>
 
-			<?php foreach ($steps as $idx => $s):
-				$st = $s['status'] ?? 'todo';
-				$badgeClass = $st === 'done' ? 'badgeDone' : ($st === 'current' ? 'badgeCur' : 'badgeTodo');
-				$badgeText  = $st === 'done' ? 'انجام‌شده' : ($st === 'current' ? 'در حال انجام' : 'انجام‌نشده');
+		<!-- Main -->
+		<div class="main-content">
+			<!-- Meta details -->
+			<div class="metadata-grid">
+				<div class="metadata-box">
+					<div class="metadata-item"><b>عنوان پروژه:</b> <?php echo esc_html($title); ?></div>
+					<?php if ($client_name && ($toggles['invoice_show_client'] ?? '1') === '1'): ?>
+						<div class="metadata-item"><b>خریدار / مشتری:</b> <?php echo esc_html($client_name); ?></div>
+					<?php endif; ?>
+					<?php if ($client_phone && ($toggles['invoice_show_client'] ?? '1') === '1'): ?>
+						<div class="metadata-item"><b>تلفن تماس:</b> <span style="direction:ltr; display:inline-block;"><?php echo esc_html($client_phone); ?></span></div>
+					<?php endif; ?>
+				</div>
+				<div class="metadata-box">
+					<?php if (!empty($expert_names) && ($toggles['invoice_show_experts'] ?? '1') === '1'): ?>
+						<div class="metadata-item"><b>کارشناسان پروژه:</b> <?php echo esc_html(implode('، ', $expert_names)); ?></div>
+					<?php endif; ?>
+					<?php if ($delivery_method): ?>
+						<div class="metadata-item"><b>روش تحویل:</b> <?php echo esc_html($delivery_method_label); ?></div>
+					<?php endif; ?>
+				</div>
+			</div>
 
-				$updated_at_fa = (string)($s['updated_at_fa'] ?? '');
-				$step_due_fa = (string)($s['due_at_fa'] ?? '');
-				$updated_by = !empty($s['updated_by']) ? $this->user_name((int)$s['updated_by']) : '';
-				$desc = trim(wp_strip_all_tags((string)($s['desc'] ?? '')));
+			<?php if ($delivery_method === 'shipping' && ($delivery_province || $delivery_address)): ?>
+				<div class="metadata-box" style="margin-bottom:20px;">
+					<b>📍 آدرس تحویل و ارسال:</b>
+					<span style="font-size:12.5px; display:block; margin-top:4px;">
+						<?php echo esc_html(($delivery_province ? $delivery_province : '') . ($delivery_city ? ' - ' . $delivery_city : '') . ($delivery_address ? ' - ' . $delivery_address : '')); ?>
+					</span>
+				</div>
+			<?php endif; ?>
 
-				$cl = isset($s['checklist']) && is_array($s['checklist']) ? $s['checklist'] : [];
-				$uts = isset($s['user_tasks']) && is_array($s['user_tasks']) ? $s['user_tasks'] : [];
+			<!-- Invoice Items table -->
+			<?php if (($toggles['invoice_show_step_breakdown'] ?? '1') === '1'): ?>
+				<table class="invoice-table">
+					<thead>
+						<tr>
+							<th class="text-center" style="width:50px;">ردیف</th>
+							<th>شرح خدمات / مرحله</th>
+							<th class="text-left" style="width:140px;">هزینه (ریال)</th>
+							<th class="text-left" style="width:140px;">دریافتی (ریال)</th>
+							<th class="text-left" style="width:140px;">مانده (ریال)</th>
+						</tr>
+					</thead>
+					<tbody>
+						<?php 
+						$total_cost = 0;
+						$total_paid = 0;
+						$total_remain = 0;
+						$row_idx = 1;
+						foreach ($steps as $s):
+							$st_title = trim((string)($s['title'] ?? ''));
+							if ($st_title === '') continue;
+							$cost = (float)($s['cost'] ?? 0);
+							$paid = (float)($s['paid'] ?? 0);
+							$remain = $cost - $paid;
+
+							$total_cost += $cost;
+							$total_paid += $paid;
+							$total_remain += $remain;
+						?>
+							<tr>
+								<td class="text-center"><?php echo esc_html($row_idx++); ?></td>
+								<td>
+									<div style="font-weight:700; color:#0f172a;"><?php echo esc_html($st_title); ?></div>
+									<?php if (!empty($s['desc'])): ?>
+										<div style="font-size:11px; color:var(--muted); margin-top:2px;"><?php echo esc_html(wp_strip_all_tags($s['desc'])); ?></div>
+									<?php endif; ?>
+								</td>
+								<td class="text-left"><?php echo esc_html(number_format($cost)); ?></td>
+								<td class="text-left" style="color:#059669;"><?php echo esc_html(number_format($paid)); ?></td>
+								<td class="text-left" style="color:<?php echo $remain > 0 ? '#dc2626' : '#059669'; ?>; font-weight:700;"><?php echo esc_html(number_format($remain)); ?></td>
+							</tr>
+						<?php endforeach; ?>
+
+						<!-- Totals -->
+						<tr class="totals-row">
+							<td colspan="2" style="text-align:left;">جمع کل پیش‌فاکتور (ریال):</td>
+							<td class="text-left"><?php echo esc_html(number_format($total_cost)); ?></td>
+							<td class="text-left" style="color:#059669;"><?php echo esc_html(number_format($total_paid)); ?></td>
+							<td class="text-left" style="color:<?php echo $total_remain > 0 ? '#dc2626' : '#059669'; ?>;"><?php echo esc_html(number_format($total_remain)); ?></td>
+						</tr>
+					</tbody>
+				</table>
+			<?php else: 
+				// Just print total summary if step breakdown is disabled
+				$total_cost = 0;
+				$total_paid = 0;
+				foreach ($steps as $s) {
+					$total_cost += (float)($s['cost'] ?? 0);
+					$total_paid += (float)($s['paid'] ?? 0);
+				}
+				$total_remain = $total_cost - $total_paid;
 			?>
-				<div class="step">
-					<div class="stepHead">
-						<div class="stepTitle">
-						<?php echo esc_html(($idx+1) . '. ' . ($s['title'] ?? '')); ?>
-						</div>
-
-						<span class="badge <?php echo esc_attr($badgeClass); ?>">
-						<?php echo esc_html($badgeText); ?>
-						</span>
-					</div>
-
-					<?php if ($step_due_fa): ?>
-						<div class="small"><b>مهلت مرحله:</b> <?php echo esc_html($step_due_fa); ?></div>
-					<?php endif; ?>
-
-					<?php if ($desc !== ''): ?>
-						<div class="stepDesc"><?php echo esc_html($desc); ?></div>
-					<?php endif; ?>
-
-					<?php if (!empty($cl)): ?>
-						<div class="hr"></div>
-						<div style="font-weight:900;">چک‌لیست</div>
-
-						<ul class="cl">
-						<?php foreach ($cl as $it):
-							$text = (string)($it['text'] ?? '');
-							if ($text === '') continue;
-
-							$done = !empty($it['done']);
-							$done_at = (string)($it['done_at_fa'] ?? '');
-							$done_by = !empty($it['done_by']) ? $this->user_name((int)$it['done_by']) : '';
-							$url = trim((string)($it['url'] ?? ''));
-						?>
-							<li class="<?php echo $done ? 'done' : ''; ?>">
-							<?php echo esc_html($text); ?>
-
-							<?php if ($done && $url && (strpos($url, 'http://') === 0 || strpos($url, 'https://') === 0)): ?>
-								<a href="<?php echo esc_url($url); ?>" target="_blank" rel="noopener noreferrer">مشاهده نتیجه</a>
-							<?php endif; ?>
-
-							<?php if ($done_at || $done_by): ?>
-								<div class="small">
-								<?php echo esc_html($done_at ?: ''); ?>
-								<?php echo $done_by ? esc_html(' — توسط: ' . $done_by) : ''; ?>
-								</div>
-							<?php endif; ?>
-							</li>
-						<?php endforeach; ?>
-						</ul>
-					<?php endif; ?>
-
-					<?php if (!empty($uts)): ?>
-						<div class="hr"></div>
-						<div style="font-weight:900;">تسک‌های مشتری</div>
-						<ul class="cl">
-						<?php foreach ($uts as $ut):
-							$ut_title = (string)($ut['title'] ?? '');
-							if ($ut_title === '') continue;
-							$ut_done = !empty($ut['done']);
-							$ut_resp = (string)($ut['response'] ?? '');
-							$ut_url = trim((string)($ut['response_url'] ?? ''));
-							$ut_file_url = trim((string)($ut['response_file_url'] ?? ''));
-							$ut_files = isset($ut['response_files']) && is_array($ut['response_files']) ? $ut['response_files'] : [];
-							$ut_completed = (string)($ut['completed_at_fa'] ?? '');
-						?>
-							<li class="<?php echo $ut_done ? 'done' : ''; ?>">
-								<?php echo esc_html($ut_title); ?>
-								<div class="small"><?php echo esc_html($ut_done ? 'تکمیل شده' : 'در انتظار مشتری'); ?><?php echo $ut_completed ? esc_html(' — ' . $ut_completed) : ''; ?></div>
-								<?php if ($ut_resp): ?><div class="small"><?php echo esc_html($ut_resp); ?></div><?php endif; ?>
-								<?php if ($ut_url && (strpos($ut_url, 'http://') === 0 || strpos($ut_url, 'https://') === 0)): ?><a href="<?php echo esc_url($ut_url); ?>" target="_blank" rel="noopener noreferrer">لینک ارسالی مشتری</a><?php endif; ?>
-								<?php if ($ut_file_url && (strpos($ut_file_url, 'http://') === 0 || strpos($ut_file_url, 'https://') === 0)): ?><a href="<?php echo esc_url($ut_file_url); ?>" target="_blank" rel="noopener noreferrer">فایل ارسالی مشتری</a><?php endif; ?>
-								<?php if (!empty($ut_files)): foreach ($ut_files as $rf): if (empty($rf['url'])) continue; ?><a href="<?php echo esc_url($rf['url']); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html(!empty($rf['name']) ? ('فایل: ' . $rf['name']) : 'فایل ارسالی مشتری'); ?></a><?php endforeach; endif; ?>
-							</li>
-						<?php endforeach; ?>
-						</ul>
-					<?php endif; ?>
-
-					<?php if ($updated_at_fa || $updated_by): ?>
-						<div class="stepMeta small">
-						<?php echo $updated_at_fa ? esc_html('تاریخ و زمان: ' . $updated_at_fa) : ''; ?>
-						<?php echo $updated_by ? esc_html(' — کارشناس: ' . $updated_by) : ''; ?>
-						</div>
-					<?php endif; ?>
+				<div class="metadata-box" style="margin-bottom:20px; display:flex; justify-content:space-between; gap:20px; text-align:center;">
+					<div><span>جمع کل هزینه:</span> <strong style="font-size:16px; display:block; margin-top:4px;"><?php echo esc_html(number_format($total_cost)); ?> ریال</strong></div>
+					<div><span>جمع پرداختی:</span> <strong style="font-size:16px; display:block; margin-top:4px; color:#059669;"><?php echo esc_html(number_format($total_paid)); ?> ریال</strong></div>
+					<div><span>مانده حساب:</span> <strong style="font-size:16px; display:block; margin-top:4px; color:<?php echo $total_remain > 0 ? '#dc2626' : '#059669'; ?>;"><?php echo esc_html(number_format($total_remain)); ?> ریال</strong></div>
 				</div>
-			<?php endforeach; ?>
-		</div>
+			<?php endif; ?>
 
-		<?php if ($sign || $stamp || !empty($brand['manager_name']) || !empty($brand['manager_title'])): ?>
-		<div class="card signCard">
-			<div class="h1" style="font-size:16px;">تأیید نهایی</div>
-			<div class="signBox">
-				<div>
-					<?php if ($sign): ?><img src="<?php echo esc_url($sign); ?>" alt="sign"><?php endif; ?>
-					<div class="signMeta">
-						<?php if (!empty($brand['manager_name'])): ?><div><?php echo esc_html($brand['manager_name']); ?></div><?php endif; ?>
-						<?php if (!empty($brand['manager_title'])): ?><div><?php echo esc_html($brand['manager_title']); ?></div><?php endif; ?>
+			<!-- Approvals sign/stamp -->
+			<?php if ((($toggles['invoice_show_sign_stamp'] ?? '1') === '1') && ($sign || $stamp || !empty($brand['manager_name'] || !empty($brand['manager_title'])))): ?>
+				<div class="final-sign-box">
+					<div class="sign-stamp-grid">
+						<div>
+							<?php if ($sign): ?>
+								<img src="<?php echo esc_url($sign); ?>" class="sign-img" alt="signature" />
+							<?php endif; ?>
+							<div class="sign-label"><?php echo esc_html($brand['manager_name'] ?: 'امضا صادرکننده پیش‌فاکتور'); ?></div>
+							<?php if (!empty($brand['manager_title'])): ?>
+								<div class="sign-title"><?php echo esc_html($brand['manager_title']); ?></div>
+							<?php endif; ?>
+						</div>
+						<div>
+							<?php if ($stamp): ?>
+								<img src="<?php echo esc_url($stamp); ?>" class="stamp-img" alt="stamp" />
+							<?php endif; ?>
+						</div>
 					</div>
 				</div>
-				<div>
-					<?php if ($stamp): ?><img src="<?php echo esc_url($stamp); ?>" alt="stamp"><?php endif; ?>
-				</div>
-			</div>
+			<?php endif; ?>
 		</div>
-		<?php endif; ?>
 
-		<div class="footer">
+		<!-- Footer -->
+		<div class="print-footer">
 			<?php echo esc_html($brand['footer_text'] ?? ''); ?>
 		</div>
 	</div>

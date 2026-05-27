@@ -408,6 +408,8 @@ class CPTT_Expert {
 				'due_at_local' => sanitize_text_field($row['due_at_local'] ?? ''),
 				'cost' => isset($row['cost']) ? (float)str_replace(",", "", (string)$row['cost']) : 0,
 				'paid' => isset($row['paid']) ? (float)str_replace(",", "", (string)$row['paid']) : 0,
+				'expert_share' => isset($row['expert_share']) ? (float)str_replace(",", "", (string)$row['expert_share']) : 0,
+				'expert_paid' => isset($row['expert_paid']) ? (float)str_replace(",", "", (string)$row['expert_paid']) : 0,
 				'checklist' => $checklist,
 				'user_tasks' => $user_tasks,
 				'assigned_expert_id' => isset($row['assigned_expert_id']) ? absint($row['assigned_expert_id']) : 0,
@@ -475,7 +477,6 @@ class CPTT_Expert {
 
 		update_post_meta($project_id, '_cptt_client_user_id', $client_id);
 		update_post_meta($project_id, '_cptt_product_id', $product_id);
-		update_post_meta($project_id, '_cptt_is_settled', $is_settled);
 		
 		$added_experts = array_diff($expert_ids, $old_experts);
 		foreach($added_experts as $ae_id) {
@@ -530,6 +531,8 @@ class CPTT_Expert {
 				$desc = wp_kses_post($row['desc'] ?? '');
 				$cost = isset($row['cost']) ? (float)str_replace(",", "", (string)$row['cost']) : 0;
 				$paid = isset($row['paid']) ? (float)str_replace(",", "", (string)$row['paid']) : 0;
+				$expert_share = isset($row['expert_share']) ? (float)str_replace(",", "", (string)$row['expert_share']) : 0;
+				$expert_paid = isset($row['expert_paid']) ? (float)str_replace(",", "", (string)$row['expert_paid']) : 0;
 
 				if ($cost > 0 && $paid >= $cost) {
 					$status = 'done';
@@ -649,6 +652,8 @@ class CPTT_Expert {
 					'desc' => $desc,
 					'cost' => $cost,
 					'paid' => $paid,
+					'expert_share' => $expert_share,
+					'expert_paid' => $expert_paid,
 					'checklist' => $checklist,
 					'user_tasks' => $user_tasks,
 					'assigned_expert_id' => isset($row['assigned_expert_id']) ? absint($row['assigned_expert_id']) : ($old_step ? (int)($old_step['assigned_expert_id'] ?? 0) : 0),
@@ -686,6 +691,9 @@ class CPTT_Expert {
 		}
 
 		update_post_meta($project_id, '_cptt_steps', $new_steps);
+		$fin_data_temp = $this->financial_data($project_id);
+		$is_settled_calc = ($fin_data_temp['remain'] <= 0 && $fin_data_temp['cost'] > 0) ? 1 : 0;
+		update_post_meta($project_id, '_cptt_is_settled', $is_settled_calc);
 
 		$note = trim((string)$note);
 		if ($note !== '') {
@@ -718,6 +726,12 @@ class CPTT_Expert {
 		$project_id = isset($_POST['project_id']) ? absint($_POST['project_id']) : 0;
 		if (!$project_id || get_post_type($project_id) !== 'cptt_project') wp_send_json_error('invalid_project', 400);
 		if (!$this->can_manage_project($project_id, get_current_user_id())) wp_send_json_error('no_access', 403);
+
+		$loaded_last_update = isset($_POST['loaded_last_update']) ? (int)$_POST['loaded_last_update'] : 0;
+		$db_last_update = (int)get_post_meta($project_id, '_cptt_last_update', true);
+		if ($loaded_last_update && $db_last_update && $loaded_last_update !== $db_last_update) {
+			wp_send_json_error('تغییرات شما ذخیره نشد! این پروژه در حین کار شما توسط کارشناس دیگری ویرایش و ذخیره شده است. برای جلوگیری از خراب شدن اطلاعات، لطفا صفحه را مجدداً رفرش کنید تا آخرین تغییرات را ببینید و سپس مجدداً اقدام نمایید.', 409);
+		}
 		$posted_steps = $this->normalize_expert_posted_steps(isset($_POST['steps']) ? $_POST['steps'] : []);
 		$note = isset($_POST['note']) ? wp_unslash((string)$_POST['note']) : '';
 		$result = $this->save_expert_project($project_id, $posted_steps, $note, $_POST);
@@ -824,6 +838,7 @@ class CPTT_Expert {
 		?>
 		<form class="cptt-expert-project-form" data-project-id="<?php echo esc_attr($project_id); ?>">
 			<input type="hidden" name="project_id" value="<?php echo esc_attr($project_id); ?>">
+			<input type="hidden" name="loaded_last_update" value="<?php echo esc_attr((string)get_post_meta($project_id, '_cptt_last_update', true)); ?>">
 
 			<!-- Project Meta -->
 			<div class="cptt-expert-projectMeta">
@@ -886,13 +901,7 @@ class CPTT_Expert {
 						<input type="text" class="cptt-jalali-datetime" name="deadline_local" value="<?php echo esc_attr($deadline_local); ?>" placeholder="۱۴۰۳/۰۱/۳۱ ۱۴:۳۰">
 					</label>
 				</div>
-				<label class="cptt-createProjectCheck">
-					<span>وضعیت مالی</span>
-					<label>
-						<input type="checkbox" name="is_settled" value="1" <?php checked($is_settled, 1); ?>>
-						تسویه شده
-					</label>
-				</label>
+				<!-- Automatic status calculated from stage financial values -->
 			</div>
 
 			<!-- Steps Accordion -->
@@ -953,12 +962,20 @@ class CPTT_Expert {
 								<input type="text" class="cptt-jalali-datetime" name="steps[<?php echo esc_attr($step_id); ?>][due_at_local]" value="<?php echo esc_attr($due_local); ?>">
 							</label>
 							<label>
-								<span>هزینه مرحله</span>
+								<span>هزینه مرحله (ریال)</span>
 								<input type="text" name="steps[<?php echo esc_attr($step_id); ?>][cost]" class="cptt-currency-input" value="<?php echo esc_attr(number_format($step['cost'] ?? 0)); ?>">
 							</label>
 							<label>
-								<span>دریافتی مرحله</span>
+								<span>دریافتی مرحله (ریال)</span>
 								<input type="text" name="steps[<?php echo esc_attr($step_id); ?>][paid]" class="cptt-currency-input" value="<?php echo esc_attr(number_format($step['paid'] ?? 0)); ?>">
+							</label>
+							<label>
+								<span>سهم کارشناس (ریال)</span>
+								<input type="text" name="steps[<?php echo esc_attr($step_id); ?>][expert_share]" class="cptt-currency-input" value="<?php echo esc_attr(number_format($step['expert_share'] ?? 0)); ?>">
+							</label>
+							<label>
+								<span>پرداخت به کارشناس (ریال)</span>
+								<input type="text" name="steps[<?php echo esc_attr($step_id); ?>][expert_paid]" class="cptt-currency-input" value="<?php echo esc_attr(number_format($step['expert_paid'] ?? 0)); ?>">
 							</label>
 						</div>
 						<?php
@@ -1114,8 +1131,7 @@ class CPTT_Expert {
 					<textarea name="note" rows="3" placeholder="اگر لازم است توضیح یا گزارش کوتاه ثبت کنید..."></textarea>
 				</label>
 				<div class="cptt-expert-formActions">
-					<button type="submit" class="cptt-btn cptt-btn--primary">ذخیره تغییرات</button>
-					<a class="cptt-btn" href="<?php echo esc_url(admin_url('post.php?action=edit&post=' . (int)$project_id)); ?>" target="_blank" rel="noopener noreferrer">ویرایش کامل در پنل ادمین</a>
+					<button type="submit" class="cptt-btn cptt-btn--primary cptt-expert-save-floating">ذخیره تغییرات</button>
 					<div class="cptt-expert-formMsg" aria-live="polite"></div>
 				</div>
 			</div>
@@ -1583,6 +1599,19 @@ class CPTT_Expert {
 				$user_tasks_total++;
 				if (!empty($task['done'])) $user_tasks_done++;
 			}
+			$user_tasks_items = [];
+			if ($full_details) {
+				foreach ($user_tasks as $task) {
+					if (!is_array($task) || empty($task['title'])) continue;
+					$user_tasks_items[] = [
+						'title' => (string) ($task['title'] ?? ''),
+						'desc' => (string) ($task['desc'] ?? ''),
+						'done' => !empty($task['done']),
+						'due_fa' => (string) ($task['due_at_fa'] ?? ''),
+						'response' => (string) ($task['response'] ?? ''),
+					];
+				}
+			}
 			$items[] = [
 				'index' => $index + 1,
 				'title' => (string) ($step['title'] ?? ('مرحله ' . ($index + 1))),
@@ -1595,6 +1624,9 @@ class CPTT_Expert {
 				'checklist_items' => $checklist_items,
 				'user_tasks_total' => $user_tasks_total,
 				'user_tasks_done' => $user_tasks_done,
+				'user_tasks_items' => $user_tasks_items,
+				'cost' => $full_details ? (float) ($step['cost'] ?? 0) : 0,
+				'paid' => $full_details ? (float) ($step['paid'] ?? 0) : 0,
 			];
 		}
 		$card = $this->project_card_data($project_id);
@@ -1617,6 +1649,11 @@ class CPTT_Expert {
 			'settled' => $full_details ? (int) ($card['settled'] ?? 0) : 0,
 			'steps' => $items,
 			'full_details' => $full_details,
+			'delivery_method' => $card['delivery_method'] ?? '',
+			'delivery_method_label' => $card['delivery_method_label'] ?? '',
+			'delivery_province' => $card['delivery_province'] ?? '',
+			'delivery_city' => $card['delivery_city'] ?? '',
+			'delivery_address' => $card['delivery_address'] ?? '',
 		];
 	}
 
@@ -3102,9 +3139,9 @@ class CPTT_Expert {
                         <button type="button" class="cptt-mobile-menu__close" style="margin-left:0;background:none;border:none;font-size:26px;color:#64748b;cursor:pointer;">×</button>
 			        </div>
 			        
-                    <div style="padding:15px 0; border-bottom:1px solid #e2e8f0; margin-bottom:15px;">
-						<div class="cptt-expertProfile" style="display:flex; align-items:center; gap:10px;">
-							<img src="<?php echo esc_url($curr_avatar); ?>" alt="avatar" style="width:60px; height:60px; border-radius:50%; object-fit:cover;">
+                    <div style="padding:15px 0; border-bottom:1px solid #e2e8f0; margin-bottom:15px; display:flex; justify-content:center; text-align:center; width:100%;">
+						<div class="cptt-expertProfileMobile" style="display:flex; flex-direction:column; align-items:center; gap:10px; text-align:center; width:100%;">
+							<img src="<?php echo esc_url($curr_avatar); ?>" alt="avatar" style="width:60px; height:60px; border-radius:50%; object-fit:cover; display:block; margin:0 auto;">
 							<div>
 								<strong style="display:block;font-size:14px;"><?php echo esc_html($current_user->display_name); ?></strong>
 								<span style="display:block; font-size:11px; color:#666;"><?php echo esc_html($current_user->user_email); ?></span>
@@ -3269,6 +3306,10 @@ class CPTT_Expert {
 					<div class="cptt-expertCard__actions">
 						<button type="button" class="cptt-btn cptt-btn--primary cptt-expert-toggleProject">مدیریت پروژه</button>
 						<?php if (current_user_can("delete_cptt_project")): ?><button type="button" class="cptt-btn cptt-btn--danger cptt-expert-delete-project" data-project-id="<?php echo esc_attr($p->ID); ?>">🗑 حذف پروژه</button><?php endif; ?>
+						
+						<!-- Proforma Invoice Button -->
+						<a class="cptt-btn cptt-btn--secondary" href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=cptt_view_invoice&project_id=' . $p->ID), 'cptt_view_invoice_' . $p->ID)); ?>" target="_blank" rel="noopener noreferrer">📄 پیش‌فاکتور</a>
+
 						<?php if (class_exists('CPTT_Report') && CPTT_Report::is_project_complete($p->ID)): ?>
 							<a class="cptt-btn" href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=cptt_view_report&project_id=' . $p->ID), 'cptt_view_report_' . $p->ID)); ?>" target="_blank" rel="noopener noreferrer">مشاهده گزارش</a>
 						<?php endif; ?>
@@ -3421,6 +3462,9 @@ class CPTT_Expert {
 		</div>
 	</div>
 
+	<!-- Floating Back to Top Button -->
+	<button type="button" id="cptt-back-to-top" style="display:none;" title="برو به بالا">▲</button>
+
 		<?php
 		return ob_get_clean();
 	}
@@ -3450,13 +3494,16 @@ class CPTT_Expert {
 			$new_steps[] = $s;
 		}
 		update_post_meta($project_id, '_cptt_steps', $new_steps);
+		$fin_data_temp = $this->financial_data($project_id);
+		$is_settled_calc = ($fin_data_temp['remain'] <= 0 && $fin_data_temp['cost'] > 0) ? 1 : 0;
+		update_post_meta($project_id, '_cptt_is_settled', $is_settled_calc);
 		$now = (int)current_time('timestamp', true);
 		update_post_meta($project_id, '_cptt_last_update', $now);
 		update_post_meta($project_id, '_cptt_last_update_fa', CPTT_Core::jalali_datetime($now));
 		wp_send_json_success(['step_id' => $step_id]);
 	}
 
-	private function insert_notification($user_id, $type, $message, $reference_id = 0, $link = '') {
+	public function insert_notification($user_id, $type, $message, $reference_id = 0, $link = '') {
 		global $wpdb;
 		$wpdb->insert(
 			$wpdb->prefix . 'cptt_notifications',
@@ -3471,9 +3518,33 @@ class CPTT_Expert {
 			],
 			['%d', '%s', '%d', '%s', '%s', '%d', '%s']
 		);
+
+		// Send Bale Messenger Notification if connected
+		if (class_exists('CPTT_Bale')) {
+			CPTT_Bale::notify_via_bale($user_id, $message);
+		}
+
+		// Send Email Notification to the expert/administrator
+		$user_obj = get_user_by('id', (int)$user_id);
+		if ($user_obj && !empty($user_obj->user_email)) {
+			$subject = '🔔 اعلان جدید در سیستم مدیریت پروژه: ' . $message;
+			$body = '<div dir="rtl" style="font-family:Tahoma, sans-serif; text-align:right; padding:20px; border:1px solid #e2e8f0; border-radius:12px; background:#fff; max-width:600px; margin:0 auto; box-shadow:0 4px 12px rgba(0,0,0,0.03);">';
+			$body .= '<h3 style="color:#0f172a; margin:0 0 10px;">سلام ' . esc_html($user_obj->display_name) . ' عزیز</h3>';
+			$body .= '<p style="color:#475569; font-size:14px; line-height:1.6; margin:0 0 15px;">یک اعلان جدید برای شما در سیستم ثبت شده است:</p>';
+			$body .= '<blockquote style="background:#f1f5f9; padding:15px; border-right:4px solid #6366f1; margin:15px 0; border-radius:4px; font-weight:bold; color:#1e293b;">' . esc_html($message) . '</blockquote>';
+			if ($link) {
+				$body .= '<p style="margin-top:20px;"><a href="' . esc_url($link) . '" style="display:inline-block; padding:10px 20px; background:#6366f1; color:#fff !important; text-decoration:none; border-radius:8px; font-weight:bold; font-size:13px; box-shadow:0 4px 10px rgba(99,102,241,0.25);">🔗 مشاهده جزئیات و اقدام</a></p>';
+			}
+			$body .= '<hr style="border:none; border-top:1px solid #e2e8f0; margin-top:25px; margin-bottom:15px;">';
+			$body .= '<p style="font-size:11px; color:#94a3b8; margin:0;">این ایمیل به صورت خودکار توسط سیستم Client Project Tracker ارسال شده است.</p>';
+			$body .= '</div>';
+			
+			$headers = ['Content-Type: text/html; charset=UTF-8'];
+			@wp_mail($user_obj->user_email, $subject, $body, $headers);
+		}
 	}
 
-	private function notify_project_experts($project_id, $exclude_user_id, $type, $message, $link = '') {
+	public function notify_project_experts($project_id, $exclude_user_id, $type, $message, $link = '') {
 		$expert_ids = CPTT_Core::get_project_expert_ids($project_id);
 		foreach ($expert_ids as $eid) {
 			if ((int)$eid === (int)$exclude_user_id) continue;

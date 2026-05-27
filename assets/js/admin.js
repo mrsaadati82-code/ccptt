@@ -369,6 +369,106 @@ jQuery(function ($) {
   $(document).on('input change', '#cptt-acct-search,#cptt-acct-client,#cptt-acct-settled,#cptt-acct-status', filterAccounting);
   $(document).on('click', '#cptt-acct-reset', function(){ $('.cptt-acct-filters input,.cptt-acct-filters select').val(''); filterAccounting(); });
 
+  /* ===== Print accounting report ===== */
+  $(document).on('click', '#cptt-acct-print', function() {
+    var $visibleRows = $('.cptt-acct-row:visible');
+    if (!$visibleRows.length) {
+      alert('هیچ پروژه‌ای در لیست برای چاپ وجود ندارد.');
+      return;
+    }
+    
+    var brand = CPTT_ADMIN.branding || {};
+    var brandName = brand.brand_name || 'مدیریت پروژه‌ها';
+    var logoUrl = CPTT_ADMIN.logo_url || '';
+    var siteUrl = brand.site_url || '';
+    var dateFa = cpttToFa(new Date().toLocaleDateString('fa-IR'));
+    
+    var html = '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8">';
+    html += '<title>گزارش مالی پروژه‌ها</title>';
+    html += '<style>';
+    html += 'body{ font-family: Tahoma, sans-serif; font-size:12px; line-height:1.6; color:#333; margin:20px; direction: rtl; text-align: right; }';
+    html += '.header-table{ width:100%; border-collapse:collapse; margin-bottom:20px; }';
+    html += '.header-table td{ padding:6px; border:none; vertical-align:middle; }';
+    html += '.brand-logo{ max-height:60px; max-width:180px; object-fit:contain; }';
+    html += '.report-title{ font-size:18px; font-weight:bold; color:#111; margin:0; }';
+    html += '.report-meta{ font-size:11px; color:#666; margin-top:4px; }';
+    html += '.report-table{ width:100%; border-collapse:collapse; margin-top:15px; }';
+    html += '.report-table th, .report-table td{ border:1px solid #ddd; padding:8px 10px; text-align:right; }';
+    html += '.report-table th{ background:#f5f5f5; font-weight:bold; }';
+    html += '.text-left{ text-align:left !important; }';
+    html += '.text-center{ text-align:center !important; }';
+    html += '.total-row{ font-weight:bold; background:#fafafa; }';
+    html += '@media print{ .no-print{ display:none; } }';
+    html += '</style></head><body>';
+    
+    html += '<table class="header-table"><tr>';
+    if (logoUrl) {
+      html += '<td style="width:120px;"><img src="' + logoUrl + '" class="brand-logo" /></td>';
+    }
+    html += '<td><div class="report-title">گزارش مالی پروژه‌ها</div><div class="report-meta">نام برند: ' + brandName + ' | آدرس سایت: ' + siteUrl + '</div></td>';
+    html += '<td style="text-align:left; vertical-align:top;"><div class="report-meta">تاریخ گزارش: ' + dateFa + '</div><div class="report-meta no-print" style="margin-top:10px;"><button onclick="window.print()" style="padding:6px 12px; background:#059669; border:none; color:#fff; font-weight:bold; border-radius:6px; cursor:pointer;">🖨 چاپ</button></div></td>';
+    html += '</tr></table>';
+    
+    html += '<table class="report-table"><thead><tr>';
+    html += '<th>ردیف</th>';
+    html += '<th>عنوان پروژه</th>';
+    html += '<th>مشتری</th>';
+    html += '<th>پیشرفت</th>';
+    html += '<th>وضعیت مالی</th>';
+    html += '<th class="text-left">کل هزینه (تومان)</th>';
+    html += '<th class="text-left">دریافتی (تومان)</th>';
+    html += '<th class="text-left">مانده (تومان)</th>';
+    html += '</tr></thead><tbody>';
+    
+    var totalCost = 0;
+    var totalPaid = 0;
+    var totalRemain = 0;
+    
+    $visibleRows.each(function(index) {
+      var $row = $(this);
+      var title = $row.find('.cptt-acct-title').text().trim();
+      var experts = $row.find('.cptt-acct-meta').text().trim();
+      var client = $row.find('td').eq(1).text().trim();
+      var progress = $row.find('td').eq(2).find('small').text().trim();
+      var settledStatus = $row.find('.cptt-chip').text().trim();
+      
+      var cost = parseFloat($row.find('td').eq(4).text().replace(/,/g, '')) || 0;
+      var paid = parseFloat($row.find('td').eq(5).text().replace(/,/g, '')) || 0;
+      var remain = parseFloat($row.find('td').eq(6).text().replace(/,/g, '')) || 0;
+      
+      totalCost += cost;
+      totalPaid += paid;
+      totalRemain += remain;
+      
+      html += '<tr>';
+      html += '<td class="text-center">' + cpttToFa(index + 1) + '</td>';
+      html += '<td><b>' + title + '</b><div style="font-size:10px; color:#666; margin-top:2px;">' + experts + '</div></td>';
+      html += '<td>' + client + '</td>';
+      html += '<td class="text-center">' + cpttToFa(progress) + '</td>';
+      html += '<td class="text-center">' + settledStatus + '</td>';
+      html += '<td class="text-left">' + cpttToFa(cost.toLocaleString('en')) + '</td>';
+      html += '<td class="text-left" style="color:#15803d;">' + cpttToFa(paid.toLocaleString('en')) + '</td>';
+      html += '<td class="text-left" style="color:' + (remain > 0 ? '#b91c1c' : '#15803d') + '; font-weight:bold;">' + cpttToFa(remain.toLocaleString('en')) + '</td>';
+      html += '</tr>';
+    });
+    
+    html += '<tr class="total-row">';
+    html += '<td colspan="5" style="text-align:left;">جمع کل گزارش:</td>';
+    html += '<td class="text-left">' + cpttToFa(totalCost.toLocaleString('en')) + '</td>';
+    html += '<td class="text-left" style="color:#15803d;">' + cpttToFa(totalPaid.toLocaleString('en')) + '</td>';
+    html += '<td class="text-left" style="color:' + (totalRemain > 0 ? '#b91c1c' : '#15803d') + ';">' + cpttToFa(totalRemain.toLocaleString('en')) + '</td>';
+    html += '</tr>';
+    
+    html += '</tbody></table>';
+    html += '<div style="margin-top:40px; text-align:center; font-size:10px; color:#999;">تولید شده توسط سیستم حسابداری Client Project Tracker</div>';
+    html += '</body></html>';
+    
+    var w = window.open('', '_blank');
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+  });
+
   /* ===== Product filter by WC category ===== */
   $(document).on('change', '#cptt_wc_cats', function(){
     var selected = $(this).val() || [];
@@ -516,4 +616,63 @@ jQuery(function($){
               e.target.value = '';
           }
       }
+  });
+
+
+  /* ===== Register Expert Payout (v5.4.0) ===== */
+  $(document).on('click', '.cptt-record-payout-btn', function(e) {
+    e.preventDefault();
+    var expertId = $(this).data('expert-id');
+    var expertName = $(this).data('expert-name');
+    var remain = $(this).data('remain');
+    
+    $('#cptt-payout-expert-id').val(expertId);
+    $('#cptt-payout-expert-name').val(expertName);
+    $('#cptt-payout-expert-remain').val(parseInt(remain).toLocaleString('en-US'));
+    $('#cptt-payout-amount').val(parseInt(remain).toLocaleString('en-US')).focus();
+    $('#cptt-payout-msg').text('').css('color', '');
+    
+    $('#cptt-payout-modal').css('display', 'flex');
+  });
+
+  $(document).on('click', '#cptt-payout-close, #cptt-payout-modal', function(e) {
+    if (e.target === this || e.target.id === 'cptt-payout-close') {
+      $('#cptt-payout-modal').hide();
+    }
+  });
+
+  $(document).on('submit', '#cptt-payout-form', function(e) {
+    e.preventDefault();
+    var $msg = $('#cptt-payout-msg');
+    var $btn = $(this).find('button[type="submit"]');
+    
+    $msg.text('در حال ثبت تسویه حساب...').css('color', '#475569');
+    $btn.prop('disabled', true);
+    
+    var fd = new FormData(this);
+    fd.append('action', 'cptt_expert_payout');
+    fd.append('nonce', CPTT_ADMIN.nonce);
+    
+    $.ajax({
+      url: CPTT_ADMIN.ajax,
+      type: 'POST',
+      data: fd,
+      processData: false,
+      contentType: false,
+      success: function(res) {
+        if (res.success) {
+          $msg.text('✓ ' + res.data).css('color', '#059669');
+          setTimeout(function() {
+            window.location.reload();
+          }, 1200);
+        } else {
+          $msg.text('✗ ' + res.data).css('color', '#dc2626');
+          $btn.prop('disabled', false);
+        }
+      },
+      error: function() {
+        $msg.text('✗ خطای ارتباط با سرور').css('color', '#dc2626');
+        $btn.prop('disabled', false);
+      }
+    });
   });

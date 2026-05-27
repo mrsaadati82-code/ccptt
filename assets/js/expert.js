@@ -13,6 +13,7 @@
   /* =========================================================
      NOTIFICATION POLLING
      ========================================================= */
+  var lastUnreadCount = 0;
   function pollNotifications() {
     if (!qs('.cptt-notification-bell')) return;
     var fd = new FormData();
@@ -25,8 +26,21 @@
       var data = json.data || {};
       var badge = qs('.cptt-bell-badge');
       var list = qs('.cptt-notifications-list');
+      
+      var currentUnread = parseInt(data.unread || 0, 10);
+      if (currentUnread > lastUnreadCount) {
+        // Trigger browser push notification!
+        if (window.Notification && Notification.permission === 'granted') {
+          new Notification('اعلان جدید در سیستم مدیریت پروژه', {
+            body: 'شما یک پیام یا کارمزد جدید تسویه شده در داشبورد CPTT دارید.',
+            dir: 'rtl'
+          });
+        }
+      }
+      lastUnreadCount = currentUnread;
+
       if (badge) {
-        if (data.unread > 0) { badge.textContent = data.unread; badge.style.display = 'flex'; }
+        if (currentUnread > 0) { badge.textContent = currentUnread; badge.style.display = 'flex'; }
         else { badge.style.display = 'none'; }
       }
       if (list && data.html) {
@@ -827,6 +841,26 @@
      INITIALIZE
      ========================================================= */
   document.addEventListener('DOMContentLoaded', function () {
+    /* ===== Web Notifications Permission Request ===== */
+    if (window.Notification && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
+    /* ===== Back to Top Button Handler ===== */
+    var btt = document.getElementById('cptt-back-to-top');
+    if (btt) {
+      window.addEventListener('scroll', function() {
+        if (window.scrollY > 300) {
+          btt.style.display = 'flex';
+        } else {
+          btt.style.display = 'none';
+        }
+      });
+      btt.addEventListener('click', function() {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    }
+
     var search = qs('#cptt-expert-search');
     var status = qs('#cptt-expert-status');
     var settled = qs('#cptt-expert-settled');
@@ -1639,8 +1673,30 @@
 
           // تسک مشتری
           if (s.user_tasks_total > 0) {
-            html += '<div class="cptt-hubModal__stepChecklist">';
-            html += '<span>📋 تسک مشتری: '+escH(String(s.user_tasks_done))+'/'+escH(String(s.user_tasks_total))+'</span>';
+            html += '<div class="cptt-hubModal__stepChecklist" style="margin-top:10px;">';
+            html += '<span>📋 تسک‌های سمت مشتری: ' + escH(String(s.user_tasks_done)) + '/' + escH(String(s.user_tasks_total)) + '</span>';
+            if (s.user_tasks_items && s.user_tasks_items.length) {
+              html += '<ul class="cptt-hubModal__checkItems" style="margin-top:6px; list-style:circle; padding-right:15px;">';
+              s.user_tasks_items.forEach(function(ut) {
+                var taskStatus = ut.done ? '<span style="color:#059669; font-weight:bold;">[تکمیل شده]</span>' : '<span style="color:#f59e0b; font-weight:bold;">[در انتظار پاسخ]</span>';
+                html += '<li style="margin-bottom:6px;">';
+                html += '<strong style="color:#0f172a;">' + escH(ut.title) + '</strong> ' + taskStatus;
+                if (ut.desc) html += '<div style="font-size:11px; color:#64748b; margin-top:2px;">' + escH(ut.desc) + '</div>';
+                if (ut.due_fa) html += '<div style="font-size:11px; color:#dc2626; margin-top:2px;">📅 مهلت تسک: ' + escH(ut.due_fa) + '</div>';
+                if (ut.done && ut.response) html += '<div style="font-size:12px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:6px; margin-top:4px; color:#047857;">💬 پاسخ مشتری: ' + escH(ut.response) + '</div>';
+                html += '</li>';
+              });
+              html += '</ul>';
+            }
+            html += '</div>';
+          }
+
+          if (project.full_details && (s.cost > 0 || s.paid > 0)) {
+            var stepRemain = s.cost - s.paid;
+            html += '<div style="font-size:11px; color:#475569; margin-top:8px; padding-top:6px; border-top:1px dashed #cbd5e1; display:flex; gap:12px; flex-wrap:wrap;">';
+            html += '<span>💰 هزینه مرحله: <b>' + Number(s.cost).toLocaleString('en') + '</b> ریال</span>';
+            html += '<span>💳 دریافتی: <b>' + Number(s.paid).toLocaleString('en') + '</b> ریال</span>';
+            html += '<span>⏳ مانده: <b style="color:' + (stepRemain > 0 ? '#dc2626' : '#059669') + '">' + Number(stepRemain).toLocaleString('en') + '</b> ریال</span>';
             html += '</div>';
           }
 
