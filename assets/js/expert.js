@@ -13,9 +13,64 @@
   /* =========================================================
      NOTIFICATION POLLING
      ========================================================= */
-  var lastUnreadCount = 0;
+  /* ---------------------------------------------------------------
+     Push Notification (v5.4.3)
+     - استفاده از آی‌دی هر اعلان برای جلوگیری از تکرار
+     - عنوان نوتیفیکیشن بر اساس نوع/متن واقعی هر اعلان
+     - ذخیره‌ی آی‌دی‌های نمایش‌داده‌شده در localStorage تا بعد از رفرش هم تکرار نشود
+  --------------------------------------------------------------- */
+  var CPTT_PUSH_STORAGE_KEY = 'cptt_pushed_notif_ids_v1';
+  var CPTT_PUSH_MAX_KEEP = 200;
+
+  function loadPushedIds() {
+    try {
+      var raw = localStorage.getItem(CPTT_PUSH_STORAGE_KEY);
+      if (!raw) return {};
+      var obj = JSON.parse(raw);
+      return (obj && typeof obj === 'object') ? obj : {};
+    } catch (e) { return {}; }
+  }
+  function savePushedIds(obj) {
+    try {
+      // محدودسازی حجم: اگر بیش از حد بزرگ شد، فقط جدیدترین‌ها نگه داشته شوند
+      var keys = Object.keys(obj);
+      if (keys.length > CPTT_PUSH_MAX_KEEP) {
+        keys.sort(function(a,b){ return (obj[a]||0) - (obj[b]||0); });
+        var drop = keys.length - CPTT_PUSH_MAX_KEEP;
+        for (var i = 0; i < drop; i++) delete obj[keys[i]];
+      }
+      localStorage.setItem(CPTT_PUSH_STORAGE_KEY, JSON.stringify(obj));
+    } catch (e) {}
+  }
+
+  // نگاشت نوع اعلان به عنوان فارسی مناسب push
+  var CPTT_NOTIF_TITLES = {
+    project_assigned:  '📌 پروژه‌ی جدید به شما واگذار شد',
+    project_removed:   '🚫 از پروژه حذف شدید',
+    step_completed:    '✅ یک مرحله انجام شد',
+    project_note:      '📝 یادداشت جدید در پروژه',
+    project_completed: '🎉 پروژه تکمیل شد',
+    project_chat:      '💬 پیام جدید در چت پروژه',
+    direct_chat:       '📨 پیام مستقیم جدید',
+    expert_payout:     '💰 تسویه حساب جدید',
+    user_task_done:    '🧩 پاسخ مشتری ثبت شد'
+  };
+  function titleForNotif(type, message) {
+    if (type && CPTT_NOTIF_TITLES[type]) return CPTT_NOTIF_TITLES[type];
+    // fallback: چند کلمه‌ی اول پیام
+    var m = String(message || '').replace(/\s+/g, ' ').trim();
+    if (!m) return '🔔 اعلان جدید';
+    return m.length > 50 ? m.slice(0, 50) + '…' : m;
+  }
+
+  var cpttPollInFlight = false;
+  var cpttFirstPoll = true; // پولینگ اولِ بار: فقط ID ها را seed کن، push نزن
+
   function pollNotifications() {
     if (!qs('.cptt-notification-bell')) return;
+    if (cpttPollInFlight) return; // جلوگیری از تداخل درخواست‌های همزمان
+    cpttPollInFlight = true;
+
     var fd = new FormData();
     fd.append('action', 'cptt_expert_fetch_notifications');
     fd.append('nonce', (window.CPTT_EXPERT && CPTT_EXPERT.nonce) ? CPTT_EXPERT.nonce : '');
@@ -26,18 +81,56 @@
       var data = json.data || {};
       var badge = qs('.cptt-bell-badge');
       var list = qs('.cptt-notifications-list');
-      
+
       var currentUnread = parseInt(data.unread || 0, 10);
-      if (currentUnread > lastUnreadCount) {
-        // Trigger browser push notification!
-        if (window.Notification && Notification.permission === 'granted') {
-          new Notification('اعلان جدید در سیستم مدیریت پروژه', {
-            body: 'شما یک پیام یا کارمزد جدید تسویه شده در داشبورد CPTT دارید.',
-            dir: 'rtl'
-          });
-        }
+      var items = Array.isArray(data.items) ? data.items : [];
+
+      // Push برای هر اعلان خوانده‌نشده‌ی جدید (که قبلا push نشده)
+      if (window.Notification && Notification.permission === 'granted' && items.length) {
+        var pushed = loadPushedIds();
+        var now = Date.now();
+        var changed = false;
+        // مرتب‌سازی صعودی بر اساس id تا اگر چند تا جدید باشد به ترتیب push شوند
+        items.slice().sort(function(a,b){ return (parseInt(a.id,10)||0) - (parseInt(b.id,10)||0); })
+        .forEach(function(it){
+          var nid = String(it.id || '');
+          if (!nid) return;
+          if (pushed[nid]) return;
+          // در پولینگ اول، فقط آی‌دی‌ها را seed کن تا اعلان‌های قدیمی موجود در دیتابیس
+          // بعد از باز کردن صفحه دوباره به‌صورت push نمایش داده نشوند.
+          if (cpttFirstPoll) {
+            pushed[nid] = now;
+            changed = true;
+            return;
+          }
+          if (parseInt(it.is_read, 10) === 1) {
+            // قبلا خوانده شده؛ push نمی‌کنیم ولی به دفتر اضافه می‌کنیم تا بعدا تکرار نشود
+            pushed[nid] = now;
+            changed = true;
+            return;
+          }
+          try {
+            var n = new Notification(titleForNotif(it.type, it.message), {
+              body: String(it.message || ''),
+              dir: 'rtl',
+              lang: 'fa',
+              tag: 'cptt-notif-' + nid,  // tag یکتا → جلوگیری از تکرار توسط مرورگر
+              renotify: false,
+              icon: (window.CPTT_EXPERT && CPTT_EXPERT.notif_icon) ? CPTT_EXPERT.notif_icon : undefined
+            });
+            if (it.link) {
+              n.onclick = function(){
+                try { window.focus(); window.location.href = it.link; } catch(e){}
+                this.close();
+              };
+            }
+          } catch(e) {}
+          pushed[nid] = now;
+          changed = true;
+        });
+        if (changed) savePushedIds(pushed);
       }
-      lastUnreadCount = currentUnread;
+      cpttFirstPoll = false;
 
       if (badge) {
         if (currentUnread > 0) { badge.textContent = currentUnread; badge.style.display = 'flex'; }
@@ -46,7 +139,8 @@
       if (list && data.html) {
         list.innerHTML = data.html;
       }
-    }).catch(function(e){ /* silently ignore polling errors */ });
+    }).catch(function(e){ /* silently ignore polling errors */ })
+    .finally(function(){ cpttPollInFlight = false; });
   }
 
   /* =========================================================
@@ -213,10 +307,18 @@
       var fab = qs('.cptt-mobile-fab');
       var menu = qs('.cptt-mobile-menu');
       if (fab && menu) {
-          fab.addEventListener('click', function() { menu.removeAttribute('hidden'); document.body.style.overflow = 'hidden'; });
+          fab.addEventListener('click', function() {
+            menu.removeAttribute('hidden');
+            document.body.style.overflow = 'hidden';
+            document.body.classList.add('cptt-mobile-menu-open');
+          });
           var close = qs('.cptt-mobile-menu__close', menu);
           var backdrop = qs('.cptt-mobile-menu__backdrop', menu);
-          function closeMenu() { menu.setAttribute('hidden', ''); document.body.style.overflow = ''; }
+          function closeMenu() {
+            menu.setAttribute('hidden', '');
+            document.body.style.overflow = '';
+            document.body.classList.remove('cptt-mobile-menu-open');
+          }
           if (close) close.addEventListener('click', closeMenu);
           if (backdrop) backdrop.addEventListener('click', closeMenu);
       }
@@ -484,6 +586,32 @@
     });
   }
 
+  /* مودال تداخل ویرایش همزمان (v5.4.3) */
+  function showConflictModal(message) {
+    if (document.getElementById('cptt-conflict-modal')) return;
+    var overlay = document.createElement('div');
+    overlay.id = 'cptt-conflict-modal';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483646;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.65);backdrop-filter:blur(4px);direction:rtl;';
+    overlay.innerHTML =
+      '<div style="background:#fff;border-radius:18px;max-width:460px;width:100%;padding:24px;box-shadow:0 30px 60px rgba(0,0,0,.3);text-align:center;font-family:inherit;">' +
+        '<div style="font-size:42px;margin-bottom:8px;">⚠️</div>' +
+        '<h3 style="margin:0 0 10px;color:#0f172a;font-size:17px;font-weight:900;">تداخل در ویرایش همزمان</h3>' +
+        '<p style="color:#475569;font-size:13px;line-height:1.8;margin:0 0 18px;">' + (message || 'این پروژه در حین کار شما توسط کارشناس دیگری ویرایش و ذخیره شده است.') + '</p>' +
+        '<p style="color:#64748b;font-size:12px;line-height:1.7;margin:0 0 18px;">برای جلوگیری از خراب شدن اطلاعات، لطفاً صفحه را بروزرسانی کنید و تغییرات خود را دوباره اعمال نمایید.</p>' +
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">' +
+          '<button type="button" id="cptt-conflict-refresh" style="flex:1;min-width:140px;padding:12px 18px;border-radius:12px;border:none;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:13px;font-weight:900;cursor:pointer;">🔄 بروزرسانی صفحه</button>' +
+          '<button type="button" id="cptt-conflict-close" style="flex:1;min-width:140px;padding:12px 18px;border-radius:12px;border:1px solid #cbd5e1;background:#fff;color:#334155;font-size:13px;font-weight:900;cursor:pointer;">بستن</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    var close = function(){ try{ overlay.remove(); }catch(e){} };
+    overlay.addEventListener('click', function(e){ if (e.target === overlay) close(); });
+    var rBtn = document.getElementById('cptt-conflict-refresh');
+    var cBtn = document.getElementById('cptt-conflict-close');
+    if (rBtn) rBtn.addEventListener('click', function(){ window.location.reload(); });
+    if (cBtn) cBtn.addEventListener('click', close);
+  }
+
   function bindSaveForms() {
     qsa('.cptt-expert-project-form').forEach(function (form) {
       if (form.dataset.bound) return;
@@ -503,7 +631,20 @@
             method: 'POST', credentials: 'same-origin', body: fd
           });
           var json = await res.json();
-          if (!json || !json.success) throw new Error((window.CPTT_EXPERT && CPTT_EXPERT.texts && CPTT_EXPERT.texts.error) || 'خطا در ذخیره اطلاعات');
+          if (!json || !json.success) {
+            // تشخیص خطای تداخل ویرایش همزمان (HTTP 409 یا پیام مشخص)
+            var errMsg = '';
+            if (json && json.data) {
+              errMsg = (typeof json.data === 'string') ? json.data : (json.data.message || '');
+            }
+            var isConflict = (res.status === 409) || (errMsg && errMsg.indexOf('کارشناس دیگری ویرایش') !== -1);
+            if (isConflict) {
+              showConflictModal(errMsg || 'این پروژه توسط کارشناس دیگری ویرایش شده است.');
+              if (msg) { msg.style.color = '#dc2626'; msg.textContent = 'برای ادامه، صفحه را بروزرسانی کنید.'; }
+              return;
+            }
+            throw new Error(errMsg || (window.CPTT_EXPERT && CPTT_EXPERT.texts && CPTT_EXPERT.texts.error) || 'خطا در ذخیره اطلاعات');
+          }
           if (msg) { msg.style.color = '#047857'; msg.textContent = (window.CPTT_EXPERT && CPTT_EXPERT.texts && CPTT_EXPERT.texts.saved) || 'تغییرات با موفقیت ذخیره شد.'; }
           var card = form.closest('.cptt-expertCard');
           applySummary(card, json.data || {});
@@ -2278,7 +2419,7 @@
           '<div style="font-size:15px;font-weight:900;color:#0f172a;margin:0 0 4px;">تنظیم عکس پروفایل</div>'+
           '<div style="font-size:11px;color:#94a3b8;margin:0 0 12px;">با انگشت یا موس جابجا کنید · اسکرول یا پینچ برای زوم</div>'+
           '<div id="cptt-avring" style="width:'+RING+'px;height:'+RING+'px;margin:0 auto 12px;border-radius:50%;overflow:hidden;border:3px solid #c7d2fe;position:relative;background:#f1f5f9;touch-action:none;cursor:grab;">'+
-            '<img id="cptt-avimg" src="'+src+'" draggable="false" style="position:absolute;display:block;pointer-events:none;user-select:none;">'+
+            '<img id="cptt-avimg" src="'+src+'" draggable="false" style="position:absolute;display:block;pointer-events:none;user-select:none;max-width:none !important;max-height:none !important;min-width:0 !important;min-height:0 !important;width:auto;height:auto;">'+
           '</div>'+
           '<input type="range" id="cptt-avzoom" min="20" max="500" value="100" style="width:90%;margin:0 auto 14px;display:block;accent-color:#6366f1;">'+
           '<div style="display:flex;gap:8px;">'+
@@ -2387,10 +2528,17 @@
       var w=_img.naturalWidth*sc;
       var h=_img.naturalHeight*sc;
       var half=RING/2;
-      _img.style.width=w+'px';
-      _img.style.height=h+'px';
-      _img.style.left=(half-w/2+_px)+'px';
-      _img.style.top=(half-h/2+_py)+'px';
+      /* استفاده از setProperty با important تا قواعد img{max-width:100%;height:auto} تم وردپرس override شود
+         این باگ باعث میشد عکس‌های غیرمربعی هنگام زوم کشیده شوند. */
+      _img.style.setProperty('width', w+'px', 'important');
+      _img.style.setProperty('height', h+'px', 'important');
+      _img.style.setProperty('max-width', 'none', 'important');
+      _img.style.setProperty('max-height', 'none', 'important');
+      _img.style.setProperty('min-width', '0', 'important');
+      _img.style.setProperty('min-height', '0', 'important');
+      _img.style.setProperty('left', (half-w/2+_px)+'px', 'important');
+      _img.style.setProperty('top', (half-h/2+_py)+'px', 'important');
+      _img.style.setProperty('position', 'absolute', 'important');
     }
 
     function endCrop(){

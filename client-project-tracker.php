@@ -2,14 +2,14 @@
 /**
  * Plugin Name: هماهنگ - افزونه ی مدیریت پروژه و تیم
  * Description: مدیریت پروژه‌های مشتری و نمایش مراحل پیشرفت داخل پنل کاربری (Stepper + Popup).
- * Version: 5.4.2
+ * Version: 5.4.5
  * Author: Your Name
  * Text Domain: cptt
  */
 
 if ( ! defined('ABSPATH') ) exit;
 
-define('CPTT_VERSION', '5.4.2');
+define('CPTT_VERSION', '5.4.5');
 define('CPTT_PATH', plugin_dir_path(__FILE__));
 define('CPTT_URL', plugin_dir_url(__FILE__));
 
@@ -28,8 +28,14 @@ require_once CPTT_PATH . 'includes/class-cptt-sms.php';
 require_once CPTT_PATH . 'includes/class-cptt-woocommerce.php';
 require_once CPTT_PATH . 'includes/class-cptt-analytics.php';
 require_once CPTT_PATH . 'includes/class-cptt-bale.php';
+require_once CPTT_PATH . 'includes/class-cptt-auth.php';
 
 register_activation_hook(__FILE__, ['CPTT_Core', 'activate']);
+register_activation_hook(__FILE__, function(){
+	if (class_exists('CPTT_Auth')) { CPTT_Auth::instance()->add_rewrites(); }
+	flush_rewrite_rules(false);
+});
+register_deactivation_hook(__FILE__, function(){ flush_rewrite_rules(false); });
 register_deactivation_hook(__FILE__, ['CPTT_Core', 'deactivate']);
 
 add_action('plugins_loaded', function () {
@@ -43,4 +49,5 @@ add_action('plugins_loaded', function () {
 	CPTT_WooCommerce::instance();
 	CPTT_Analytics::instance();
 	CPTT_Bale::instance();
+	CPTT_Auth::instance();
 });

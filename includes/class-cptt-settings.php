@@ -1205,6 +1205,8 @@ class CPTT_Settings {
 										'expert_payout' => 'ارسال پیام بابت تسویه حساب به کارشناس',
 										'client_complete' => 'ارسال پیام بابت تکمیل پروژه به مشتری',
 										'client_task' => 'ارسال پیام بابت تسک مشتری جدید به مشتری',
+										'daily_report' => 'ارسال گزارش روزانه به مدیر و کارشناسان (صبح)',
+										'weekly_report' => 'ارسال گزارش هفتگی به مدیر (هر هفته)',
 									];
 									foreach ($bale_labels as $key => $lbl):
 										$val = $bale[$key] ?? '1';
@@ -1218,6 +1220,35 @@ class CPTT_Settings {
 										</label>
 									</div>
 									<?php endforeach; ?>
+								</div>
+							</div>
+
+							<!-- v5.4.4: OTP Login via Bale -->
+							<div class="cptt-settings-fields-tab" style="margin-top:30px; border-top:1px solid #cbd5e1; padding-top:20px;">
+								<span style="font-size:14px;font-weight:bold;margin-bottom:6px;display:block;color:#0f172a;">🔐 ورود/ثبت‌نام اختصاصی با شماره موبایل + کد بله:</span>
+								<p style="color:#64748b; font-size:12px; margin:0 0 12px;">با فعال‌کردن این گزینه، صفحه‌ی ورود اختصاصی افزونه روی آدرس <code>/cptt-login</code> در دسترس قرار می‌گیرد. کاربران با شماره موبایل وارد می‌شوند و کد یک‌بارمصرف از ربات بله دریافت می‌کنند. در صورت فعال‌سازی «اعمال به‌جای فرم وردپرس»، صفحه‌ی <code>wp-login.php</code> هم به این فرم ریدایرکت می‌شود.</p>
+								<div class="cptt-switch-container">
+									<?php
+									$otp_labels = [
+										'enable_otp_login' => 'فعال‌سازی صفحه‌ی ورود اختصاصی (/cptt-login)',
+										'otp_login_only'   => 'ریدایرکت wp-login.php به صفحه‌ی اختصاصی',
+									];
+									foreach ($otp_labels as $key => $lbl):
+										$val = $bale[$key] ?? '0';
+									?>
+									<div class="cptt-switch-item">
+										<label><?php echo esc_html($lbl); ?></label>
+										<label class="cptt-switch">
+											<input type="hidden" name="cptt_bale_settings[<?php echo esc_attr($key); ?>]" value="0" />
+											<input type="checkbox" name="cptt_bale_settings[<?php echo esc_attr($key); ?>]" value="1" <?php checked($val, '1'); ?> />
+											<span class="cptt-slider"></span>
+										</label>
+									</div>
+									<?php endforeach; ?>
+								</div>
+								<div style="margin-top:12px; padding:10px 14px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; font-size:12px; color:#1e40af;">
+									<b>🔗 آدرس صفحه ورود:</b> <code style="background:#fff; padding:2px 8px; border-radius:4px;"><?php echo esc_html(home_url('/cptt-login/')); ?></code>
+									<br><small>⚠️ پس از فعال‌سازی، یک‌بار از تنظیمات وردپرس → پیوندهای یکتا، روی «ذخیره تغییرات» بزنید (یا افزونه را غیرفعال/فعال کنید) تا rewrite ها رفرش شوند.</small>
 								</div>
 							</div>
 

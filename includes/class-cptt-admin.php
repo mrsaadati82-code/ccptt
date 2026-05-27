@@ -21,6 +21,7 @@ class CPTT_Admin {
 		add_action('wp_ajax_cptt_get_checklist_tpl', [$this, 'ajax_get_checklist_tpl']);
 		add_action('wp_ajax_cptt_quick_pay', [$this, 'ajax_quick_pay']);
 		add_action('wp_ajax_cptt_expert_payout', [$this, 'ajax_expert_payout']);
+		add_action('wp_ajax_cptt_step_settle', [$this, 'ajax_step_settle']);
 	}
 	public function reorder_menu() {
 		global $submenu;
@@ -401,61 +402,105 @@ class CPTT_Admin {
 			</div>
 
 			<?php
-			// Calculate expert aggregates for payout settlement
-			$expert_balances = [];
+			// === v5.4.3: New step-by-step settlement table ===
+			// هر ردیف = یک مرحله از یک پروژه که paid > 0 دارد. وضعیت تسویه از _cptt_step_settled مرحله خوانده می‌شود.
+			$step_settlement_rows = [];
+			$sum_paid = 0; $sum_to_expert = 0; $sum_to_admin = 0; $sum_unsettled_to_expert = 0;
 			foreach ($projects as $proj) {
 				$stps = get_post_meta($proj->ID, '_cptt_steps', true);
-				if (is_array($stps)) {
-					foreach ($stps as $st) {
-						$ae_id = isset($st['assigned_expert_id']) ? (int)$st['assigned_expert_id'] : 0;
-						if ($ae_id) {
-							if (!isset($expert_balances[$ae_id])) {
-								$expert_balances[$ae_id] = ['share' => 0, 'paid' => 0];
-							}
-							$expert_balances[$ae_id]['share'] += (float)($st['expert_share'] ?? 0);
-							$expert_balances[$ae_id]['paid'] += (float)($st['expert_paid'] ?? 0);
-						}
+				if (!is_array($stps)) continue;
+				foreach ($stps as $sk => $st) {
+					$paid = (float)($st['paid'] ?? 0);
+					if ($paid <= 0) continue;
+					$ae_id = isset($st['assigned_expert_id']) ? (int)$st['assigned_expert_id'] : 0;
+					// اگر کارشناس مرحله مشخص نیست، فقط اولین کارشناس پروژه را پیشنهاد می‌کنیم.
+					if (!$ae_id) {
+						$_eids = class_exists('CPTT_Core') ? CPTT_Core::get_project_expert_ids($proj->ID) : [];
+						if (!empty($_eids)) $ae_id = (int)$_eids[0];
 					}
+					$exp_to_expert = (float)($st['expert_paid'] ?? 0);
+					$admin_received = (float)($st['admin_received'] ?? 0);
+					$settled = !empty($st['step_settled']) ? 1 : 0;
+					$settle_at_fa = isset($st['settle_at_fa']) ? (string)$st['settle_at_fa'] : '';
+					$step_id = isset($st['id']) ? (string)$st['id'] : (string)$sk;
+					$step_title = (string)($st['title'] ?? '—');
+					$sum_paid += $paid;
+					if ($settled) {
+						$sum_to_expert += $exp_to_expert;
+						$sum_to_admin  += $admin_received;
+					} else {
+						$sum_unsettled_to_expert += $exp_to_expert; // مبلغی که قبلاً صرفا به کارشناس واریز شده بدون تسویه نهایی
+					}
+					$step_settlement_rows[] = [
+						'project_id' => (int)$proj->ID,
+						'project_title' => get_the_title($proj),
+						'step_id' => $step_id,
+						'step_title' => $step_title,
+						'expert_id' => $ae_id,
+						'expert_name' => $ae_id ? (($u=get_user_by('id',$ae_id))?$u->display_name:'—') : '—',
+						'paid' => $paid,
+						'exp_to_expert' => $exp_to_expert,
+						'admin_received' => $admin_received,
+						'settled' => $settled,
+						'settle_at_fa' => $settle_at_fa,
+					];
 				}
 			}
 			?>
-			<h2 style="margin-top:40px; font-weight:950; color:#0f172a; font-size:18px;">💼 وضعیت تسویه حساب با همکاران / کارشناسان</h2>
-			<p style="color:#64748b; margin-top:4px; margin-bottom:15px; font-size:12px;">سهم کارشناسان و پرداختی به آن‌ها بر اساس مقادیر ثبت‌شده در هر مرحله محاسبه می‌شود.</p>
+			<h2 style="margin-top:40px; font-weight:950; color:#0f172a; font-size:18px;">💼 تسویه مراحل با کارشناسان</h2>
+			<p style="color:#64748b; margin-top:4px; margin-bottom:8px; font-size:12px;">برای هر مرحله‌ای که دریافتی دارد می‌توانید با کلیک روی «تسویه»، مبلغ پرداختی به کارشناس را تعیین کنید. اگر «تسویه نهایی» بزنید، باقی‌مانده به دریافتی‌های مدیر سایت منتقل و مرحله تسویه‌شده ثبت می‌شود.</p>
+			<div style="display:flex; gap:10px; flex-wrap:wrap; margin:8px 0 14px;">
+				<div class="cptt-acct-kpi" style="flex:1; min-width:160px;"><div class="cptt-acct-kpi__body"><div class="cptt-acct-kpi__label">جمع دریافتی مراحل</div><div class="cptt-acct-kpi__value" style="font-size:16px;"><?php echo number_format($sum_paid); ?> <small>تومان</small></div></div></div>
+				<div class="cptt-acct-kpi" style="flex:1; min-width:160px;"><div class="cptt-acct-kpi__body"><div class="cptt-acct-kpi__label">سهم تسویه‌شده به مدیر</div><div class="cptt-acct-kpi__value" style="font-size:16px; color:#15803d;"><?php echo number_format($sum_to_admin); ?> <small>تومان</small></div></div></div>
+				<div class="cptt-acct-kpi" style="flex:1; min-width:160px;"><div class="cptt-acct-kpi__body"><div class="cptt-acct-kpi__label">سهم تسویه‌شده به کارشناسان</div><div class="cptt-acct-kpi__value" style="font-size:16px; color:#2563eb;"><?php echo number_format($sum_to_expert); ?> <small>تومان</small></div></div></div>
+				<div class="cptt-acct-kpi" style="flex:1; min-width:160px;"><div class="cptt-acct-kpi__body"><div class="cptt-acct-kpi__label">پرداخت به کارشناس بدون تسویه نهایی</div><div class="cptt-acct-kpi__value" style="font-size:16px; color:#b45309;"><?php echo number_format($sum_unsettled_to_expert); ?> <small>تومان</small></div></div></div>
+			</div>
 			<div class="cptt-acct-table-wrap" style="margin-top:10px;">
-				<table class="cptt-acct-table">
+				<table class="cptt-acct-table" id="cptt-step-settle-table">
 					<thead>
 						<tr>
-							<th>نام کارشناس / همکار</th>
-							<th>سمت</th>
-							<th style="text-align:left">مجموع سهم کارشناس (تومان)</th>
-							<th style="text-align:left">مجموع پرداختی به کارشناس (تومان)</th>
-							<th style="text-align:left">مانده طلب کارشناس (تومان)</th>
+							<th>پروژه / مرحله</th>
+							<th>کارشناس</th>
+							<th style="text-align:left">دریافتی مرحله (تومان)</th>
+							<th style="text-align:left">پرداخت به کارشناس</th>
+							<th style="text-align:left">سهم مدیر</th>
 							<th>وضعیت</th>
+							<th style="width:200px">عملیات</th>
 						</tr>
 					</thead>
 					<tbody>
-						<?php if (empty($expert_balances)): ?>
-							<tr><td colspan="6" style="text-align:center; padding:20px;">هیچ سهم کارشناسی برای مراحل ثبت نشده است.</td></tr>
-						<?php else: 
-							foreach ($expert_balances as $exp_id => $bal):
-								$exp_user = get_user_by('id', $exp_id);
-								if (!$exp_user) continue;
-								$exp_title = get_user_meta($exp_id, 'cptt_expert_title', true) ?: 'کارشناس';
-								$remain_bal = $bal['share'] - $bal['paid'];
-								$bal_status = $remain_bal <= 0 ? '<span class="cptt-chip cptt-chip--completed" style="background:rgba(34,197,94,0.12); color:#065f46; border:1px solid rgba(34,197,94,0.22);">تسویه کامل</span>' : '<span class="cptt-chip cptt-chip--in_progress" style="background:rgba(239,68,68,0.12); color:#991b1b; border:1px solid rgba(239,68,68,0.22);">دارای مانده طلب</span>';
+						<?php if (empty($step_settlement_rows)): ?>
+							<tr><td colspan="7" style="text-align:center; padding:20px;">هیچ مرحله‌ای با دریافتی برای تسویه ثبت نشده است.</td></tr>
+						<?php else: foreach ($step_settlement_rows as $rr):
+							$remain_paid = max(0, $rr['paid'] - $rr['exp_to_expert']);
+							$status_html = $rr['settled']
+								? '<span class="cptt-chip cptt-chip--completed" style="background:rgba(34,197,94,0.12); color:#065f46; border:1px solid rgba(34,197,94,0.22);">✓ تسویه شده'.($rr['settle_at_fa']?' — '.esc_html($rr['settle_at_fa']):'').'</span>'
+								: ($rr['exp_to_expert']>0 ? '<span class="cptt-chip" style="background:rgba(245,158,11,0.12); color:#92400e; border:1px solid rgba(245,158,11,0.22);">⏳ پرداخت به کارشناس — بدون تسویه نهایی</span>' : '<span class="cptt-chip cptt-chip--in_progress">تسویه نشده</span>');
 						?>
 							<tr>
-								<td><b><?php echo esc_html($exp_user->display_name); ?></b></td>
-								<td><?php echo esc_html($exp_title); ?></td>
-								<td style="text-align:left; font-weight:bold;"><?php echo number_format($bal['share']); ?></td>
-								<td style="text-align:left; color:#15803d; font-weight:bold;"><?php echo number_format($bal['paid']); ?></td>
-								<td style="text-align:left; color:<?php echo $remain_bal > 0 ? '#b91c1c' : '#15803d'; ?>; font-weight:900;"><?php echo number_format($remain_bal); ?></td>
-								<td><?php echo $bal_status; ?></td>
 								<td>
-									<?php if ($remain_bal > 0): ?>
-										<button type="button" class="button cptt-record-payout-btn" data-expert-id="<?php echo esc_attr($exp_id); ?>" data-expert-name="<?php echo esc_attr($exp_user->display_name); ?>" data-remain="<?php echo esc_attr($remain_bal); ?>" style="background:#2563eb; color:#fff; border:none; padding:4px 10px; font-size:12px; border-radius:6px; cursor:pointer;">ثبت تسویه</button>
+									<a href="<?php echo esc_url(get_edit_post_link($rr['project_id'])); ?>" style="font-weight:800; color:#0f172a; text-decoration:none;"><?php echo esc_html($rr['project_title']); ?></a>
+									<div style="color:#64748b; font-size:12px;">مرحله: <?php echo esc_html($rr['step_title']); ?></div>
+								</td>
+								<td><?php echo esc_html($rr['expert_name']); ?></td>
+								<td style="text-align:left; font-weight:800;"><?php echo number_format($rr['paid']); ?></td>
+								<td style="text-align:left; color:#2563eb; font-weight:800;"><?php echo number_format($rr['exp_to_expert']); ?></td>
+								<td style="text-align:left; color:#15803d; font-weight:800;"><?php echo number_format($rr['admin_received']); ?></td>
+								<td><?php echo $status_html; ?></td>
+								<td>
+									<?php if (!$rr['settled']): ?>
+									<button type="button" class="button cptt-step-settle-btn"
+										data-project-id="<?php echo esc_attr($rr['project_id']); ?>"
+										data-step-id="<?php echo esc_attr($rr['step_id']); ?>"
+										data-step-title="<?php echo esc_attr($rr['step_title']); ?>"
+										data-project-title="<?php echo esc_attr($rr['project_title']); ?>"
+										data-paid="<?php echo esc_attr($rr['paid']); ?>"
+										data-already-paid="<?php echo esc_attr($rr['exp_to_expert']); ?>"
+										data-expert-id="<?php echo esc_attr($rr['expert_id']); ?>"
+										data-expert-name="<?php echo esc_attr($rr['expert_name']); ?>"
+										style="background:#2563eb; color:#fff; border:none; padding:6px 14px; font-weight:bold; border-radius:6px; cursor:pointer;">💳 تسویه</button>
 									<?php else: ?>
-										<span style="font-size:11px; color:#15803d; font-weight:bold;">✓ تسویه شده</span>
+									<span style="font-size:11px; color:#15803d; font-weight:bold;">✓ نهایی شده</span>
 									<?php endif; ?>
 								</td>
 							</tr>
@@ -463,6 +508,78 @@ class CPTT_Admin {
 					</tbody>
 				</table>
 			</div>
+
+			<!-- مودال تسویه‌ی مرحله -->
+			<div id="cptt-step-settle-modal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,.6); z-index:9999; align-items:center; justify-content:center; padding:16px;">
+				<div style="background:#fff; border-radius:18px; max-width:480px; width:100%; padding:24px; box-shadow:0 30px 60px rgba(0,0,0,.3); direction:rtl;">
+					<h3 style="margin:0 0 8px; font-weight:900; color:#0f172a;">💳 تسویه مرحله با کارشناس</h3>
+					<p id="cptt-step-settle-info" style="margin:0 0 14px; color:#475569; font-size:13px; line-height:1.8;"></p>
+
+					<div style="background:#f8fafc; padding:12px; border-radius:10px; border:1px solid #e2e8f0; margin-bottom:14px;">
+						<div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px;"><span>دریافتی این مرحله:</span><b id="cptt-step-settle-paid" style="color:#0f172a;">0</b></div>
+						<div style="display:flex; justify-content:space-between; font-size:13px;"><span>قبلاً به کارشناس پرداخت‌شده:</span><b id="cptt-step-settle-already" style="color:#2563eb;">0</b></div>
+					</div>
+
+					<label style="display:block; font-weight:800; margin-bottom:6px; color:#0f172a; font-size:13px;">پرداخت به کارشناس (تومان)</label>
+					<input type="text" id="cptt-step-settle-amount" class="cptt-currency-input" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; font-size:14px;" placeholder="مثلا 250000" />
+					<div style="margin-top:6px; font-size:11px; color:#64748b;">با «تسویه نهایی» مابقی به دریافتی‌های مدیر می‌رود و مرحله بسته می‌شود. با «ثبت پرداختی» فقط مبلغ کارشناس ثبت می‌شود و مرحله باز می‌ماند.</div>
+
+					<div style="display:flex; gap:8px; margin-top:18px; flex-wrap:wrap;">
+						<button type="button" id="cptt-step-settle-final" style="flex:1; min-width:140px; padding:11px 14px; border-radius:10px; border:none; background:linear-gradient(135deg,#059669,#10b981); color:#fff; font-weight:900; cursor:pointer;">✓ تسویه نهایی با کارشناس</button>
+						<button type="button" id="cptt-step-settle-partial" style="flex:1; min-width:140px; padding:11px 14px; border-radius:10px; border:none; background:linear-gradient(135deg,#f59e0b,#fbbf24); color:#fff; font-weight:900; cursor:pointer;">⏳ ثبت پرداختی (بدون تسویه)</button>
+						<button type="button" id="cptt-step-settle-cancel" style="padding:11px 14px; border-radius:10px; border:1px solid #cbd5e1; background:#fff; color:#334155; font-weight:800; cursor:pointer;">انصراف</button>
+					</div>
+					<div id="cptt-step-settle-msg" style="margin-top:10px; font-size:12px; text-align:center;"></div>
+				</div>
+			</div>
+
+			<script>
+			(function(){
+				var modal = document.getElementById('cptt-step-settle-modal');
+				if (!modal) return;
+				var info = document.getElementById('cptt-step-settle-info');
+				var paidEl = document.getElementById('cptt-step-settle-paid');
+				var alreadyEl = document.getElementById('cptt-step-settle-already');
+				var amountEl = document.getElementById('cptt-step-settle-amount');
+				var msgEl = document.getElementById('cptt-step-settle-msg');
+				var btnF = document.getElementById('cptt-step-settle-final');
+				var btnP = document.getElementById('cptt-step-settle-partial');
+				var btnC = document.getElementById('cptt-step-settle-cancel');
+				var ctx = {};
+				function openModal(d){ ctx = d; info.innerHTML = 'پروژه: <b>'+d.projectTitle+'</b><br>مرحله: <b>'+d.stepTitle+'</b><br>کارشناس: <b>'+d.expertName+'</b>'; paidEl.textContent = Number(d.paid).toLocaleString('en-US'); alreadyEl.textContent = Number(d.already).toLocaleString('en-US'); amountEl.value = ''; msgEl.textContent=''; modal.style.display='flex'; }
+				function closeModal(){ modal.style.display='none'; }
+				function toNum(v){ return parseFloat(String(v||'').replace(/[,\s]/g,''))||0; }
+				document.addEventListener('click', function(e){
+					var btn = e.target.closest('.cptt-step-settle-btn'); if (!btn) return;
+					openModal({ projectId: btn.dataset.projectId, projectTitle: btn.dataset.projectTitle, stepId: btn.dataset.stepId, stepTitle: btn.dataset.stepTitle, expertId: btn.dataset.expertId, expertName: btn.dataset.expertName, paid: toNum(btn.dataset.paid), already: toNum(btn.dataset.alreadyPaid) });
+				});
+				btnC.addEventListener('click', closeModal);
+				modal.addEventListener('click', function(e){ if (e.target===modal) closeModal(); });
+				function submit(mode){
+					var amount = toNum(amountEl.value);
+					var maxAmount = ctx.paid - ctx.already;
+					if (amount <= 0) { msgEl.style.color='#dc2626'; msgEl.textContent='لطفا مبلغ پرداخت به کارشناس را وارد کنید.'; return; }
+					if (amount > maxAmount + 0.001) { msgEl.style.color='#dc2626'; msgEl.textContent='مبلغ پرداختی نمی‌تواند از مانده‌ی این مرحله بیشتر باشد.'; return; }
+					btnF.disabled = btnP.disabled = true; msgEl.style.color='#475569'; msgEl.textContent='در حال ذخیره...';
+					var fd = new FormData();
+					fd.append('action','cptt_step_settle');
+					fd.append('nonce', (window.cpttAdminNonce||''));
+					fd.append('project_id', ctx.projectId);
+					fd.append('step_id', ctx.stepId);
+					fd.append('expert_id', ctx.expertId);
+					fd.append('amount', String(amount));
+					fd.append('mode', mode);
+					fetch(ajaxurl, {method:'POST', credentials:'same-origin', body:fd}).then(function(r){return r.json();}).then(function(j){
+						btnF.disabled = btnP.disabled = false;
+						if (j && j.success) { msgEl.style.color='#059669'; msgEl.textContent='ذخیره شد. صفحه بروزرسانی می‌شود...'; setTimeout(function(){ location.reload(); }, 700); }
+						else { msgEl.style.color='#dc2626'; msgEl.textContent=(j && j.data ? j.data : 'خطا در ذخیره'); }
+					}).catch(function(){ btnF.disabled = btnP.disabled = false; msgEl.style.color='#dc2626'; msgEl.textContent='خطای شبکه'; });
+				}
+				btnF.addEventListener('click', function(){ submit('final'); });
+				btnP.addEventListener('click', function(){ submit('partial'); });
+			})();
+			</script>
+			<script>window.cpttAdminNonce = '<?php echo esc_js(wp_create_nonce('cptt_admin_nonce')); ?>';</script>
 		</div>
 		<?php
 	}
@@ -752,13 +869,32 @@ class CPTT_Admin {
 								<div class="cptt-billing-row" style="grid-template-columns: repeat(4, 1fr) !important; gap:10px !important;">
 									<label>هزینه (تومان) <input type="text" name="cptt_steps[<?php echo esc_attr($i); ?>][cost]" value="<?php echo esc_attr(number_format($step['cost']??0)); ?>" class="cptt-step-cost cptt-currency-input" step="any" /></label>
 									<label>دریافتی (تومان) <input type="text" name="cptt_steps[<?php echo esc_attr($i); ?>][paid]" value="<?php echo esc_attr(number_format($step['paid']??0)); ?>" class="cptt-step-paid cptt-currency-input" step="any" /></label>
-									<label>سهم کارشناس (تومان) <input type="text" name="cptt_steps[<?php echo esc_attr($i); ?>][expert_share]" value="<?php echo esc_attr(number_format($step['expert_share']??0)); ?>" class="cptt-step-expert-share cptt-currency-input" step="any" /></label>
-									<label>پرداخت به کارشناس (تومان) <input type="text" name="cptt_steps[<?php echo esc_attr($i); ?>][expert_paid]" value="<?php echo esc_attr(number_format($step['expert_paid']??0)); ?>" class="cptt-step-expert-paid cptt-currency-input" step="any" /></label>
+									<?php /* v5.4.3: فیلدهای سهم/پرداختی کارشناس از UI متاباکس حذف شدند؛ این مقادیر در صفحه‌ی «حساب و کتاب» مدیریت می‌شوند. مقادیر فعلی به‌صورت hidden حفظ می‌شوند. */ ?>
+									<input type="hidden" name="cptt_steps[<?php echo esc_attr($i); ?>][expert_share]" value="<?php echo esc_attr((float)($step['expert_share']??0)); ?>" />
+									<input type="hidden" name="cptt_steps[<?php echo esc_attr($i); ?>][expert_paid]" value="<?php echo esc_attr((float)($step['expert_paid']??0)); ?>" />
 								</div>
 								<div style="margin-top:6px; font-size:11px; color:#64748b;">
-									<span class="cptt-step-remain">مانده مرحله: <?php echo number_format(floatval($step['cost']??0)-floatval($step['paid']??0)); ?> تومان</span> | 
-									<span>طلب کارشناس: <?php echo number_format(floatval($step['expert_share']??0)-floatval($step['expert_paid']??0)); ?> تومان</span>
+									<span class="cptt-step-remain">مانده مرحله: <?php echo number_format(floatval($step['cost']??0)-floatval($step['paid']??0)); ?> تومان</span>
 								</div>
+								<?php
+								// v5.4.3: نمایش وضعیت تسویه‌ی مرحله (مدیریت از صفحه‌ی «حساب و کتاب»)
+								$_a_ep_paid = (float)($step['expert_paid']??0);
+								$_a_admin_received = (float)($step['admin_received']??0);
+								$_a_settled = !empty($step['step_settled']) ? 1 : 0;
+								$_a_settle_fa = isset($step['settle_at_fa']) ? (string)$step['settle_at_fa'] : '';
+								if ($_a_ep_paid > 0 || $_a_settled || $_a_admin_received > 0): ?>
+								<div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; padding:8px 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; font-size:11px;">
+									<span style="color:#475569;">💳 وضعیت تسویه:</span>
+									<span>به کارشناس: <b style="color:#2563eb;"><?php echo number_format($_a_ep_paid); ?></b></span>
+									<span>به مدیر: <b style="color:#15803d;"><?php echo number_format($_a_admin_received); ?></b></span>
+									<?php if ($_a_settled): ?>
+										<span style="background:rgba(34,197,94,.12); color:#065f46; border:1px solid rgba(34,197,94,.22); padding:2px 8px; border-radius:6px; font-weight:800;">✓ تسویه نهایی<?php if ($_a_settle_fa) echo ' — ' . esc_html($_a_settle_fa); ?></span>
+									<?php else: ?>
+										<span style="background:rgba(245,158,11,.12); color:#92400e; border:1px solid rgba(245,158,11,.22); padding:2px 8px; border-radius:6px; font-weight:800;">⏳ بدون تسویه نهایی</span>
+									<?php endif; ?>
+									<a href="<?php echo esc_url(admin_url('edit.php?post_type=cptt_project&page=cptt-project-accounting')); ?>" style="margin-right:auto; color:#6366f1; text-decoration:none;">مدیریت در حساب و کتاب ↗</a>
+								</div>
+								<?php endif; ?>
 							</div>
 							<!-- Step Assigned Expert (فقط اگر >1 کارشناس) -->
 							<?php
@@ -835,8 +971,9 @@ class CPTT_Admin {
 								<div class="cptt-billing-row" style="grid-template-columns: repeat(4, 1fr) !important; gap:10px !important;">
 									<label>هزینه (تومان) <input type="text" name="cptt_steps[{{i}}][cost]" value="0" class="cptt-step-cost cptt-currency-input" step="any" /></label>
 									<label>دریافتی (تومان) <input type="text" name="cptt_steps[{{i}}][paid]" value="0" class="cptt-step-paid cptt-currency-input" step="any" /></label>
-									<label>سهم کارشناس (تومان) <input type="text" name="cptt_steps[{{i}}][expert_share]" value="0" class="cptt-step-expert-share cptt-currency-input" step="any" /></label>
-									<label>پرداخت به کارشناس (تومان) <input type="text" name="cptt_steps[{{i}}][expert_paid]" value="0" class="cptt-step-expert-paid cptt-currency-input" step="any" /></label>
+									<?php /* v5.4.3: حذف فیلدها از تمپلیت مرحله‌ی جدید */ ?>
+									<input type="hidden" name="cptt_steps[{{i}}][expert_share]" value="0" />
+									<input type="hidden" name="cptt_steps[{{i}}][expert_paid]" value="0" />
 								</div>
 							</div>
 							<?php endif; ?>
@@ -1011,7 +1148,10 @@ class CPTT_Admin {
 			if ($title===''&&$desc===''&&empty($checklist)&&empty($user_tasks)) continue;
 			if ($status==='current') { $current_found=true; }
 			$assigned_expert_id=isset($s['assigned_expert_id'])?absint($s['assigned_expert_id']):0;
-			$row=['id'=>$id,'title'=>$title,'desc'=>$desc,'status'=>$status,'checklist'=>$checklist,'user_tasks'=>$user_tasks,'cost'=>$cost,'paid'=>$paid,'assigned_expert_id'=>$assigned_expert_id];
+			// v5.4.3: حفظ فیلدهای مالی/تسویه (که از UI حذف شده ولی از hidden ارسال می‌شوند)
+			$expert_share = isset($s['expert_share']) ? (float)str_replace([',', ' '], '', (string)$s['expert_share']) : 0;
+			$expert_paid  = isset($s['expert_paid']) ? (float)str_replace([',', ' '], '', (string)$s['expert_paid']) : 0;
+			$row=['id'=>$id,'title'=>$title,'desc'=>$desc,'status'=>$status,'checklist'=>$checklist,'user_tasks'=>$user_tasks,'cost'=>$cost,'paid'=>$paid,'expert_share'=>$expert_share,'expert_paid'=>$expert_paid,'assigned_expert_id'=>$assigned_expert_id];
 			if ($due_at) { $row['due_at']=$due_at; $row['due_at_fa']=class_exists('CPTT_Core')?CPTT_Core::jalali_datetime($due_at):date('Y/m/d H:i',$due_at); }
 			$out[]=$row;
 		}
@@ -1125,12 +1265,41 @@ class CPTT_Admin {
 		$old_steps=get_post_meta($post_id,'_cptt_steps',true);
 		$steps=isset($_POST['cptt_steps'])&&is_array($_POST['cptt_steps'])?$_POST['cptt_steps']:[];
 		$steps=$this->normalize_steps($steps);
+		// v5.4.3: حفظ متاهای تسویه‌ی مرحله‌ای از مقادیر قبلی
+		if (is_array($old_steps)) {
+			$old_by_id_settle = [];
+			foreach ($old_steps as $_os) { if (is_array($_os) && !empty($_os['id'])) $old_by_id_settle[(string)$_os['id']] = $_os; }
+			foreach ($steps as &$_ns) {
+				$_sid = (string)($_ns['id'] ?? '');
+				if ($_sid !== '' && isset($old_by_id_settle[$_sid])) {
+					foreach (['admin_received','step_settled','settle_at','settle_at_fa','settled_by'] as $_pk) {
+						if (isset($old_by_id_settle[$_sid][$_pk])) $_ns[$_pk] = $old_by_id_settle[$_sid][$_pk];
+					}
+				}
+			}
+			unset($_ns);
+		}
 		$steps=$this->preserve_user_task_state($steps,$old_steps);
 		$steps=$this->apply_checklist_done_timestamps($steps,$old_steps);
 		$steps=$this->apply_step_status_from_checklist($steps);
 		[$steps,$any_status_changed]=$this->apply_status_timestamps($steps,$old_steps);
 		$any_check_changed=$this->checklist_changed($steps,$old_steps);
 		update_post_meta($post_id,'_cptt_steps',$steps);
+		// v5.4.4: trigger on new user_tasks → notify customer in Bale
+		if (is_array($old_steps)) {
+			$_old_ut_ids = [];
+			foreach ($old_steps as $_os) if (!empty($_os['user_tasks']) && is_array($_os['user_tasks'])) foreach ($_os['user_tasks'] as $_ot) if (!empty($_ot['id'])) $_old_ut_ids[$_ot['id']] = true;
+			foreach ($steps as $_ns) {
+				$_sid = $_ns['id'] ?? ''; if (!$_sid) continue;
+				if (empty($_ns['user_tasks']) || !is_array($_ns['user_tasks'])) continue;
+				foreach ($_ns['user_tasks'] as $_nt) {
+					$_tid = $_nt['id'] ?? '';
+					if ($_tid && empty($_old_ut_ids[$_tid]) && empty($_nt['done'])) {
+						do_action('cptt_user_task_assigned', $post_id, $_sid, $_tid);
+					}
+				}
+			}
+		}
 		if ($any_status_changed||$any_check_changed) {
 			$now=(int)current_time('timestamp',true);
 			update_post_meta($post_id,'_cptt_last_update',$now);
@@ -1290,6 +1459,87 @@ class CPTT_Admin {
 		}
 		
 		wp_send_json_success('تسویه حساب کارشناس با موفقیت ثبت شد.');
+	}
+
+	/**
+	 * v5.4.3 - تسویه‌ی مرحله‌محور
+	 * mode = 'final'   : amount به expert_paid اضافه می‌شود، (paid - new_expert_paid) به admin_received می‌رود، step_settled=1
+	 * mode = 'partial' : amount به expert_paid اضافه می‌شود، admin_received بدون تغییر، step_settled=0
+	 */
+	public function ajax_step_settle() {
+		if (!current_user_can('edit_cptt_projects')) wp_send_json_error('دسترسی ندارید.', 403);
+		check_ajax_referer('cptt_admin_nonce', 'nonce');
+
+		$project_id = isset($_POST['project_id']) ? absint($_POST['project_id']) : 0;
+		$step_id    = isset($_POST['step_id']) ? sanitize_text_field((string)$_POST['step_id']) : '';
+		$expert_id  = isset($_POST['expert_id']) ? absint($_POST['expert_id']) : 0;
+		$amount     = isset($_POST['amount']) ? (float)str_replace([',', ' '], '', (string)$_POST['amount']) : 0;
+		$mode       = isset($_POST['mode']) ? sanitize_key($_POST['mode']) : 'final';
+
+		if (!$project_id || $step_id === '') wp_send_json_error('اطلاعات نامعتبر.', 400);
+		if ($amount <= 0) wp_send_json_error('مبلغ نامعتبر.', 400);
+		if (!in_array($mode, ['final', 'partial'], true)) $mode = 'final';
+
+		$steps = get_post_meta($project_id, '_cptt_steps', true);
+		if (!is_array($steps)) wp_send_json_error('مراحل پروژه یافت نشد.', 400);
+
+		$found = false;
+		foreach ($steps as $i => $st) {
+			$sid = isset($st['id']) ? (string)$st['id'] : (string)$i;
+			if ($sid !== (string)$step_id) continue;
+			$found = true;
+
+			$paid = (float)($st['paid'] ?? 0);
+			$already_expert = (float)($st['expert_paid'] ?? 0);
+			$already_admin  = (float)($st['admin_received'] ?? 0);
+			$max_payable = max(0, $paid - $already_expert);
+			if ($amount > $max_payable + 0.001) wp_send_json_error('مبلغ از مانده‌ی این مرحله بیشتر است.', 400);
+
+			$new_expert = $already_expert + $amount;
+			$steps[$i]['expert_paid'] = $new_expert;
+			// expert_share را برای backward-compatibility هم‌سان نگه می‌داریم (تجمعی برابر expert_paid)
+			$steps[$i]['expert_share'] = max((float)($steps[$i]['expert_share'] ?? 0), $new_expert);
+			if ($expert_id) $steps[$i]['assigned_expert_id'] = $expert_id;
+
+			if ($mode === 'final') {
+				$steps[$i]['admin_received'] = $already_admin + max(0, $paid - $new_expert);
+				$steps[$i]['step_settled'] = 1;
+				$now = (int) current_time('timestamp', true);
+				$steps[$i]['settle_at'] = $now;
+				$steps[$i]['settle_at_fa'] = class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime($now) : date('Y-m-d H:i', $now);
+				$steps[$i]['settled_by'] = (int) get_current_user_id();
+			} else {
+				$steps[$i]['step_settled'] = 0;
+			}
+			break;
+		}
+		if (!$found) wp_send_json_error('مرحله یافت نشد.', 404);
+
+		update_post_meta($project_id, '_cptt_steps', $steps);
+
+		// به‌روزرسانی وضعیت تسویه‌ی کلی پروژه: اگر همه‌ی مراحلِ paid > 0 تسویه شده باشند
+		$all_settled = true; $has_any_paid = false;
+		foreach ($steps as $st) {
+			if ((float)($st['paid'] ?? 0) > 0) {
+				$has_any_paid = true;
+				if (empty($st['step_settled'])) { $all_settled = false; break; }
+			}
+		}
+		update_post_meta($project_id, '_cptt_is_settled', ($has_any_paid && $all_settled) ? 1 : 0);
+
+		// اعلان به کارشناس
+		if ($expert_id && class_exists('CPTT_Expert')) {
+			$title = get_the_title($project_id);
+			$step_title = isset($steps[$i]['title']) ? (string)$steps[$i]['title'] : '';
+			if ($mode === 'final') {
+				$msg = sprintf('💰 تسویه نهایی مرحله «%s» در پروژه «%s» انجام شد. مبلغ %s تومان به حساب شما واریز شد.', $step_title, $title, number_format($amount));
+			} else {
+				$msg = sprintf('💸 پرداخت %s تومان بابت مرحله «%s» در پروژه «%s» به حساب شما واریز شد (تسویه نهایی هنوز انجام نشده).', number_format($amount), $step_title, $title);
+			}
+			CPTT_Expert::instance()->insert_notification($expert_id, 'expert_payout', $msg, $project_id, CPTT_Expert::dashboard_url() . '#project-' . $project_id);
+		}
+
+		wp_send_json_success(['msg' => 'ذخیره شد']);
 	}
 
 }
