@@ -44,11 +44,34 @@ jQuery(function ($) {
     });
   }
 
+
+  function fillStepExpertSelects(context) {
+    const experts = [];
+    $('input[name="cptt_expert_user_ids[]"]').each(function(){
+      const $cb = $(this);
+      const txt = $.trim($cb.closest('label').text()) || $cb.val();
+      experts.push({id: String($cb.val()), name: txt});
+    });
+    $(context || document).find('select.cptt-step-assigned-experts').each(function(){
+      const $sel = $(this);
+      if ($sel.children().length) return;
+      experts.forEach(function(ex){ $sel.append($('<option/>').val(ex.id).text(ex.name)); });
+      if (!experts.length) $sel.append($('<option/>').val('').text('ابتدا کارشناسان پروژه را انتخاب/ذخیره کنید'));
+    });
+  }
+  fillStepExpertSelects(document);
+  $(document).on('change', 'select[name*="[assigned_expert_ids]"]', function(){
+    const $sel = $(this);
+    const first = ($sel.val() || [])[0] || '0';
+    $sel.closest('.cptt-stepCard__expertAssign').find('input[name*="[assigned_expert_id]"]').val(first);
+  });
+
   $('#cptt-add-step').on('click', function () {
     const i = $rows.find('.cptt-step-row').length;
     const id = uuid();
     const html = stepTpl.replaceAll('{{i}}', i).replaceAll('{{uuid}}', id);
     $rows.append(html);
+    fillStepExpertSelects($rows.children().last());
     reindexAll(); $(document).trigger('cptt:stepsChanged');
   });
 
@@ -162,6 +185,7 @@ jQuery(function ($) {
         });
         $rows.append($row);
       });
+      fillStepExpertSelects($rows);
       reindexAll(); $(document).trigger('cptt:stepsChanged');
       $rows.sortable('refresh');
       $rows.find('.cptt-checkitems').each(function () {
@@ -354,6 +378,8 @@ jQuery(function ($) {
     const client=$('#cptt-acct-client').val()||'';
     const settled=$('#cptt-acct-settled').val();
     const status=$('#cptt-acct-status').val()||'';
+    const from=$('#cptt-acct-from').val()?Math.floor(new Date($('#cptt-acct-from').val()).getTime()/1000):0;
+    const to=$('#cptt-acct-to').val()?Math.floor(new Date($('#cptt-acct-to').val()).getTime()/1000)+86399:0;
     let count=0;
     $('.cptt-acct-row').each(function(){
       const $r=$(this); let ok=true;
@@ -361,12 +387,16 @@ jQuery(function ($) {
       if(client && $r.attr('data-client')!==client) ok=false;
       if(settled!=='' && settled!=null && $r.attr('data-settled')!==settled) ok=false;
       if(status && $r.attr('data-status')!==status) ok=false;
+      const cts=parseInt($r.attr('data-created-ts')||'0',10);
+      if(from && cts && cts<from) ok=false;
+      if(to && cts && cts>to) ok=false;
       $r.toggle(ok);
       if(ok) count++;
     });
     $('#cptt-acct-empty').toggle(count===0);
+    if (window.cpttRenderAccountingCharts) window.cpttRenderAccountingCharts();
   }
-  $(document).on('input change', '#cptt-acct-search,#cptt-acct-client,#cptt-acct-settled,#cptt-acct-status', filterAccounting);
+  $(document).on('input change', '#cptt-acct-search,#cptt-acct-client,#cptt-acct-settled,#cptt-acct-status,#cptt-acct-from,#cptt-acct-to', filterAccounting);
   $(document).on('click', '#cptt-acct-reset', function(){ $('.cptt-acct-filters input,.cptt-acct-filters select').val(''); filterAccounting(); });
 
   /* ===== Print accounting report ===== */
@@ -413,8 +443,8 @@ jQuery(function ($) {
     html += '<th>ردیف</th>';
     html += '<th>عنوان پروژه</th>';
     html += '<th>مشتری</th>';
-    html += '<th>پیشرفت</th>';
-    html += '<th>وضعیت مالی</th>';
+    html += '<th>شماره موبایل</th>';
+    html += '<th>تاریخ ایجاد</th>';
     html += '<th class="text-left">کل هزینه (تومان)</th>';
     html += '<th class="text-left">دریافتی (تومان)</th>';
     html += '<th class="text-left">مانده (تومان)</th>';
@@ -429,8 +459,8 @@ jQuery(function ($) {
       var title = $row.find('.cptt-acct-title').text().trim();
       var experts = $row.find('.cptt-acct-meta').text().trim();
       var client = $row.find('td').eq(1).text().trim();
-      var progress = $row.find('td').eq(2).find('small').text().trim();
-      var settledStatus = $row.find('.cptt-chip').text().trim();
+      var phone = $row.attr('data-phone') || '';
+      var created = $row.attr('data-created') || '';
       
       var cost = parseFloat($row.find('td').eq(4).text().replace(/,/g, '')) || 0;
       var paid = parseFloat($row.find('td').eq(5).text().replace(/,/g, '')) || 0;
@@ -444,8 +474,8 @@ jQuery(function ($) {
       html += '<td class="text-center">' + cpttToFa(index + 1) + '</td>';
       html += '<td><b>' + title + '</b><div style="font-size:10px; color:#666; margin-top:2px;">' + experts + '</div></td>';
       html += '<td>' + client + '</td>';
-      html += '<td class="text-center">' + cpttToFa(progress) + '</td>';
-      html += '<td class="text-center">' + settledStatus + '</td>';
+      html += '<td>' + phone + '</td>';
+      html += '<td>' + created + '</td>';
       html += '<td class="text-left">' + cpttToFa(cost.toLocaleString('en')) + '</td>';
       html += '<td class="text-left" style="color:#15803d;">' + cpttToFa(paid.toLocaleString('en')) + '</td>';
       html += '<td class="text-left" style="color:' + (remain > 0 ? '#b91c1c' : '#15803d') + '; font-weight:bold;">' + cpttToFa(remain.toLocaleString('en')) + '</td>';
@@ -676,3 +706,58 @@ jQuery(function($){
       }
     });
   });
+
+jQuery(function($){
+  var $client = $('#cptt_client_user_id');
+  if ($client.length && !$client.data('cpttClientSearch')) {
+    $client.data('cpttClientSearch', 1);
+    var $wrap = $('<div class="cptt-admin-client-search" style="display:grid;grid-template-columns:auto 1fr;gap:8px;max-width:420px;"></div>');
+    var $btn = $('<button type="button" class="button" title="جستجوی مشتری">🔎</button>');
+    var $inp = $('<input type="search" placeholder="جستجوی نام، نام خانوادگی یا شماره تماس..." style="display:none;" />');
+    $client.before($wrap); $wrap.append($btn, $inp, $client);
+    $client.css('grid-column','1/-1');
+    $btn.on('click', function(){ $inp.toggle(); if($inp.is(':visible')) $inp.trigger('focus'); });
+    $inp.on('input', function(){
+      var q = String($inp.val() || '').toLowerCase();
+      $client.find('option').each(function(){
+        if (!this.value) { this.hidden = false; return; }
+        var hay = String(($(this).data('search') || '') + ' ' + $(this).text()).toLowerCase();
+        this.hidden = q && hay.indexOf(q) === -1;
+      });
+    });
+  }
+});
+
+/* v5.4.14 professional accounting dashboard: date filters, exports, charts */
+jQuery(function($){
+  function money(n){ return (Number(n)||0).toLocaleString('en-US'); }
+  function visibleAcctRows(){ return $('.cptt-acct-row:visible'); }
+  function renderBarChart($el, data){
+    if(!$el.length) return;
+    var keys = Object.keys(data || {});
+    if(!keys.length){ $el.html('<div class="cptt-chart-empty">داده‌ای برای نمایش نیست</div>'); return; }
+    var max = Math.max.apply(null, keys.map(k=>Math.abs(data[k])||0)) || 1;
+    $el.html(keys.map(function(k){ var v=data[k]||0; var w=Math.max(3, Math.round(Math.abs(v)/max*100)); return '<div class="cptt-chart-row"><span>'+k+'</span><div><i style="width:'+w+'%"></i></div><b>'+money(v)+'</b></div>'; }).join(''));
+  }
+  window.cpttRenderAccountingCharts = function(){
+    var monthly={}, debtors={}, expertPay={};
+    visibleAcctRows().each(function(){
+      var $r=$(this), m=$r.attr('data-month')||'—', paid=parseFloat($r.attr('data-paid')||0), remain=parseFloat($r.attr('data-remain')||0), client=$r.find('td').eq(1).text().trim()||'—';
+      monthly[m]=(monthly[m]||0)+paid; if(remain>0) debtors[client]=(debtors[client]||0)+remain;
+    });
+    $('.cptt-step-settle-row').each(function(){ var $r=$(this), name=$r.find('td').eq(2).text().trim()||'—', paid=parseFloat($r.find('td').eq(4).text().replace(/,/g,''))||0; if(paid>0) expertPay[name]=(expertPay[name]||0)+paid; });
+    renderBarChart($('#cptt-chart-monthly'), monthly);
+    renderBarChart($('#cptt-chart-debtors'), debtors);
+    renderBarChart($('#cptt-chart-experts-pay'), expertPay);
+  };
+  var oldFilter = window.cpttAcctFilterHooked;
+  $(document).on('input change', '#cptt-acct-from,#cptt-acct-to', function(){ $('#cptt-acct-search').trigger('input'); });
+  $(document).on('click', '#cptt-acct-excel', function(){
+    var rows=[['عنوان پروژه','مشتری','موبایل','تاریخ ایجاد','کل هزینه','دریافتی','طلب از مشتری','سود ناخالص']];
+    visibleAcctRows().each(function(){ var $r=$(this); rows.push([$r.find('.cptt-acct-title').text().trim(),$r.find('td').eq(1).text().trim(),$r.attr('data-phone')||'',$r.attr('data-created')||'',$r.attr('data-cost')||0,$r.attr('data-paid')||0,$r.attr('data-remain')||0,$r.attr('data-profit')||0]); });
+    var csv='\ufeff'+rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
+    var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'})); a.download='cptt-finance-report.csv'; a.click();
+  });
+  $(document).on('click', '#cptt-acct-pdf', function(){ $('#cptt-acct-print').trigger('click'); setTimeout(function(){ try{ window.print(); }catch(e){} },500); });
+  setTimeout(window.cpttRenderAccountingCharts, 300);
+});

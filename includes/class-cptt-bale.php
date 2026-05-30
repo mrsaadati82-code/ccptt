@@ -39,6 +39,7 @@ class CPTT_Bale {
 		add_filter('cron_schedules', [$this, 'add_cron_schedules']);
 		add_action('cptt_bale_daily_report',  [$this, 'cron_daily_report']);
 		add_action('cptt_bale_weekly_report', [$this, 'cron_weekly_report']);
+		add_action('cptt_bale_morning_digest', [$this, 'cron_morning_digest']);
 		add_action('init', [$this, 'maybe_schedule_crons']);
 
 		// User task done → also notify customer in Bale with quick-reply
@@ -59,6 +60,8 @@ class CPTT_Bale {
 			'client_task'          => '1',
 			'daily_report'         => '1',
 			'weekly_report'        => '1',
+			'morning_digest'       => '1',
+			'morning_digest_time'  => '08:00',
 			'enable_otp_login'     => '0',
 			'otp_login_only'       => '0',
 		];
@@ -127,6 +130,7 @@ class CPTT_Bale {
 	}
 
 	public function maybe_schedule_crons() {
+		if (!wp_next_scheduled('cptt_bale_morning_digest')) { wp_schedule_event(time() + 300, 'hourly', 'cptt_bale_morning_digest'); }
 		if (!wp_next_scheduled('cptt_bale_daily_report')) {
 			// شروع از فردا صبح ساعت ۸ (UTC → local Tehran). برای سادگی +24h از الان.
 			wp_schedule_event(time() + 60, 'daily_morning', 'cptt_bale_daily_report');
@@ -313,7 +317,7 @@ class CPTT_Bale {
 		}
 
 		// 1) Stateful flow (wizard)
-		if ($user && $state) {
+		if ($state) {
 			$handled = $this->route_state($chat_id, $user, $state, $text, $file_id, $file_name);
 			if ($handled) { status_header(200); exit; }
 		}
@@ -324,11 +328,12 @@ class CPTT_Bale {
 				$this->send_welcome_menu($chat_id, $user);
 			} else {
 				self::send_message($chat_id,
-					"🤝 *به ربات «هماهنگ» خوش آمدید*\n\n" .
-					"این ربات یار شما در مدیریت پروژه‌هاست.\n\n" .
-					"🔐 برای اتصال حساب کاربری، *شماره موبایل ۱۱ رقمی* خود را ارسال کنید.\n" .
-					"_مثال:_ `09123456789`"
+					"🤝 *به ربات «هماهنگ» خوش آمدید*
+
+" .
+					"برای ثبت‌نام سریع، لطفاً *نام* خود را ارسال کنید."
 				);
+				$this->set_state($chat_id, 'bale_reg_first', []);
 			}
 			status_header(200); exit;
 		}
@@ -347,10 +352,8 @@ class CPTT_Bale {
 				);
 				$this->send_welcome_menu($chat_id, $found);
 			} else {
-				self::send_message($chat_id,
-					"❌ شماره `" . esc_html($phone) . "` در سیستم ثبت نشده است.\n\n" .
-					"💡 شماره موبایل خود را در پروفایل وب‌سایت ثبت کنید و دوباره تلاش کنید."
-				);
+				self::send_message($chat_id, "شماره شما در سایت نبود. برای ثبت‌نام، لطفاً *نام* خود را ارسال کنید.");
+				$this->set_state($chat_id, 'bale_reg_first', ['phone'=>$phone]);
 			}
 			status_header(200); exit;
 		}
@@ -400,6 +403,7 @@ class CPTT_Bale {
 			if ($data === 'order_skip_address')         { $this->order_skip_address($chat_id, $msg_id, $user); return; }
 			if ($data === 'order_confirm')              { $this->order_finalize($chat_id, $msg_id, $user); return; }
 			if ($data === 'order_cancel')               { $this->order_cancel($chat_id, $msg_id, $user); return; }
+			if ($data === 'cust_payments') { $this->customer_payments($chat_id, $msg_id, $user); return; }
 			if ($data === 'cust_orders')                { $this->cust_orders_list($chat_id, $msg_id, $user); return; }
 			if (strpos($data, 'cust_view_order_') === 0){ $this->cust_view_order($chat_id, $msg_id, (int)substr($data, 16), $user); return; }
 		}
@@ -455,6 +459,7 @@ class CPTT_Bale {
 			// (callbackهای wiz_cp_* در بلوک expert/admin بالا handle می‌شوند)
 			if ($data === 'admin_broadcast_start')     { $this->wizard_broadcast_start($chat_id, $msg_id, $user); return; }
 			if ($data === 'admin_reminders_trigger')   { $this->trigger_manual_reminders($chat_id, $msg_id); return; }
+			if ($data === 'admin_morning_time')       { $this->set_state($chat_id, 'admin_morning_time', []); $this->edit_or_send($chat_id,$msg_id,'⏰ زمان ارسال پیام صبح را به فرمت 24 ساعته بفرستید. مثال: `08:00`', $this->kb_cancel()); return; }
 
 			// === v5.4.7: Admin assign expert to order ===
 			if (strpos($data, 'order_assign_') === 0)   { $this->admin_show_assign_experts($chat_id, $msg_id, (int)substr($data, 13), $user); return; }
@@ -475,6 +480,32 @@ class CPTT_Bale {
 	private function route_state($chat_id, $user, $state, $text, $file_id, $file_name) {
 		$s = isset($state['s']) ? $state['s'] : '';
 		$d = isset($state['d']) && is_array($state['d']) ? $state['d'] : [];
+
+
+		// Guest registration wizard
+		if (!$user && strpos($s, 'bale_reg_') === 0) {
+			if ($s === 'bale_reg_first' && $text !== '') { $d['first_name'] = sanitize_text_field($text); $this->set_state($chat_id, 'bale_reg_last', $d); self::send_message($chat_id, 'نام خانوادگی خود را ارسال کنید.'); return true; }
+			if ($s === 'bale_reg_last' && $text !== '') { $d['last_name'] = sanitize_text_field($text); $this->set_state($chat_id, 'bale_reg_phone', $d); self::send_message($chat_id, 'شماره موبایل ۱۱ رقمی خود را ارسال کنید.'); return true; }
+			if ($s === 'bale_reg_phone' && $text !== '') {
+				$phone = $this->to_english_digits($text); if (strpos($phone,'09')!==0 && strpos($phone,'9')===0) $phone='0'.$phone;
+				if (!preg_match('/^09\d{9}$/',$phone)) { self::send_message($chat_id,'شماره معتبر نیست. مثال: `09123456789`'); return true; }
+				$existing = $this->find_user_by_phone($phone);
+				if ($existing) { update_user_meta($existing->ID, '_cptt_bale_chat_id', $chat_id); $this->clear_state($chat_id); $this->send_welcome_menu($chat_id, $existing); return true; }
+				$login = $phone; $pass = wp_generate_password(12,true,false); $uid = wp_create_user($login, $pass, '');
+				if (is_wp_error($uid)) { self::send_message($chat_id,'خطا در ثبت‌نام: '.$uid->get_error_message()); return true; }
+				$full = trim(($d['first_name']??'').' '.($d['last_name']??''));
+				wp_update_user(['ID'=>(int)$uid,'display_name'=>$full,'nickname'=>$full,'first_name'=>$d['first_name']??'','last_name'=>$d['last_name']??'']);
+				update_user_meta($uid,'first_name',$d['first_name']??''); update_user_meta($uid,'last_name',$d['last_name']??''); update_user_meta($uid,'billing_first_name',$d['first_name']??''); update_user_meta($uid,'billing_last_name',$d['last_name']??''); update_user_meta($uid,'billing_phone',$phone); update_user_meta($uid,'_cptt_bale_chat_id',$chat_id);
+				$u = get_user_by('id',(int)$uid); if($u) $u->set_role('customer');
+				$this->clear_state($chat_id); self::send_message($chat_id,'✅ ثبت‌نام شما انجام شد و حساب بله فعال شد.'); if($u) $this->send_welcome_menu($chat_id,$u); return true;
+			}
+			return true;
+		}
+		if ($user && $s === 'admin_morning_time' && $text !== '') {
+			$t = $this->to_english_digits($text);
+			if (!preg_match('/^([01]?\d|2[0-3]):[0-5]\d$/', $t)) { self::send_message($chat_id,'فرمت درست نیست. مثال: `08:00`'); return true; }
+			$opt = self::get_settings(); $opt['morning_digest_time'] = $t; update_option('cptt_bale_settings', $opt, false); $this->clear_state($chat_id); self::send_message($chat_id,'✅ زمان پیام صبح روی '.$t.' تنظیم شد.'); return true;
+		}
 
 		// Wizard: create project (admin / expert-from-order)
 		if ($s === 'wiz_cp_title' && $text !== '') {
@@ -644,7 +675,7 @@ class CPTT_Bale {
 				['text' => '⏰ ارسال یادآوری', 'callback_data' => 'admin_reminders_trigger'],
 			];
 			$kb[] = [['text' => '🛒 سفارش‌های دریافت‌شده', 'callback_data' => 'admin_orders']];
-			$kb[] = [['text' => '⚙ تنظیمات اعلان‌های من', 'callback_data' => 'expert_notif_settings']];
+			$kb[] = [['text' => '⏰ زمان پیام صبح', 'callback_data' => 'admin_morning_time'], ['text' => '⚙ تنظیمات اعلان‌های من', 'callback_data' => 'expert_notif_settings']];
 		} elseif ($role === 'expert') {
 			$kb[] = [['text' => '📁 پروژه‌های فعال من', 'callback_data' => 'expert_projects']];
 			$kb[] = [
@@ -659,7 +690,7 @@ class CPTT_Bale {
 				['text' => '📝 تسک‌های در انتظار من', 'callback_data' => 'cust_tasks'],
 				['text' => '📄 پیش‌فاکتورها', 'callback_data' => 'cust_invoices'],
 			];
-			$kb[] = [['text' => '📦 سفارش‌های من', 'callback_data' => 'cust_orders']];
+			$kb[] = [['text' => '📦 سفارش‌های من', 'callback_data' => 'cust_orders'], ['text' => '💳 پرداخت بدهی', 'callback_data' => 'cust_payments']];
 		}
 		return ['inline_keyboard' => $kb];
 	}
@@ -1395,6 +1426,20 @@ class CPTT_Bale {
 			$order_id = (int)$d['_from_order'];
 			update_post_meta($order_id, '_cptt_order_project_id', (int)$project_id);
 			update_post_meta($order_id, '_cptt_order_status', 'project');
+
+			$files = get_post_meta($order_id, '_cptt_order_files', true);
+			if (is_array($files)) {
+				$changed_files = false;
+				foreach ($files as &$of) {
+					if (empty($of['id']) && !empty($of['file_id'])) {
+						$up = self::download_to_media($of['file_id'], $of['name'] ?? 'bale_file.bin');
+						if (!is_wp_error($up)) { $of['id']=(int)$up['id']; $of['url']=(string)$up['url']; $of['name']=(string)$up['name']; $of['storage']='site'; $changed_files=true; }
+					}
+				}
+				unset($of);
+				if ($changed_files) update_post_meta($order_id, '_cptt_order_files', $files);
+			}
+
 			// انتقال فایل‌های سفارش به یادداشت‌های پروژه (برای دسترسی کارشناس)
 			$files = get_post_meta($order_id, '_cptt_order_files', true);
 			if (is_array($files) && !empty($files)) {
@@ -1704,6 +1749,37 @@ class CPTT_Bale {
 			$msg = $this->build_expert_daily_report($e);
 			if ($msg) self::send_message($chat, $msg);
 		}
+	}
+
+
+	public function cron_morning_digest() {
+		$settings = self::get_settings();
+		if (($settings['morning_digest'] ?? '1') !== '1') return;
+		$time = preg_match('/^\d{1,2}:\d{2}$/', (string)($settings['morning_digest_time'] ?? '08:00')) ? (string)$settings['morning_digest_time'] : '08:00';
+		$now = current_time('H:i'); $today = current_time('Y-m-d');
+		if ($now < $time) return;
+		$sent = get_option('cptt_bale_morning_sent_'.$today, '0'); if ($sent === '1') return;
+		$motiv = $this->morning_motivation();
+		$admin_id = trim((string)($settings['admin_id'] ?? ''));
+		if ($admin_id !== '') self::send_message($admin_id, $this->build_morning_digest(null, true, $motiv));
+		$experts = get_users(['role__in'=>['cptt_expert','administrator'], 'meta_key'=>'_cptt_bale_chat_id']);
+		foreach ($experts as $e) { $cid=get_user_meta($e->ID,'_cptt_bale_chat_id',true); if($cid) self::send_message($cid, $this->build_morning_digest($e, false, $motiv)); }
+		update_option('cptt_bale_morning_sent_'.$today, '1', false);
+	}
+	private function morning_motivation(){ $arr=['امروز یک قدم کوچک هم می‌تواند نتیجه بزرگی بسازد.','تمرکز امروز، آرامش فرداست.','با نظم و پیگیری، هیچ پروژه‌ای سخت نیست.','کیفیت کار امروز، اعتبار فرداست.','اولویت‌ها را ببین، یکی‌یکی تمامشان کن.']; return $arr[(int)current_time('z') % count($arr)]; }
+	private function build_morning_digest($user = null, $is_admin = false, $motiv = '') {
+		$name = $is_admin ? 'مدیر عزیز' : ($user ? $user->display_name : 'همکار عزیز');
+		$projects = get_posts(['post_type'=>'cptt_project','post_status'=>'any','numberposts'=>-1]);
+		$active=0; $today=0; $overdue=0; $today_start=strtotime(current_time('Y-m-d').' 00:00:00'); $today_end=$today_start+DAY_IN_SECONDS-1; $now=current_time('timestamp', true);
+		foreach($projects as $p){ if(!$is_admin && $user && class_exists('CPTT_Core') && !in_array((int)$user->ID, CPTT_Core::get_project_expert_ids($p->ID), true)) continue; $steps=get_post_meta($p->ID,'_cptt_steps',true); if(!is_array($steps)) continue; foreach($steps as $st){ $status=$st['status']??'todo'; if($status!=='done') $active++; $due=(int)($st['due_at']??0); if($due && $status!=='done'){ if($due>=$today_start && $due<=$today_end) $today++; if($due<$now) $overdue++; } } }
+		return "🌅 صبح بخیر *{$name}*\n\n📌 کارهای در دست اقدام: *{$active}*\n📅 کارهای امروز: *{$today}*\n⏰ کارهای معوقه: *{$overdue}*\n\n✨ {$motiv}";
+	}
+	private function customer_payments($chat_id, $msg_id, $user) {
+		$projects = get_posts(['post_type'=>'cptt_project','post_status'=>'any','numberposts'=>20,'meta_key'=>'_cptt_client_user_id','meta_value'=>(int)$user->ID]);
+		$rows=[]; $txt="💳 *پرداخت بدهی پروژه‌ها*\n\n";
+		foreach($projects as $p){ $steps=get_post_meta($p->ID,'_cptt_steps',true); $remain=0; if(is_array($steps)) foreach($steps as $st) $remain += max(0,(float)($st['cost']??0)-(float)($st['paid']??0)); if($remain>0){ $txt.='• '.get_the_title($p).' — '.number_format($remain)." تومان\n"; if(class_exists('CPTT_Payment')) $rows[]=[['text'=>'پرداخت '.get_the_title($p),'url'=>CPTT_Payment::payment_url($p->ID,$remain)]]; } }
+		if(empty($rows)) $txt.="✅ بدهی فعالی ندارید.";
+		$this->edit_or_send($chat_id,$msg_id,$txt, ['inline_keyboard'=>array_merge($rows, [[['text'=>'🏠 منو','callback_data'=>'back_to_menu']]])]);
 	}
 
 	public function cron_weekly_report() {

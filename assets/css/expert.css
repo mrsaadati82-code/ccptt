@@ -4833,3 +4833,72 @@ body.cptt-mobile-menu-open .cptt-expertCard.is-expanded .cptt-expert-save-floati
     .cptt-debtors-item { grid-template-columns: 1fr; }
     .cptt-debtors-item__amount { text-align: center; }
 }
+
+/* v5.4.8 fixes: client search, dark inputs, step experts */
+.cptt-client-search-wrap{display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:center}
+.cptt-client-search-wrap select{grid-column:1/-1;width:100%}
+.cptt-client-search-toggle{width:38px;height:38px;border-radius:10px;border:1px solid #cbd5e1;background:#f8fafc;cursor:pointer;font-size:16px;display:inline-flex;align-items:center;justify-content:center}
+.cptt-client-search-input{min-height:38px;border-radius:10px;border:1px solid #cbd5e1;padding:8px 12px;width:100%;box-sizing:border-box}
+.cptt-step-expert-wrap{margin:10px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.cptt-step-expert-btn{border:1px dashed #a5b4fc;background:#eef2ff;color:#3730a3;border-radius:10px;padding:8px 12px;font-weight:800;cursor:pointer}
+.cptt-step-expert-btn.has-expert{border-style:solid;background:#ecfdf5;color:#047857;border-color:#86efac}
+.cptt-sep-option--hint{font-size:12px;color:#64748b;padding:8px 10px;background:#f8fafc;border-radius:10px;margin-bottom:6px}
+.cptt-product-pair-row label{margin:0}
+
+body.cptt-dark .cptt-expertWrap input,
+body.cptt-dark .cptt-expertWrap select,
+body.cptt-dark .cptt-expertWrap textarea,
+body.cptt-dark .cptt-newProjectModal input,
+body.cptt-dark .cptt-newProjectModal select,
+body.cptt-dark .cptt-newProjectModal textarea,
+body.cptt-dark .cptt-new-customer-modal-dialog input,
+body.cptt-dark .cptt-new-customer-modal-dialog textarea,
+body.cptt-dark .cptt-new-customer-modal-dialog select{
+  background:#111827!important;color:#e5e7eb!important;border-color:#334155!important;box-shadow:none!important;
+}
+body.cptt-dark .cptt-expertWrap input::placeholder,
+body.cptt-dark .cptt-expertWrap textarea::placeholder{color:#94a3b8!important}
+body.cptt-dark .cptt-expertWrap label span,
+body.cptt-dark .cptt-expert-sectionTitle,
+body.cptt-dark .cptt-fieldLabel,
+body.cptt-dark .cptt-bf-lbl,
+body.cptt-dark .cptt-expertCard__meta,
+body.cptt-dark .cptt-expert-emptyMini{color:#cbd5e1!important}
+body.cptt-dark .cptt-client-search-toggle,
+body.cptt-dark .cptt-step-expert-btn{background:#1e293b!important;color:#e0e7ff!important;border-color:#475569!important}
+body.cptt-dark .cptt-step-expert-btn.has-expert{background:rgba(16,185,129,.14)!important;color:#86efac!important;border-color:rgba(134,239,172,.35)!important}
+body.cptt-dark .cptt-create-finance-row input[readonly],
+body.cptt-dark #cptt-create-total-price,
+body.cptt-dark #cptt-create-paid-amount,
+body.cptt-dark #cptt-create-remaining{background:#0f172a!important;color:#e5e7eb!important}
+
+/* v5.4.9 project code / dashboard timeline / labels */
+.cptt-project-code{display:inline-flex;align-items:center;margin-inline-start:6px;padding:2px 7px;border-radius:999px;background:#eef2ff;color:#4f46e5;font-size:11px;font-weight:900;vertical-align:middle}
+.cptt-expertCardTimeline{margin:12px 0 10px;overflow-x:auto;padding-bottom:4px}
+.cptt-expertCardTimeline .cptt-publicTimeline__items{min-width:max-content}
+.cptt-expertCardTimeline .cptt-publicTimeline__label{max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cptt-client-search-inline .cptt-client-search-input{flex:1;min-width:180px}
+body.cptt-dark .cptt-project-code{background:#1e293b;color:#a5b4fc}
+
+/* v5.4.10 isolated create-project customer search */
+.cptt-clientSearchCreate{width:100%;max-width:100%;display:grid;gap:6px;box-sizing:border-box;isolation:isolate;position:relative;z-index:1}
+.cptt-clientSearchCreate__search{width:100%;max-width:100%;box-sizing:border-box}
+.cptt-clientSearchCreate__input{width:100%!important;max-width:100%!important;min-height:38px!important;height:38px!important;border-radius:10px!important;border:1px solid #cbd5e1!important;background:#fff!important;color:#0f172a!important;padding:8px 12px!important;box-sizing:border-box!important;font:inherit!important;box-shadow:none!important;margin:0!important}
+.cptt-clientSearchCreate__field{width:100%;max-width:100%;display:flex!important;align-items:center!important;gap:8px!important;box-sizing:border-box!important;direction:rtl!important}
+.cptt-clientSearchCreate__field select{flex:1 1 auto!important;min-width:0!important;width:auto!important;max-width:calc(100% - 46px)!important;margin:0!important;box-sizing:border-box!important}
+.cptt-clientSearchCreate__btn{flex:0 0 38px!important;width:38px!important;height:38px!important;min-width:38px!important;min-height:38px!important;padding:0!important;margin:0!important;border-radius:10px!important;border:1px solid #cbd5e1!important;background:#f8fafc!important;color:#334155!important;box-shadow:none!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;cursor:pointer!important;font:16px/1 inherit!important;box-sizing:border-box!important}
+body.cptt-dark .cptt-clientSearchCreate__input{background:#111827!important;color:#e5e7eb!important;border-color:#334155!important}
+body.cptt-dark .cptt-clientSearchCreate__btn{background:#1e293b!important;color:#e0e7ff!important;border-color:#475569!important}
+.cptt-clientSearchCreate__results{margin-top:6px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 14px 35px rgba(15,23,42,.14);max-height:240px;overflow:auto;padding:6px;z-index:20;position:relative}.cptt-clientSearchCreate__results button{width:100%!important;text-align:right!important;background:#fff!important;border:0!important;border-radius:9px!important;padding:9px 10px!important;color:#0f172a!important;cursor:pointer!important;font:inherit!important;box-shadow:none!important;margin:0 0 2px!important}.cptt-clientSearchCreate__results button:hover{background:#eef2ff!important}.cptt-clientSearchCreate__empty{padding:10px;color:#64748b;font-size:12px}body.cptt-dark .cptt-clientSearchCreate__results{background:#0f172a;border-color:#334155}body.cptt-dark .cptt-clientSearchCreate__results button{background:#0f172a!important;color:#e5e7eb!important}body.cptt-dark .cptt-clientSearchCreate__results button:hover{background:#1e293b!important}
+.cptt-step-toggle-avatars{display:inline-flex;align-items:center;margin-inline-start:8px;vertical-align:middle}.cptt-step-toggle-avatars img{width:22px!important;height:22px!important;border-radius:50%!important;object-fit:cover!important;border:2px solid #fff!important;margin-inline-start:-6px!important;box-shadow:0 2px 6px rgba(15,23,42,.18)}body.cptt-dark .cptt-step-toggle-avatars img{border-color:#0f172a!important}
+
+/* v5.4.11 analytics polish */
+.cptt-expert-analytics-section{background:linear-gradient(180deg,#ffffff,#f8fafc);border:1px solid #e5e7eb;border-radius:18px;padding:16px;box-shadow:0 10px 28px rgba(15,23,42,.06)}
+.cptt-expert-analytics-section .cptt-expert-sectionTitle{font-size:16px!important;font-weight:950!important;color:#0f172a!important;margin-bottom:12px!important}
+body.cptt-dark .cptt-expert-analytics-section{background:linear-gradient(180deg,#111827,#0f172a);border-color:#334155}
+body.cptt-dark .cptt-expert-analytics-section *{border-color:#334155!important}
+.cptt-expert-step__toggleMain strong .cptt-step-toggle-avatars{display:inline-flex!important;align-items:center!important;width:auto!important;margin-top:0!important}.cptt-expert-step__toggleMain strong .cptt-step-toggle-avatars img{display:inline-block!important;visibility:visible!important;opacity:1!important}
+/* v5.4.15 avatar shape fix */
+.cptt-expert-step__toggleMain strong .cptt-step-toggle-avatars{display:inline-flex!important;align-items:center!important;gap:0!important;vertical-align:middle!important;line-height:1!important;white-space:nowrap!important;overflow:visible!important;flex:0 0 auto!important;width:auto!important;max-width:none!important;height:30px!important;min-height:30px!important}
+.cptt-expert-step__toggleMain strong .cptt-step-toggle-avatars img{display:inline-block!important;width:30px!important;height:30px!important;min-width:30px!important;max-width:30px!important;min-height:30px!important;max-height:30px!important;aspect-ratio:1/1!important;border-radius:999px!important;object-fit:cover!important;flex:0 0 30px!important;overflow:hidden!important;margin-inline-start:-7px!important;box-sizing:border-box!important}
+.cptt-expert-step__toggleMain strong .cptt-step-toggle-avatars img:first-child{margin-inline-start:0!important}

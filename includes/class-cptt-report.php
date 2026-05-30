@@ -110,6 +110,11 @@ class CPTT_Report {
 		$sign = $this->att_url($brand['sign_id'] ?? 0);
 		$stamp = $this->att_url($brand['stamp_id'] ?? 0);
 
+		if (class_exists('CPTT_Core')) {
+			$total_for_invoice = 0; foreach ($steps as $_s) $total_for_invoice += (float)($_s['cost'] ?? 0);
+			CPTT_Core::ensure_invoice($project_id, !empty($_GET['final']) ? 'final' : 'proforma', $total_for_invoice);
+		}
+
 		// Get toggles
 		$toggles = class_exists('CPTT_Settings') && method_exists('CPTT_Settings', 'get_branding_toggles') ? CPTT_Settings::get_branding_toggles() : [];
 
@@ -445,6 +450,7 @@ class CPTT_Report {
 		<div class="actions-bar">
 			<a class="btn" href="<?php echo esc_url(wp_get_referer() ?: home_url('/')); ?>">◀ بازگشت</a>
 			<div>
+				<a class="btn" href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=cptt_view_invoice&project_id=' . $project_id . '&final=1'), 'cptt_view_invoice_' . $project_id)); ?>" target="_blank">🧾 فاکتور</a>
 				<button class="btn btn-primary" type="button" onclick="window.print()">🖨 چاپ گزارش</button>
 			</div>
 		</div>
@@ -614,6 +620,9 @@ class CPTT_Report {
 		check_admin_referer('cptt_view_invoice_' . $project_id);
 
 		if (!self::user_can_access($project_id, get_current_user_id())) wp_die('شما به این پیش‌فاکتور دسترسی ندارید.');
+		$is_final_invoice = !empty($_GET['final']);
+		$invoice_title = $is_final_invoice ? 'فاکتور نهایی پروژه' : 'پیش‌فاکتور پروژه';
+		$invoice_short = $is_final_invoice ? 'فاکتور' : 'پیش‌فاکتور';
 
 		$brand = $this->branding();
 		$primary = $brand['primary_color'] ?: '#6366f1';
@@ -658,7 +667,7 @@ class CPTT_Report {
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title><?php echo esc_html('پیش‌فاکتور - ' . $title); ?></title>
+	<title><?php echo esc_html($invoice_short . ' - ' . $title); ?></title>
 	<style>
 		:root{
 			--primary: <?php echo esc_html($primary); ?>;
@@ -891,7 +900,7 @@ class CPTT_Report {
 				</div>
 			</div>
 			<div class="document-title-box">
-				<div class="document-title">پیش‌فاکتور پروژه</div>
+				<div class="document-title"><?php echo esc_html($invoice_title); ?></div>
 				<?php if (($toggles['invoice_show_dates'] ?? '1') === '1'): ?>
 					<div class="document-date">تاریخ صدور: <?php echo esc_html($created_fa); ?></div>
 				<?php endif; ?>
@@ -902,7 +911,7 @@ class CPTT_Report {
 		<div class="actions-bar">
 			<a class="btn" href="<?php echo esc_url(wp_get_referer() ?: home_url('/')); ?>">◀ بازگشت</a>
 			<div>
-				<button class="btn btn-primary" type="button" onclick="window.print()">🖨 چاپ پیش‌فاکتور</button>
+				<button class="btn btn-primary" type="button" onclick="window.print()">🖨 چاپ <?php echo esc_html($invoice_short); ?></button>
 			</div>
 		</div>
 
@@ -983,7 +992,7 @@ class CPTT_Report {
 
 						<!-- Totals -->
 						<tr class="totals-row">
-							<td colspan="2" style="text-align:left;">جمع کل پیش‌فاکتور (ریال):</td>
+							<td colspan="2" style="text-align:left;">جمع کل <?php echo esc_html($invoice_short); ?> (ریال):</td>
 							<td class="text-left"><?php echo esc_html(number_format($total_cost)); ?></td>
 							<td class="text-left" style="color:#059669;"><?php echo esc_html(number_format($total_paid)); ?></td>
 							<td class="text-left" style="color:<?php echo $total_remain > 0 ? '#dc2626' : '#059669'; ?>;"><?php echo esc_html(number_format($total_remain)); ?></td>
@@ -1015,7 +1024,7 @@ class CPTT_Report {
 							<?php if ($sign): ?>
 								<img src="<?php echo esc_url($sign); ?>" class="sign-img" alt="signature" />
 							<?php endif; ?>
-							<div class="sign-label"><?php echo esc_html($brand['manager_name'] ?: 'امضا صادرکننده پیش‌فاکتور'); ?></div>
+							<div class="sign-label"><?php echo esc_html($brand['manager_name'] ?: ($is_final_invoice ? 'امضا صادرکننده فاکتور' : 'امضا صادرکننده پیش‌فاکتور')); ?></div>
 							<?php if (!empty($brand['manager_title'])): ?>
 								<div class="sign-title"><?php echo esc_html($brand['manager_title']); ?></div>
 							<?php endif; ?>

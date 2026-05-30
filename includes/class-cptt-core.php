@@ -22,9 +22,9 @@ class CPTT_Core {
 	
 	public function maybe_update_db() {
 		$db_version = get_option('cptt_db_version', '1.0');
-		if (version_compare($db_version, '1.6.0', '<')) {
+		if (version_compare($db_version, '1.8.0', '<')) {
 			$this->create_custom_tables();
-			update_option('cptt_db_version', '1.6.0');
+			update_option('cptt_db_version', '1.8.0');
 		}
 	}
 
@@ -56,6 +56,127 @@ class CPTT_Core {
 			PRIMARY KEY  (id)
 		) $charset_collate;";
 		dbDelta($sql2);
+
+		$sql3 = "CREATE TABLE {$wpdb->prefix}cptt_ledger (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			project_id bigint(20) unsigned DEFAULT 0,
+			step_id varchar(80) DEFAULT '',
+			user_id bigint(20) unsigned DEFAULT 0,
+			type varchar(50) NOT NULL,
+			amount decimal(18,2) NOT NULL DEFAULT 0,
+			note text NULL,
+			created_by bigint(20) unsigned DEFAULT 0,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (id), KEY project_id (project_id), KEY user_id (user_id), KEY type (type)
+		) $charset_collate;";
+		dbDelta($sql3);
+
+		$sql4 = "CREATE TABLE {$wpdb->prefix}cptt_invoices (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			project_id bigint(20) unsigned NOT NULL,
+			invoice_no varchar(40) NOT NULL,
+			type varchar(20) NOT NULL DEFAULT 'proforma',
+			status varchar(20) NOT NULL DEFAULT 'issued',
+			total decimal(18,2) DEFAULT 0,
+			created_by bigint(20) unsigned DEFAULT 0,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (id), UNIQUE KEY invoice_no (invoice_no), KEY project_id (project_id)
+		) $charset_collate;";
+		dbDelta($sql4);
+
+		$sql5 = "CREATE TABLE {$wpdb->prefix}cptt_activity (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			object_type varchar(40) NOT NULL,
+			object_id bigint(20) unsigned DEFAULT 0,
+			action varchar(80) NOT NULL,
+			message text NULL,
+			user_id bigint(20) unsigned DEFAULT 0,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (id), KEY object_id (object_id), KEY action (action), KEY user_id (user_id)
+		) $charset_collate;";
+		dbDelta($sql5);
+	}
+
+
+
+	public static function ledger_add($args) {
+		global $wpdb;
+		$defaults = ['project_id'=>0,'step_id'=>'','user_id'=>0,'type'=>'manual','amount'=>0,'note'=>'','created_by'=>get_current_user_id()];
+		$a = wp_parse_args($args, $defaults);
+		$wpdb->insert($wpdb->prefix.'cptt_ledger', [
+			'project_id'=>(int)$a['project_id'], 'step_id'=>sanitize_text_field((string)$a['step_id']), 'user_id'=>(int)$a['user_id'],
+			'type'=>sanitize_key((string)$a['type']), 'amount'=>(float)$a['amount'], 'note'=>sanitize_textarea_field((string)$a['note']),
+			'created_by'=>(int)$a['created_by'], 'created_at'=>current_time('mysql')
+		], ['%d','%s','%d','%s','%f','%s','%d','%s']);
+		return (int)$wpdb->insert_id;
+	}
+
+	public static function activity_log($object_type, $object_id, $action, $message = '') {
+		global $wpdb;
+		$wpdb->insert($wpdb->prefix.'cptt_activity', [
+			'object_type'=>sanitize_key($object_type), 'object_id'=>(int)$object_id, 'action'=>sanitize_key($action),
+			'message'=>sanitize_textarea_field($message), 'user_id'=>(int)get_current_user_id(), 'created_at'=>current_time('mysql')
+		], ['%s','%d','%s','%s','%d','%s']);
+		return (int)$wpdb->insert_id;
+	}
+
+	public static function ensure_invoice($project_id, $type = 'proforma', $total = 0) {
+		global $wpdb;
+		$project_id = (int)$project_id; $type = $type === 'final' ? 'final' : 'proforma';
+		$table = $wpdb->prefix.'cptt_invoices';
+		$id = $wpdb->get_var($wpdb->prepare("SELECT id FROM $table WHERE project_id=%d AND type=%s ORDER BY id DESC LIMIT 1", $project_id, $type));
+		if ($id) return (int)$id;
+		$prefix = $type === 'final' ? 'INV' : 'PRO';
+		$no = $prefix . '-' . self::get_project_code($project_id) . '-' . date('ymd-His');
+		$wpdb->insert($table, ['project_id'=>$project_id,'invoice_no'=>$no,'type'=>$type,'status'=>'issued','total'=>(float)$total,'created_by'=>(int)get_current_user_id(),'created_at'=>current_time('mysql')], ['%d','%s','%s','%s','%f','%d','%s']);
+		self::activity_log('invoice', (int)$wpdb->insert_id, 'invoice_issued', 'صدور ' . ($type==='final'?'فاکتور':'پیش‌فاکتور') . ' برای پروژه #' . $project_id);
+		return (int)$wpdb->insert_id;
+	}
+
+	public static function get_project_code($project_id) {
+		$project_id = (int)$project_id;
+		if (!$project_id) return '';
+		$code = (string)get_post_meta($project_id, '_cptt_project_code', true);
+		if (preg_match('/^\d{5}$/', $code)) return $code;
+		for ($i = 0; $i < 80; $i++) {
+			$try = (string)wp_rand(10000, 99999);
+			$exists = get_posts([
+				'post_type' => 'cptt_project', 'post_status' => 'any', 'numberposts' => 1, 'fields' => 'ids',
+				'exclude' => [$project_id],
+				'meta_query' => [[ 'key' => '_cptt_project_code', 'value' => $try, 'compare' => '=' ]],
+			]);
+			if (empty($exists)) { update_post_meta($project_id, '_cptt_project_code', $try); return $try; }
+		}
+		for ($n = 0; $n < 100000; $n++) {
+			$try = str_pad((string)(($project_id + $n) % 100000), 5, '0', STR_PAD_LEFT);
+			$exists = get_posts(['post_type'=>'cptt_project','post_status'=>'any','numberposts'=>1,'fields'=>'ids','exclude'=>[$project_id],'meta_query'=>[[ 'key'=>'_cptt_project_code','value'=>$try,'compare'=>'=' ]]]);
+			if (empty($exists)) { update_post_meta($project_id, '_cptt_project_code', $try); return $try; }
+		}
+		return '';
+	}
+
+	public static function get_project_labels() {
+		$labels = get_option('cptt_project_labels', []);
+		if (!is_array($labels)) $labels = [];
+		$out = [];
+		foreach ($labels as $l) {
+			if (!is_array($l)) continue;
+			$name = sanitize_text_field($l['name'] ?? '');
+			if ($name === '') continue;
+			$out[] = [
+				'id' => sanitize_key($l['id'] ?? ('lbl_' . md5($name))),
+				'name' => $name,
+				'color' => preg_match('/^#[0-9a-fA-F]{6}$/', (string)($l['color'] ?? '')) ? (string)$l['color'] : '#6366f1',
+			];
+		}
+		return $out;
+	}
+
+	public static function get_project_label($project_id) {
+		$id = (string)get_post_meta((int)$project_id, '_cptt_project_label_id', true);
+		if ($id === '') return null;
+		foreach (self::get_project_labels() as $l) if ((string)$l['id'] === $id) return $l;
+		return null;
 	}
 
 	public static function activate() {
@@ -131,6 +252,12 @@ class CPTT_Core {
 			'menu_icon' => 'dashicons-cart','supports' => ['title'],'has_archive' => false,
 			'show_in_rest' => false,'publicly_queryable' => false,'exclude_from_search' => true,
 			'capability_type' => 'post','map_meta_cap' => true,
+		]);
+
+
+		register_post_type('cptt_payment_receipt', [
+			'labels' => ['name'=>'رسیدهای پرداخت','singular_name'=>'رسید پرداخت','menu_name'=>'رسیدهای پرداخت'],
+			'public'=>false,'show_ui'=>false,'show_in_menu'=>false,'supports'=>['title'],'has_archive'=>false,'show_in_rest'=>false,
 		]);
 
 				register_post_type('cptt_checklist_tpl', [

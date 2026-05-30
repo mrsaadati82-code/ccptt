@@ -311,7 +311,7 @@ class CPTT_Analytics {
 				.cptt-an-kpi__value { font-size: 26px; font-weight: 950; color: #0f172a; line-height: 1.2; }
 				.cptt-an-kpi__label { font-size: 12px; color: #64748b; font-weight: 700; margin-top: 4px; }
 
-				.cptt-an-experts { display: grid; gap: 20px; }
+				.cptt-an-picker{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:18px 0}.cptt-an-pick-card{border:1px solid #e0e7ff;background:#fff;border-radius:16px;padding:12px;display:flex;align-items:center;gap:10px;cursor:pointer;box-shadow:0 5px 16px rgba(15,23,42,.05)}.cptt-an-pick-card.is-active{background:linear-gradient(135deg,#eef2ff,#f5f3ff);border-color:#6366f1}.cptt-an-pick-card img{width:42px;height:42px;border-radius:50%;object-fit:cover}.cptt-an-experts { display: grid; gap: 20px; }
 				.cptt-an-expert-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 20px; padding: 22px; box-shadow: 0 6px 18px rgba(0,0,0,0.04); }
 				.cptt-an-expert-header { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; padding-bottom: 16px; border-bottom: 1px solid #f1f5f9; flex-wrap: wrap; }
 				.cptt-an-expert-header h3 { margin: 0; font-size: 18px; font-weight: 950; color: #0f172a; }
@@ -387,12 +387,19 @@ class CPTT_Analytics {
 				<div class="cptt-an-kpi"><div class="cptt-an-kpi__icon"><?php echo $g_remain > 0 ? '📊' : '💚'; ?></div><div class="cptt-an-kpi__value" style="color:<?php echo $g_remain > 0 ? '#dc2626' : '#059669'; ?>"><?php echo number_format($g_remain); ?></div><div class="cptt-an-kpi__label">مانده کل (ریال)</div></div>
 			</div>
 
+
+			<div class="cptt-an-picker" id="cptt-an-picker">
+				<?php foreach ($all_stats as $ps): $av=''; $aid=(int)get_user_meta($ps['user_id'],'cptt_expert_avatar_id',true); if($aid)$av=wp_get_attachment_image_url($aid,'thumbnail'); if(!$av)$av=get_avatar_url($ps['user_id'],['size'=>80]); ?>
+				<button type="button" class="cptt-an-pick-card" data-expert="<?php echo esc_attr($ps['user_id']); ?>"><img src="<?php echo esc_url($av); ?>" alt=""><span><strong><?php echo esc_html($ps['display_name']); ?></strong><br><small>امتیاز: <?php echo esc_html($ps['score']); ?></small></span></button>
+				<?php endforeach; ?>
+			</div>
+
 			<!-- Per Expert -->
 			<div class="cptt-an-experts">
 			<?php foreach ($all_stats as $s):
 				$scoreClass = $s['score'] >= 70 ? 'high' : ($s['score'] >= 40 ? 'mid' : 'low');
 			?>
-				<div class="cptt-an-expert-card">
+				<div class="cptt-an-expert-card" style="display:none" data-expert="<?php echo esc_attr($s['user_id']); ?>">
 					<div class="cptt-an-expert-header">
 						<?php
 						$expert_avatar = '';
@@ -513,6 +520,7 @@ class CPTT_Analytics {
 			<?php endforeach; ?>
 			</div>
 		</div>
+		<script>document.addEventListener('click',function(e){var b=e.target.closest('.cptt-an-pick-card');if(!b)return;document.querySelectorAll('.cptt-an-pick-card').forEach(x=>x.classList.remove('is-active'));b.classList.add('is-active');var id=b.getAttribute('data-expert')||'';document.querySelectorAll('.cptt-an-expert-card').forEach(function(c){c.style.display=(id&&c.getAttribute('data-expert')===id)?'':'none';});});</script>
 		<?php
 	}
 

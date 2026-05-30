@@ -478,6 +478,7 @@
     });
     var empty = qs('#cptt-expert-empty');
     if (empty) empty.hidden = visible !== 0;
+    document.dispatchEvent(new CustomEvent('cptt:expertFiltersChanged', { detail: { visible: visible } }));
   }
 
   function bindProjectToggles() {
@@ -901,6 +902,9 @@
     });
   }
 
+
+  function initClientSearchPickers() { /* disabled: search is only for create form and is bound by isolated v5.4.10 code */ }
+
   function initKanban() {
     var dataEl = qs('#cptt-kanban-data');
     if (!dataEl) return;
@@ -920,7 +924,11 @@
 
     function buildKanban() {
       var cols = { todo: [], current: [], done: [] };
-      steps.forEach(function (s) { cols[s.status || 'todo'].push(s); });
+      steps.forEach(function (s) {
+        var projectCard = document.querySelector('.cptt-expertCard[data-project-id="' + String(s.project_id) + '"]');
+        if (projectCard && (projectCard.hidden || projectCard.style.display === 'none')) return;
+        cols[s.status || 'todo'].push(s);
+      });
       var html = '<div class="cptt-kanban">' +
         '<div class="cptt-kanban__col" data-status="todo"><div class="cptt-kanban__head">🔵 انجام‌نشده</div><div class="cptt-kanban__dropzone">' + renderCol(cols.todo) + '</div></div>' +
         '<div class="cptt-kanban__col" data-status="current"><div class="cptt-kanban__head">🟡 در حال انجام</div><div class="cptt-kanban__dropzone">' + renderCol(cols.current) + '</div></div>' +
@@ -955,11 +963,15 @@
           steps.forEach(function (s) { if (s.step_id === stepId) s.status = newStatus; });
           try {
             var fd = new FormData();
-            fd.append('action', 'cptt_expert_save_project');
+            fd.append('action', 'cptt_expert_update_step_status');
             fd.append('nonce', (window.CPTT_EXPERT && CPTT_EXPERT.nonce) ? CPTT_EXPERT.nonce : '');
             fd.append('project_id', projectId);
-            fd.append('steps[' + stepId + '][status]', newStatus);
-            await fetch((window.CPTT_EXPERT && CPTT_EXPERT.ajax) ? CPTT_EXPERT.ajax : '', { method: 'POST', credentials: 'same-origin', body: fd });
+            fd.append('step_id', stepId);
+            fd.append('status', newStatus);
+            var kr = await fetch((window.CPTT_EXPERT && CPTT_EXPERT.ajax) ? CPTT_EXPERT.ajax : '', { method: 'POST', credentials: 'same-origin', body: fd });
+            var kj = await kr.json().catch(function(){ return null; });
+            if (!kj || !kj.success) throw new Error((kj && kj.data) ? kj.data : 'خطا در تغییر وضعیت');
+            window.location.reload();
           } catch (err) { console.error(err); }
         });
       });
@@ -975,6 +987,7 @@
         toggle.textContent = show ? '📋 نمایش لیست' : '📌 نمایش Kanban';
         if (show) buildKanban();
       });
+      document.addEventListener('cptt:expertFiltersChanged', function(){ if (!kanbanWrap.hidden) buildKanban(); });
     }
   }
 
@@ -1205,7 +1218,7 @@
         if (!container) return;
         var stepId = randId('step');
         var idx = container.querySelectorAll('.cptt-expert-step').length + 1;
-        var html = '<div class="cptt-expert-step is-open" draggable="true" data-step-id="'+stepId+'"><button type="button" class="cptt-expert-step__toggle" aria-expanded="true"><span class="cptt-step-reorder-handle" title="تغییر ترتیب">⠿</span><div class="cptt-expert-step__toggleMain"><strong>' + idx + '. مرحله جدید</strong><span>چک‌لیست: 0/0</span></div><div class="cptt-expert-step__toggleSide"><span class="cptt-expert-status cptt-expert-status--todo">انجام‌نشده</span><span class="cptt-expert-step__chevron">⌄</span></div></button><div class="cptt-expert-step__body"><div class="cptt-expert-step__metaGrid"><label><span>عنوان مرحله</span><input type="text" name="steps['+stepId+'][title]" value="مرحله جدید"></label><label><span>وضعیت مرحله</span><select name="steps['+stepId+'][status]"><option value="todo">انجام‌نشده</option><option value="current">در حال انجام</option><option value="done">انجام‌شده</option></select></label><label><span>مهلت مرحله</span><input type="text" class="cptt-jalali-datetime" name="steps['+stepId+'][due_at_local]" value=""></label></div><div class="cptt-expert-step__metaGrid"><label><span>هزینه مرحله</span><input type="text" class="cptt-currency-input" name="steps['+stepId+'][cost]" value="0"></label><label><span>دریافتی مرحله</span><input type="text" class="cptt-currency-input" name="steps['+stepId+'][paid]" value="0"></label></div><label class="cptt-expert-noteField"><span>توضیحات (اختیاری)</span><textarea name="steps['+stepId+'][desc]" rows="2"></textarea></label><div class="cptt-expert-checklist"><div class="cptt-expert-sectionTitle">چک‌لیست مرحله</div><div class="cptt-expert-checklist-items"></div><button type="button" class="button button-small cptt-expert-add-checkitem" style="margin-top:10px;">+ افزودن آیتم چک‌لیست</button></div><div class="cptt-expert-userTasks"><div class="cptt-expert-sectionTitle">تسک‌های سمت مشتری</div><div class="cptt-expert-usertasks-items"></div><button type="button" class="button button-small cptt-expert-add-usertask" style="margin-top:10px;">+ افزودن تسک مشتری</button></div><div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;"><button type="button" class="button button-small cptt-expert-add-checkitem" style="flex:1;">+ افزودن چک‌لیست</button><button type="button" class="button button-link-delete cptt-expert-remove-step" style="flex:1;color:#b91c1c;">× حذف مرحله</button></div></div></div>';
+        var html = '<div class="cptt-expert-step is-open" draggable="true" data-step-id="'+stepId+'"><button type="button" class="cptt-expert-step__toggle" aria-expanded="true"><span class="cptt-step-reorder-handle" title="تغییر ترتیب">⠿</span><div class="cptt-expert-step__toggleMain"><strong>' + idx + '. مرحله جدید</strong><span>چک‌لیست: 0/0</span></div><div class="cptt-expert-step__toggleSide"><span class="cptt-expert-status cptt-expert-status--todo">انجام‌نشده</span><span class="cptt-expert-step__chevron">⌄</span></div></button><div class="cptt-expert-step__body"><div class="cptt-expert-step__metaGrid"><label><span>عنوان مرحله</span><input type="text" name="steps['+stepId+'][title]" value="مرحله جدید"></label><label><span>وضعیت مرحله</span><select name="steps['+stepId+'][status]"><option value="todo">انجام‌نشده</option><option value="current">در حال انجام</option><option value="done">انجام‌شده</option></select></label><label><span>مهلت مرحله</span><input type="text" class="cptt-jalali-datetime" name="steps['+stepId+'][due_at_local]" value=""></label></div><div class="cptt-expert-step__metaGrid"><label><span>هزینه مرحله</span><input type="text" class="cptt-currency-input" name="steps['+stepId+'][cost]" value="0"></label><label><span>دریافتی مرحله</span><input type="text" class="cptt-currency-input" name="steps['+stepId+'][paid]" value="0"></label></div><div class="cptt-step-expert-wrap"><input type="hidden" class="cptt-step-expert-primary" name="steps['+stepId+'][assigned_expert_id]" value=""><div class="cptt-step-expert-hidden-list"></div><button type="button" class="cptt-step-expert-btn">👥 انتخاب کارشناسان مرحله</button></div><label class="cptt-expert-noteField"><span>توضیحات (اختیاری)</span><textarea name="steps['+stepId+'][desc]" rows="2"></textarea></label><div class="cptt-expert-checklist"><div class="cptt-expert-sectionTitle">چک‌لیست مرحله</div><div class="cptt-expert-checklist-items"></div><button type="button" class="button button-small cptt-expert-add-checkitem" style="margin-top:10px;">+ افزودن آیتم چک‌لیست</button></div><div class="cptt-expert-userTasks"><div class="cptt-expert-sectionTitle">تسک‌های سمت مشتری</div><div class="cptt-expert-usertasks-items"></div><button type="button" class="button button-small cptt-expert-add-usertask" style="margin-top:10px;">+ افزودن تسک مشتری</button></div><div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;"><button type="button" class="button button-small cptt-expert-add-checkitem" style="flex:1;">+ افزودن چک‌لیست</button><button type="button" class="button button-link-delete cptt-expert-remove-step" style="flex:1;color:#b91c1c;">× حذف مرحله</button></div></div></div>';
         container.insertAdjacentHTML('beforeend', html);
         bindStepAccordions(container);
         refreshStepNumbers(container);
@@ -1628,6 +1641,7 @@
 
     // Init new customer modal trigger for existing forms
     initNewCustomerModals();
+    initClientSearchPickers();
     bindNewCustomerSubmit();
 
     // Watch for dynamically opened project cards (delegation)
@@ -1643,6 +1657,7 @@
             // Re-init new customer triggers
             if (node.querySelector && node.querySelector('select[name="client_user_id"]')) {
               initNewCustomerModals();
+              initClientSearchPickers();
             }
           });
         });
@@ -2097,7 +2112,7 @@
         '<div class="cptt-stepExpertModal__backdrop"></div>' +
         '<div class="cptt-stepExpertModal__dialog">' +
           '<button type="button" class="cptt-stepExpertModal__close" aria-label="بستن">×</button>' +
-          '<div class="cptt-stepExpertModal__title">انتخاب کارشناس مسئول مرحله</div>' +
+          '<div class="cptt-stepExpertModal__title">انتخاب کارشناسان مسئول مرحله</div>' +
           '<div class="cptt-stepExpertModal__list" id="cptt-sep-list"></div>' +
         '</div>';
       document.body.appendChild(m);
@@ -2118,7 +2133,8 @@
 
       // hidden input با نام صحیح
       var hiddenInput = stepEl.querySelector('input[name*="[assigned_expert_id]"]');
-      var currentVal = hiddenInput ? hiddenInput.value : '';
+      var currentVals = Array.prototype.map.call(stepEl.querySelectorAll('.cptt-step-expert-hidden-list input[type="hidden"]'), function(inp){ return String(inp.value); });
+      if (!currentVals.length && hiddenInput && hiddenInput.value) currentVals = [String(hiddenInput.value)];
 
       // گرفتن لیست کارشناسان از article card
       var card = btn.closest('[data-project-experts]');
@@ -2150,16 +2166,11 @@
       var modal = document.getElementById('cptt-step-expert-modal');
       var listEl = document.getElementById('cptt-sep-list');
 
-      var html = '';
-      // گزینه «بدون کارشناس»
-      html += '<div class="cptt-sep-option"><label>' +
-        '<input type="radio" name="sep_choice" value=""' + (currentVal===''?' checked':'') + '> ' +
-        '<span>بدون کارشناس مشخص</span></label></div>';
-
+      var html = '<div class="cptt-sep-option cptt-sep-option--hint">یک یا چند کارشناس را انتخاب کنید. برای پاک کردن انتخاب، همه را بردارید.</div>';
       experts.forEach(function(ex) {
-        var chk = (String(ex.id) === String(currentVal)) ? ' checked' : '';
+        var chk = (currentVals.indexOf(String(ex.id)) !== -1) ? ' checked' : '';
         html += '<div class="cptt-sep-option">' +
-          '<label><input type="radio" name="sep_choice" value="'+escH(String(ex.id))+'"'+chk+'> ' +
+          '<label><input type="checkbox" name="sep_choice[]" value="'+escH(String(ex.id))+'"'+chk+'> ' +
           '<span>'+escH(ex.name||String(ex.id))+'</span></label>' +
           '</div>';
       });
@@ -2180,26 +2191,38 @@
       if (!e.target.classList.contains('cptt-sep-confirm')) return;
       var modal = document.getElementById('cptt-step-expert-modal');
       if (!modal) return;
-      var checked = modal.querySelector('input[name="sep_choice"]:checked');
-      var val = checked ? checked.value : '';
+      var checked = Array.prototype.slice.call(modal.querySelectorAll('input[name="sep_choice[]"]:checked'));
+      var vals = checked.map(function(ch){ return String(ch.value); });
+      var val = vals.length ? vals[0] : '';
       var experts = modal._experts || [];
 
-      // ذخیره در hidden input
-      if (modal._hiddenInput) {
-        modal._hiddenInput.value = val;
+      // ذخیره در hidden inputها
+      if (modal._hiddenInput) { modal._hiddenInput.value = val; }
+      if (modal._stepEl) {
+        var list = modal._stepEl.querySelector('.cptt-step-expert-hidden-list');
+        if (list) {
+          var stepId = modal._stepEl.getAttribute('data-step-id') || '';
+          list.innerHTML = vals.map(function(v){ return '<input type="hidden" name="steps[' + escH(stepId) + '][assigned_expert_ids][]" value="' + escH(v) + '">'; }).join('');
+        }
       }
 
       // آپدیت متن دکمه
       if (modal._stepEl) {
         var dispBtn = modal._stepEl.querySelector('.cptt-step-expert-btn');
         if (dispBtn) {
-          if (val) {
-            var found = experts.filter(function(ex){ return String(ex.id)===String(val); });
-            var nm = found.length ? found[0].name : val;
-            dispBtn.textContent = '👤 ' + nm;
+          if (vals.length) {
+            var names = vals.map(function(v){ var found = experts.filter(function(ex){ return String(ex.id)===String(v); }); return found.length ? found[0].name : v; });
+            dispBtn.textContent = '👥 ' + names.join('، ');
             dispBtn.classList.add('has-expert');
+            var titleStrong = modal._stepEl.querySelector('.cptt-expert-step__toggleMain strong');
+            if (titleStrong) {
+              var oldAv = titleStrong.querySelector('.cptt-step-toggle-avatars'); if (oldAv) oldAv.remove();
+              var avWrap = document.createElement('span'); avWrap.className = 'cptt-step-toggle-avatars';
+              vals.forEach(function(v){ var found = experts.filter(function(ex){ return String(ex.id)===String(v); })[0]; if(found && found.avatar){ var img=document.createElement('img'); img.src=found.avatar; img.alt=''; avWrap.appendChild(img); } });
+              if (avWrap.children.length) titleStrong.appendChild(avWrap);
+            }
           } else {
-            dispBtn.textContent = '👤 انتخاب کارشناس مرحله';
+            dispBtn.textContent = '👥 انتخاب کارشناسان مرحله';
             dispBtn.classList.remove('has-expert');
           }
         }
@@ -2568,4 +2591,56 @@
       _m=null; _img=null; _drag=false; fi.value='';
     }
   });
+})();
+
+/* v5.4.10 isolated client search button - create project only */
+(function(){
+  function bindClientSearch(){
+    document.querySelectorAll('.cptt-expert-create-form select[name="client_user_id"], .cptt-expert-project-form select[name="client_user_id"]').forEach(function(sel){
+      if (sel.dataset.cpttRobustClientSearch) return;
+      sel.dataset.cpttRobustClientSearch = '1';
+      var wrap = document.createElement('div');
+      wrap.className = 'cptt-clientSearchCreate';
+      var searchRow = document.createElement('div');
+      searchRow.className = 'cptt-clientSearchCreate__search';
+      searchRow.hidden = true;
+      var inp = document.createElement('input');
+      inp.type = 'search'; inp.className = 'cptt-clientSearchCreate__input'; inp.placeholder = 'جستجوی نام، نام خانوادگی یا شماره تماس...';
+      var results = document.createElement('div');
+      results.className = 'cptt-clientSearchCreate__results';
+      results.hidden = true;
+      var fieldRow = document.createElement('div');
+      fieldRow.className = 'cptt-clientSearchCreate__field';
+      var btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'cptt-clientSearchCreate__btn'; btn.textContent = '🔎'; btn.setAttribute('aria-label','جستجوی مشتری');
+      sel.parentNode.insertBefore(wrap, sel);
+      searchRow.appendChild(inp); searchRow.appendChild(results); fieldRow.appendChild(sel); fieldRow.appendChild(btn); wrap.appendChild(searchRow); wrap.appendChild(fieldRow);
+      btn.addEventListener('click', function(){ searchRow.hidden = !searchRow.hidden; if (!searchRow.hidden) setTimeout(function(){ inp.focus(); }, 30); });
+      function renderResults(){
+        var q = String(inp.value || '').toLowerCase().trim();
+        var matches = [];
+        Array.prototype.forEach.call(sel.options, function(opt){
+          if (!opt.value || opt.value === 'new_customer_trigger') { opt.hidden = false; return; }
+          var h = String((opt.getAttribute('data-search') || '') + ' ' + opt.textContent).toLowerCase();
+          var ok = !!q && h.indexOf(q) !== -1;
+          opt.hidden = !!q && !ok;
+          if (ok && matches.length < 12) matches.push(opt);
+        });
+        if (!q) { results.hidden = true; results.innerHTML = ''; return; }
+        if (!matches.length) { results.hidden = false; results.innerHTML = '<div class="cptt-clientSearchCreate__empty">نتیجه‌ای یافت نشد</div>'; return; }
+        results.hidden = false;
+        results.innerHTML = matches.map(function(opt){ return '<button type="button" data-value="' + String(opt.value).replace(/"/g,'&quot;') + '">' + opt.textContent + '</button>'; }).join('');
+      }
+      inp.addEventListener('input', renderResults);
+      results.addEventListener('click', function(e){
+        var b = e.target.closest('button[data-value]'); if (!b) return;
+        sel.value = b.getAttribute('data-value');
+        sel.dispatchEvent(new Event('change', {bubbles:true}));
+        inp.value = b.textContent;
+        results.hidden = true;
+      });
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindClientSearch); else bindClientSearch();
+  document.addEventListener('click', function(e){ if(e.target.closest('[data-cptt-open-newproject], .cptt-newProjectCta, .cptt-expert-toggleProject')) setTimeout(bindClientSearch, 100); });
 })();

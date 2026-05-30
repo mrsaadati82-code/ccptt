@@ -2,14 +2,14 @@
 /**
  * Plugin Name: هماهنگ - افزونه ی مدیریت پروژه و تیم
  * Description: مدیریت پروژه‌های مشتری و نمایش مراحل پیشرفت داخل پنل کاربری (Stepper + Popup).
- * Version: 5.4.7
+ * Version: 5.4.16
  * Author: Your Name
  * Text Domain: cptt
  */
 
 if ( ! defined('ABSPATH') ) exit;
 
-define('CPTT_VERSION', '5.4.7');
+define('CPTT_VERSION', '5.4.16');
 define('CPTT_PATH', plugin_dir_path(__FILE__));
 define('CPTT_URL', plugin_dir_url(__FILE__));
 
@@ -29,6 +29,7 @@ require_once CPTT_PATH . 'includes/class-cptt-woocommerce.php';
 require_once CPTT_PATH . 'includes/class-cptt-analytics.php';
 require_once CPTT_PATH . 'includes/class-cptt-bale.php';
 require_once CPTT_PATH . 'includes/class-cptt-auth.php';
+require_once CPTT_PATH . 'includes/class-cptt-payment.php';
 
 register_activation_hook(__FILE__, ['CPTT_Core', 'activate']);
 register_activation_hook(__FILE__, function(){
@@ -50,4 +51,5 @@ add_action('plugins_loaded', function () {
 	CPTT_Analytics::instance();
 	CPTT_Bale::instance();
 	CPTT_Auth::instance();
+	CPTT_Payment::instance();
 });
