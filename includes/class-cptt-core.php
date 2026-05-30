@@ -122,7 +122,18 @@ class CPTT_Core {
 			'show_in_rest' => false,'publicly_queryable' => false,'exclude_from_search' => true,
 		]);
 
-		register_post_type('cptt_checklist_tpl', [
+		register_post_type('cptt_order', [
+			'labels' => [
+				'name' => 'سفارش‌های بله','singular_name' => 'سفارش بله','add_new_item' => 'افزودن سفارش جدید',
+				'edit_item' => 'ویرایش سفارش','menu_name' => 'سفارش‌های بله',
+			],
+			'public' => false,'show_ui' => true,'show_in_menu' => 'edit.php?post_type=cptt_project',
+			'menu_icon' => 'dashicons-cart','supports' => ['title'],'has_archive' => false,
+			'show_in_rest' => false,'publicly_queryable' => false,'exclude_from_search' => true,
+			'capability_type' => 'post','map_meta_cap' => true,
+		]);
+
+				register_post_type('cptt_checklist_tpl', [
 			'labels' => [
 				'name' => 'تمپلیت چک‌لیست','singular_name' => 'تمپلیت چک‌لیست','add_new_item' => 'افزودن تمپلیت چک‌لیست',
 				'edit_item' => 'ویرایش تمپلیت چک‌لیست','menu_name' => 'تمپلیت چک‌لیست',
@@ -186,7 +197,43 @@ class CPTT_Core {
 			'type' => 'array','single' => true,'show_in_rest' => false,
 			'auth_callback' => function(){ return current_user_can('edit_cptt_projects'); },
 		]);
-		register_post_meta('cptt_checklist_tpl', '_cptt_checklist_items', [
+		register_post_meta('cptt_order', '_cptt_order_client_id', [
+			'type' => 'integer','single' => true,'show_in_rest' => false,
+			'auth_callback' => function(){ return current_user_can('edit_cptt_projects'); },
+		]);
+		register_post_meta('cptt_order', '_cptt_order_type', [
+			'type' => 'string','single' => true,'show_in_rest' => false,
+			'auth_callback' => function(){ return current_user_can('edit_cptt_projects'); },
+		]);
+		register_post_meta('cptt_order', '_cptt_order_description', [
+			'type' => 'string','single' => true,'show_in_rest' => false,
+			'auth_callback' => function(){ return current_user_can('edit_cptt_projects'); },
+		]);
+		register_post_meta('cptt_order', '_cptt_order_address', [
+			'type' => 'string','single' => true,'show_in_rest' => false,
+			'auth_callback' => function(){ return current_user_can('edit_cptt_projects'); },
+		]);
+		register_post_meta('cptt_order', '_cptt_order_files', [
+			'type' => 'array','single' => true,'show_in_rest' => false,
+			'auth_callback' => function(){ return current_user_can('edit_cptt_projects'); },
+		]);
+		register_post_meta('cptt_order', '_cptt_order_status', [
+			'type' => 'string','single' => true,'show_in_rest' => false,
+			'auth_callback' => function(){ return current_user_can('edit_cptt_projects'); },
+		]);
+		register_post_meta('cptt_order', '_cptt_order_assigned_expert', [
+			'type' => 'integer','single' => true,'show_in_rest' => false,
+			'auth_callback' => function(){ return current_user_can('edit_cptt_projects'); },
+		]);
+		register_post_meta('cptt_order', '_cptt_order_project_id', [
+			'type' => 'integer','single' => true,'show_in_rest' => false,
+			'auth_callback' => function(){ return current_user_can('edit_cptt_projects'); },
+		]);
+		register_post_meta('cptt_order', '_cptt_order_created_at_fa', [
+			'type' => 'string','single' => true,'show_in_rest' => false,
+			'auth_callback' => function(){ return current_user_can('edit_cptt_projects'); },
+		]);
+				register_post_meta('cptt_checklist_tpl', '_cptt_checklist_items', [
 			'type' => 'array','single' => true,'show_in_rest' => false,
 			'auth_callback' => function(){ return current_user_can('edit_cptt_projects'); },
 		]);

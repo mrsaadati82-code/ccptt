@@ -1252,6 +1252,29 @@ class CPTT_Settings {
 								</div>
 							</div>
 
+							<!-- v5.4.7: کارشناسان دریافت‌کننده‌ی سفارش‌های بله -->
+							<div class="cptt-settings-fields-tab" style="margin-top:30px; border-top:1px solid #cbd5e1; padding-top:20px;">
+								<span style="font-size:14px;font-weight:bold;margin-bottom:6px;display:block;color:#0f172a;">🛒 کارشناسان دریافت‌کننده‌ی سفارش‌های جدید مشتری</span>
+								<p style="color:#64748b; font-size:12px; margin:0 0 12px;">انتخاب کنید کدام کارشناسان هنگام ثبت سفارش جدید توسط مشتری در ربات بله، نوتیف دریافت کنند. اگر چیزی انتخاب نکنید، فقط مدیر سایت پیام را می‌گیرد.</p>
+								<?php
+								$order_experts = isset($bale['order_expert_ids']) && is_array($bale['order_expert_ids']) ? array_map('intval', $bale['order_expert_ids']) : [];
+								$all_experts = get_users(['role' => 'cptt_expert', 'orderby' => 'display_name', 'order' => 'ASC']);
+								?>
+								<input type="hidden" name="cptt_bale_settings[order_expert_ids][]" value="" />
+								<?php if (empty($all_experts)): ?>
+									<div style="padding:10px; background:#fef3c7; border:1px solid #fcd34d; border-radius:8px; font-size:12px; color:#92400e;">هیچ کارشناسی در سیستم ثبت نشده است.</div>
+								<?php else: ?>
+								<div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:8px; max-height:240px; overflow:auto; padding:10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px;">
+									<?php foreach ($all_experts as $exp): $checked = in_array((int)$exp->ID, $order_experts, true); ?>
+										<label style="display:flex; align-items:center; gap:8px; padding:8px 10px; background:#fff; border:1px solid <?php echo $checked ? '#6366f1' : '#e2e8f0'; ?>; border-radius:8px; cursor:pointer; font-size:13px;">
+											<input type="checkbox" name="cptt_bale_settings[order_expert_ids][]" value="<?php echo (int)$exp->ID; ?>" <?php checked($checked); ?> />
+											<span><?php echo esc_html($exp->display_name); ?></span>
+										</label>
+									<?php endforeach; ?>
+								</div>
+								<?php endif; ?>
+							</div>
+
 							<!-- Manual Webhook Actions -->
 							<div class="cptt-settings-fields-tab" style="margin-top:30px; border-top:1px solid #cbd5e1; padding-top:20px;">
 								<span style="font-size:14px;font-weight:bold;margin-bottom:15px;display:block;color:#0f172a;">عملیات دستی ربات بله:</span>

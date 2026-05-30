@@ -390,6 +390,18 @@ class CPTT_Bale {
 			if (strpos($data, 'cust_view_proj_') === 0) { $this->cust_view_project($chat_id, $msg_id, (int)substr($data, 15), $user); return; }
 			if (strpos($data, 'cust_ut_reply_') === 0)  { $this->cust_start_task_reply($chat_id, $msg_id, substr($data, 14), $user); return; }
 			if (strpos($data, 'cust_ut_skip_') === 0)   { $this->cust_finish_task_skip_file($chat_id, $msg_id, $user); return; }
+
+			// === v5.4.7: New Order Flow ===
+			if ($data === 'cust_new_order')             { $this->order_start($chat_id, $msg_id, $user); return; }
+			if ($data === 'order_type_onsite')          { $this->order_pick_type($chat_id, $msg_id, $user, 'onsite'); return; }
+			if ($data === 'order_type_ship')            { $this->order_pick_type($chat_id, $msg_id, $user, 'ship'); return; }
+			if ($data === 'order_skip_desc')            { $this->order_skip_desc($chat_id, $msg_id, $user); return; }
+			if ($data === 'order_done_files')           { $this->order_done_files($chat_id, $msg_id, $user); return; }
+			if ($data === 'order_skip_address')         { $this->order_skip_address($chat_id, $msg_id, $user); return; }
+			if ($data === 'order_confirm')              { $this->order_finalize($chat_id, $msg_id, $user); return; }
+			if ($data === 'order_cancel')               { $this->order_cancel($chat_id, $msg_id, $user); return; }
+			if ($data === 'cust_orders')                { $this->cust_orders_list($chat_id, $msg_id, $user); return; }
+			if (strpos($data, 'cust_view_order_') === 0){ $this->cust_view_order($chat_id, $msg_id, (int)substr($data, 16), $user); return; }
 		}
 
 		// Expert
@@ -415,6 +427,16 @@ class CPTT_Bale {
 			}
 			if (strpos($data, 'proj_chat_') === 0)      { $this->expert_start_chat($chat_id, $msg_id, (int)substr($data, 10), $user); return; }
 			if (strpos($data, 'proj_mute_') === 0)      { $this->show_mute_options($chat_id, $msg_id, (int)substr($data, 10), $user); return; }
+
+			// === v5.4.7: Order management for experts/admin ===
+			if (strpos($data, 'order_view_') === 0)     { $this->order_view($chat_id, $msg_id, (int)substr($data, 11), $user); return; }
+			if (strpos($data, 'order_create_proj_') === 0) { $this->order_start_create_project($chat_id, $msg_id, (int)substr($data, 18), $user); return; }
+
+			// اجازه‌ی استفاده از مراحل wizard ایجاد پروژه برای کارشناس هم (وقتی از سفارش وارد شده)
+			if (strpos($data, 'wiz_cp_tpl_') === 0)    { $this->wizard_create_proj_pick_tpl($chat_id, $msg_id, substr($data, 11), $user); return; }
+			if (strpos($data, 'wiz_cp_exp_') === 0)    { $this->wizard_create_proj_pick_expert($chat_id, $msg_id, substr($data, 11), $user); return; }
+			if ($data === 'wiz_cp_confirm')            { $this->wizard_create_proj_confirm($chat_id, $msg_id, $user); return; }
+
 			if (strpos($data, 'mute_') === 0) {
 				$parts = explode('_', substr($data, 5), 2); // duration_pid
 				$this->apply_mute($chat_id, $msg_id, (int)($parts[1] ?? 0), $parts[0] ?? '', $user); return;
@@ -430,11 +452,17 @@ class CPTT_Bale {
 			if ($data === 'admin_projects')            { $this->admin_recent_projects($chat_id, $msg_id); return; }
 			if ($data === 'admin_experts')             { $this->admin_experts_list($chat_id, $msg_id); return; }
 			if ($data === 'admin_create_proj_start')   { $this->wizard_create_proj_start($chat_id, $msg_id, $user); return; }
-			if (strpos($data, 'wiz_cp_tpl_') === 0)    { $this->wizard_create_proj_pick_tpl($chat_id, $msg_id, substr($data, 11), $user); return; }
-			if (strpos($data, 'wiz_cp_exp_') === 0)    { $this->wizard_create_proj_pick_expert($chat_id, $msg_id, substr($data, 11), $user); return; }
-			if ($data === 'wiz_cp_confirm')            { $this->wizard_create_proj_confirm($chat_id, $msg_id, $user); return; }
+			// (callbackهای wiz_cp_* در بلوک expert/admin بالا handle می‌شوند)
 			if ($data === 'admin_broadcast_start')     { $this->wizard_broadcast_start($chat_id, $msg_id, $user); return; }
 			if ($data === 'admin_reminders_trigger')   { $this->trigger_manual_reminders($chat_id, $msg_id); return; }
+
+			// === v5.4.7: Admin assign expert to order ===
+			if (strpos($data, 'order_assign_') === 0)   { $this->admin_show_assign_experts($chat_id, $msg_id, (int)substr($data, 13), $user); return; }
+			if (strpos($data, 'order_setexp_') === 0) {
+				$parts = explode('_', substr($data, 13), 2);
+				$this->admin_assign_expert_to_order($chat_id, $msg_id, (int)($parts[0] ?? 0), (int)($parts[1] ?? 0), $user); return;
+			}
+			if ($data === 'admin_orders')               { $this->admin_orders_list($chat_id, $msg_id); return; }
 		}
 
 		// Unknown
@@ -448,11 +476,17 @@ class CPTT_Bale {
 		$s = isset($state['s']) ? $state['s'] : '';
 		$d = isset($state['d']) && is_array($state['d']) ? $state['d'] : [];
 
-		// Wizard: create project (admin)
+		// Wizard: create project (admin / expert-from-order)
 		if ($s === 'wiz_cp_title' && $text !== '') {
 			$d['title'] = sanitize_text_field($text);
-			$this->set_state($chat_id, 'wiz_cp_phone', $d);
-			self::send_message($chat_id, "📞 *مرحله ۲ از ۵*\n\nشماره موبایل *مشتری* را ارسال کنید (مثال: `09123456789`)", $this->kb_cancel());
+			// اگر از سفارش بله ساخته می‌شود، مشتری از قبل مشخص است → مستقیم به انتخاب تمپلیت
+			if (!empty($d['client_id'])) {
+				$this->set_state($chat_id, 'wiz_cp_pick_tpl', $d);
+				$this->wizard_create_proj_show_templates($chat_id, 0, $user);
+			} else {
+				$this->set_state($chat_id, 'wiz_cp_phone', $d);
+				self::send_message($chat_id, "📞 *مرحله ۲ از ۵*\n\nشماره موبایل *مشتری* را ارسال کنید (مثال: `09123456789`)", $this->kb_cancel());
+			}
 			return true;
 		}
 		if ($s === 'wiz_cp_phone' && $text !== '') {
@@ -478,6 +512,50 @@ class CPTT_Bale {
 			$d['cost'] = $cost;
 			$this->set_state($chat_id, 'wiz_cp_pick_expert', $d);
 			$this->wizard_create_proj_show_experts($chat_id, 0, $user);
+			return true;
+		}
+
+		// === v5.4.7: Order flow states ===
+		if ($s === 'order_wait_desc') {
+			if ($text === '') return true;
+			$d['description'] = sanitize_textarea_field($text);
+			$this->set_state($chat_id, 'order_wait_files', $d);
+			$this->order_show_files_step($chat_id, 0, $user);
+			return true;
+		}
+		if ($s === 'order_wait_files') {
+			if ($file_id !== '') {
+				// آپلود فایل به media library
+				$res = self::download_to_media($file_id, $file_name);
+				if (is_wp_error($res)) {
+					self::send_message($chat_id, "❌ خطا در دریافت فایل: " . $res->get_error_message() . "\n\nمی‌توانید دوباره فایل بفرستید یا روی «ثبت و تأیید» کلیک کنید.");
+					return true;
+				}
+				$files = isset($d['files']) && is_array($d['files']) ? $d['files'] : [];
+				$files[] = [
+					'id'   => (int)$res['id'],
+					'url'  => (string)$res['url'],
+					'name' => (string)$res['name'],
+				];
+				$d['files'] = $files;
+				$this->set_state($chat_id, 'order_wait_files', $d);
+				self::send_message($chat_id,
+					"✅ *فایل دریافت شد* (" . count($files) . " فایل تا کنون)\n\n📎 می‌توانید فایل/عکس بیشتری بفرستید، یا روی «ثبت و ادامه» بزنید.",
+					$this->order_kb_files_done()
+				);
+				return true;
+			}
+			// متن آزاد در این مرحله نادیده گرفته می‌شود (راهنمایی می‌کنیم)
+			if ($text !== '' && trim($text) !== '/cancel') {
+				self::send_message($chat_id, "📎 لطفاً *فایل* یا *عکس* ارسال کنید، یا روی دکمه‌ی «ثبت و ادامه» کلیک کنید.", $this->order_kb_files_done());
+			}
+			return true;
+		}
+		if ($s === 'order_wait_address') {
+			if ($text === '') return true;
+			$d['address'] = sanitize_textarea_field($text);
+			$this->set_state($chat_id, 'order_wait_confirm', $d);
+			$this->order_show_confirm($chat_id, 0, $user);
 			return true;
 		}
 
@@ -565,6 +643,7 @@ class CPTT_Bale {
 				['text' => '📢 پیام همگانی', 'callback_data' => 'admin_broadcast_start'],
 				['text' => '⏰ ارسال یادآوری', 'callback_data' => 'admin_reminders_trigger'],
 			];
+			$kb[] = [['text' => '🛒 سفارش‌های دریافت‌شده', 'callback_data' => 'admin_orders']];
 			$kb[] = [['text' => '⚙ تنظیمات اعلان‌های من', 'callback_data' => 'expert_notif_settings']];
 		} elseif ($role === 'expert') {
 			$kb[] = [['text' => '📁 پروژه‌های فعال من', 'callback_data' => 'expert_projects']];
@@ -574,11 +653,13 @@ class CPTT_Bale {
 			];
 			$kb[] = [['text' => '⚙ تنظیمات اعلان‌های من', 'callback_data' => 'expert_notif_settings']];
 		} else {
+			$kb[] = [['text' => '🛒 ثبت سفارش جدید', 'callback_data' => 'cust_new_order']];
 			$kb[] = [['text' => '📁 پروژه‌های من', 'callback_data' => 'cust_projects']];
 			$kb[] = [
 				['text' => '📝 تسک‌های در انتظار من', 'callback_data' => 'cust_tasks'],
 				['text' => '📄 پیش‌فاکتورها', 'callback_data' => 'cust_invoices'],
 			];
+			$kb[] = [['text' => '📦 سفارش‌های من', 'callback_data' => 'cust_orders']];
 		}
 		return ['inline_keyboard' => $kb];
 	}
@@ -1309,6 +1390,44 @@ class CPTT_Bale {
 			);
 		}
 
+		// === v5.4.7: اگر این پروژه از یک سفارش بله ایجاد شد، آن را لینک کن و به مشتری اطلاع بده ===
+		if (!empty($d['_from_order'])) {
+			$order_id = (int)$d['_from_order'];
+			update_post_meta($order_id, '_cptt_order_project_id', (int)$project_id);
+			update_post_meta($order_id, '_cptt_order_status', 'project');
+			// انتقال فایل‌های سفارش به یادداشت‌های پروژه (برای دسترسی کارشناس)
+			$files = get_post_meta($order_id, '_cptt_order_files', true);
+			if (is_array($files) && !empty($files)) {
+				$notes = get_post_meta($project_id, '_cptt_project_notes', true);
+				if (!is_array($notes)) $notes = [];
+				$lines = ["📎 فایل‌های اولیه از سفارش #{$order_id}:"];
+				foreach ($files as $f) {
+					$lines[] = '• ' . ($f['name'] ?? 'فایل') . ' — ' . ($f['url'] ?? '');
+				}
+				$notes[] = [
+					'id'   => 'n_' . wp_generate_uuid4(),
+					'text' => implode("\n", $lines),
+					'at'   => $now,
+					'at_fa'=> class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime($now) : '',
+					'by'   => (int)$user->ID,
+				];
+				update_post_meta($project_id, '_cptt_project_notes', $notes);
+			}
+			// نوتیف بله به مشتری
+			$client_chat = get_user_meta((int)$d['client_id'], '_cptt_bale_chat_id', true);
+			if ($client_chat) {
+				$kb = ['inline_keyboard' => [
+					[['text' => '📁 مشاهده پروژه', 'callback_data' => 'cust_view_proj_' . $project_id]],
+					[['text' => '📦 سفارش‌های من', 'callback_data' => 'cust_orders']],
+				]];
+				self::send_message($client_chat,
+					"🎉 *سفارش شما تبدیل به پروژه شد!*\n\n" .
+					"سفارش *#{$order_id}* توسط کارشناس بررسی و به پروژه‌ی *«" . esc_html($d['title']) . "»* تبدیل شد. می‌توانید روند انجام پروژه را از داشبورد خود پیگیری کنید.",
+					$kb
+				);
+			}
+		}
+
 		$this->clear_state($chat_id);
 		$kb = [
 			[['text' => '📁 مشاهده در ربات', 'callback_data' => 'view_proj_' . $project_id]],
@@ -1673,4 +1792,543 @@ class CPTT_Bale {
 		}
 		return $msg;
 	}
+	/* ====================================================================
+	 * v5.4.7 — NEW ORDER FLOW (Customer-side)
+	 * ==================================================================== */
+
+	/** صفحه‌ی اول: انتخاب نوع سفارش (حضوری / با ارسال) */
+	private function order_start($chat_id, $msg_id, $user) {
+		$this->set_state($chat_id, 'order_pick_type', []);
+		$msg  = "🛒 *ثبت سفارش جدید*\n\n";
+		$msg .= "سلام " . esc_html($user->display_name) . " عزیز 👋\n";
+		$msg .= "برای ثبت سفارش خود، ابتدا *نوع سفارش* را مشخص کنید:\n\n";
+		$msg .= "🏬 *حضوری:* خودتان یا نماینده‌تان برای دریافت/تحویل مراجعه می‌کنید.\n";
+		$msg .= "🚚 *با ارسال:* سفارش به آدرس شما ارسال می‌شود (در ادامه آدرس را می‌گیریم).";
+		$kb = ['inline_keyboard' => [
+			[['text' => '🏬 ثبت سفارش حضوری', 'callback_data' => 'order_type_onsite']],
+			[['text' => '🚚 ثبت سفارش با ارسال', 'callback_data' => 'order_type_ship']],
+			[['text' => '✖ انصراف', 'callback_data' => 'order_cancel']],
+		]];
+		$this->edit_or_send($chat_id, $msg_id, $msg, $kb);
+	}
+
+	/** مرحله ۲: گرفتن توضیحات (با گزینه‌ی رد) */
+	private function order_pick_type($chat_id, $msg_id, $user, $type) {
+		$state = $this->get_state($chat_id);
+		$d = ($state && isset($state['d']) && is_array($state['d'])) ? $state['d'] : [];
+		$d['type'] = ($type === 'ship') ? 'ship' : 'onsite';
+		$this->set_state($chat_id, 'order_wait_desc', $d);
+
+		$type_label = $d['type'] === 'ship' ? '🚚 *ارسال به آدرس*' : '🏬 *حضوری*';
+		$msg  = "✅ نوع سفارش انتخاب شد: " . $type_label . "\n\n";
+		$msg .= "📝 *مرحله ۲ از " . ($d['type'] === 'ship' ? '۵' : '۴') . " — توضیحات سفارش*\n\n";
+		$msg .= "لطفاً توضیحات کامل سفارش خود را در یک پیام ارسال کنید (مثلاً نوع خدمت، نام محصول، مشخصات، تعداد، نکات مهم و ...).\n\n";
+		$msg .= "_اگر در حال حاضر توضیحاتی ندارید، می‌توانید این مرحله را رد کنید و مستقیم به ارسال فایل/عکس بروید._";
+		$kb = ['inline_keyboard' => [
+			[['text' => '⏭ رد کردن این مرحله', 'callback_data' => 'order_skip_desc']],
+			[['text' => '✖ انصراف از سفارش', 'callback_data' => 'order_cancel']],
+		]];
+		$this->edit_or_send($chat_id, $msg_id, $msg, $kb);
+	}
+
+	/** رد کردن مرحله توضیحات */
+	private function order_skip_desc($chat_id, $msg_id, $user) {
+		$state = $this->get_state($chat_id);
+		$d = ($state && isset($state['d']) && is_array($state['d'])) ? $state['d'] : [];
+		$d['description'] = '';
+		$this->set_state($chat_id, 'order_wait_files', $d);
+		$this->order_show_files_step($chat_id, $msg_id, $user);
+	}
+
+	/** نمایش مرحله‌ی آپلود فایل (با امکان رد کردن) */
+	private function order_show_files_step($chat_id, $msg_id, $user) {
+		$state = $this->get_state($chat_id);
+		$d = ($state && isset($state['d']) && is_array($state['d'])) ? $state['d'] : [];
+		$step_no = ($d['type'] ?? 'onsite') === 'ship' ? '۳ از ۵' : '۳ از ۴';
+		$count = isset($d['files']) ? count($d['files']) : 0;
+		$msg  = "📎 *مرحله {$step_no} — ارسال فایل یا عکس*\n\n";
+		$msg .= "اگر فایل، عکس، اسکرین‌شات، نقشه، طرح یا هر مستند دیگری دارید، می‌توانید *یک یا چند فایل* در پیام‌های جداگانه ارسال کنید.\n\n";
+		if ($count > 0) {
+			$msg .= "✅ *{$count} فایل* تا کنون دریافت شد.\n\n";
+		}
+		$msg .= "بعد از اتمام، روی *«ثبت و ادامه»* کلیک کنید.\nاگر فایلی ندارید، روی *«بدون فایل، ادامه»* کلیک کنید.";
+		$this->edit_or_send($chat_id, $msg_id, $msg, $this->order_kb_files_done());
+	}
+
+	/** کیبورد مشترک مرحله‌ی فایل */
+	private function order_kb_files_done() {
+		return ['inline_keyboard' => [
+			[['text' => '✅ ثبت و ادامه', 'callback_data' => 'order_done_files']],
+			[['text' => '✖ انصراف از سفارش', 'callback_data' => 'order_cancel']],
+		]];
+	}
+
+	/** پایان مرحله فایل: رفتن به آدرس (اگر ارسال) یا تأیید نهایی */
+	private function order_done_files($chat_id, $msg_id, $user) {
+		$state = $this->get_state($chat_id);
+		$d = ($state && isset($state['d']) && is_array($state['d'])) ? $state['d'] : [];
+		// اگر هیچ توضیح و هیچ فایلی نیست، نگذاریم ثبت کند
+		$desc = trim((string)($d['description'] ?? ''));
+		$files = isset($d['files']) && is_array($d['files']) ? $d['files'] : [];
+		if ($desc === '' && empty($files)) {
+			self::send_message($chat_id, "⚠️ لطفاً حداقل *توضیحات* یا *یک فایل* برای سفارش خود ارسال کنید تا کارشناسان بتوانند سفارش شما را بررسی کنند.");
+			$this->order_show_files_step($chat_id, 0, $user);
+			return;
+		}
+		if (($d['type'] ?? 'onsite') === 'ship') {
+			$this->set_state($chat_id, 'order_wait_address', $d);
+			$step_no = '۴ از ۵';
+			$msg  = "🏠 *مرحله {$step_no} — آدرس ارسال*\n\n";
+			$msg .= "لطفاً *آدرس کامل* محل ارسال را ارسال کنید (استان، شهر، خیابان، پلاک، کد پستی و توضیحات تکمیلی).\n\n";
+			$msg .= "_در صورتی که می‌خواهید بعداً آدرس را با کارشناس هماهنگ کنید، می‌توانید این مرحله را رد کنید._";
+			$kb = ['inline_keyboard' => [
+				[['text' => '⏭ بعداً هماهنگ می‌کنم', 'callback_data' => 'order_skip_address']],
+				[['text' => '✖ انصراف از سفارش', 'callback_data' => 'order_cancel']],
+			]];
+			$this->edit_or_send($chat_id, $msg_id, $msg, $kb);
+			return;
+		}
+		// حضوری → مستقیم به تأیید نهایی
+		$this->set_state($chat_id, 'order_wait_confirm', $d);
+		$this->order_show_confirm($chat_id, $msg_id, $user);
+	}
+
+	/** رد کردن آدرس */
+	private function order_skip_address($chat_id, $msg_id, $user) {
+		$state = $this->get_state($chat_id);
+		$d = ($state && isset($state['d']) && is_array($state['d'])) ? $state['d'] : [];
+		$d['address'] = '';
+		$this->set_state($chat_id, 'order_wait_confirm', $d);
+		$this->order_show_confirm($chat_id, $msg_id, $user);
+	}
+
+	/** نمایش پیش‌نمایش و دکمه‌ی تأیید نهایی */
+	private function order_show_confirm($chat_id, $msg_id, $user) {
+		$state = $this->get_state($chat_id);
+		$d = ($state && isset($state['d']) && is_array($state['d'])) ? $state['d'] : [];
+		$step_total = ($d['type'] ?? 'onsite') === 'ship' ? '۵' : '۴';
+		$step_no = ($d['type'] ?? 'onsite') === 'ship' ? '۵' : '۴';
+		$type_label = ($d['type'] ?? '') === 'ship' ? '🚚 ارسال به آدرس' : '🏬 حضوری';
+		$desc = trim((string)($d['description'] ?? ''));
+		$files = isset($d['files']) && is_array($d['files']) ? $d['files'] : [];
+		$addr = trim((string)($d['address'] ?? ''));
+
+		$msg  = "🧾 *مرحله {$step_no} از {$step_total} — تأیید نهایی سفارش*\n\n";
+		$msg .= "*نوع سفارش:* {$type_label}\n";
+		$msg .= "*توضیحات:* " . ($desc !== '' ? "\n_" . $this->shorten($desc, 300) . "_" : "_ثبت نشد_") . "\n";
+		$msg .= "*تعداد فایل:* " . count($files) . " فایل\n";
+		if (($d['type'] ?? '') === 'ship') {
+			$msg .= "*آدرس:* " . ($addr !== '' ? "\n_" . $this->shorten($addr, 200) . "_" : "_ثبت نشد (هماهنگی بعدی)_") . "\n";
+		}
+		$msg .= "\n👀 لطفاً اطلاعات بالا را بررسی کنید. در صورت تأیید، روی دکمه‌ی زیر کلیک کنید.";
+		$kb = ['inline_keyboard' => [
+			[['text' => '✅ ثبت و تأیید نهایی سفارش', 'callback_data' => 'order_confirm']],
+			[['text' => '✖ انصراف از سفارش', 'callback_data' => 'order_cancel']],
+		]];
+		$this->edit_or_send($chat_id, $msg_id, $msg, $kb);
+	}
+
+	/** انصراف کلی */
+	private function order_cancel($chat_id, $msg_id, $user) {
+		$this->clear_state($chat_id);
+		$this->edit_or_send($chat_id, $msg_id,
+			"↩️ ثبت سفارش لغو شد. هر زمان آماده بودید، می‌توانید دوباره اقدام کنید.",
+			['inline_keyboard' => [
+				[['text' => '🛒 ثبت سفارش جدید', 'callback_data' => 'cust_new_order']],
+				[['text' => '🏠 منوی اصلی', 'callback_data' => 'back_to_menu']],
+			]]
+		);
+	}
+
+	/** ثبت نهایی سفارش در دیتابیس + ارسال به مدیر و کارشناسان */
+	private function order_finalize($chat_id, $msg_id, $user) {
+		$state = $this->get_state($chat_id);
+		if (!$state || ($state['s'] ?? '') !== 'order_wait_confirm') {
+			$this->edit_or_send($chat_id, $msg_id, "⚠️ نشست سفارش منقضی شده. لطفاً دوباره اقدام کنید.", $this->kb_back());
+			return;
+		}
+		$d = $state['d'];
+		$type = ($d['type'] ?? 'onsite') === 'ship' ? 'ship' : 'onsite';
+		$desc = (string)($d['description'] ?? '');
+		$addr = (string)($d['address'] ?? '');
+		$files = isset($d['files']) && is_array($d['files']) ? $d['files'] : [];
+
+		// ساخت پست cptt_order
+		$now = (int)current_time('timestamp', true);
+		$created_at_fa = class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime($now) : date('Y-m-d H:i', $now);
+		$title = 'سفارش #' . date('ymd-Hi', $now) . ' — ' . $user->display_name;
+		$order_id = wp_insert_post([
+			'post_type'   => 'cptt_order',
+			'post_status' => 'publish',
+			'post_title'  => sanitize_text_field($title),
+			'post_author' => (int)$user->ID,
+		]);
+		if (is_wp_error($order_id) || !$order_id) {
+			$this->edit_or_send($chat_id, $msg_id, "❌ خطا در ثبت سفارش. لطفاً دوباره تلاش کنید.", $this->kb_back());
+			return;
+		}
+		update_post_meta($order_id, '_cptt_order_client_id', (int)$user->ID);
+		update_post_meta($order_id, '_cptt_order_type', $type);
+		update_post_meta($order_id, '_cptt_order_description', $desc);
+		update_post_meta($order_id, '_cptt_order_address', $addr);
+		update_post_meta($order_id, '_cptt_order_files', $files);
+		update_post_meta($order_id, '_cptt_order_status', 'pending');
+		update_post_meta($order_id, '_cptt_order_created_at_fa', $created_at_fa);
+
+		$this->clear_state($chat_id);
+
+		// پیام تشکر به مشتری
+		$kb = ['inline_keyboard' => [
+			[['text' => '📦 سفارش‌های من', 'callback_data' => 'cust_orders']],
+			[['text' => '🏠 منوی اصلی', 'callback_data' => 'back_to_menu']],
+		]];
+		$this->edit_or_send($chat_id, $msg_id,
+			"🎉 *سفارش شما با موفقیت ثبت شد!*\n\n" .
+			"شناسه سفارش: `{$order_id}`\n" .
+			"📨 سفارش شما برای کارشناسان ما ارسال شد و در *اسرع وقت* با شما تماس گرفته خواهد شد.\n\n" .
+			"از اعتماد شما سپاسگزاریم 🙏",
+			$kb
+		);
+
+		// ارسال به مدیر و کارشناسان
+		$this->order_notify_staff($order_id, $user);
+	}
+
+	/** ارسال کارت زیبا به مدیر و کارشناسان منتخب + فایل‌ها */
+	private function order_notify_staff($order_id, $client_user) {
+		$settings = self::get_settings();
+		$admin_chat = trim((string)($settings['admin_id'] ?? ''));
+
+		// پیام به مدیر (همراه دکمه «تخصیص کارشناس»)
+		if ($admin_chat !== '') {
+			$msg = $this->render_order_card($order_id, $client_user, /*for_admin*/ true);
+			$kb  = ['inline_keyboard' => [
+				[['text' => '👥 تخصیص کارشناس', 'callback_data' => 'order_assign_' . $order_id]],
+				[['text' => '👁 مشاهده جزئیات', 'callback_data' => 'order_view_' . $order_id]],
+				[['text' => '🔗 ویرایش در پنل ادمین', 'url' => get_edit_post_link($order_id, '')]],
+			]];
+			self::send_message($admin_chat, $msg, $kb);
+			$this->order_send_files($admin_chat, $order_id);
+		}
+
+		// پیام به کارشناسان منتخب
+		$expert_ids = isset($settings['order_expert_ids']) && is_array($settings['order_expert_ids']) ? array_map('intval', $settings['order_expert_ids']) : [];
+		$expert_ids = array_filter(array_unique($expert_ids));
+		foreach ($expert_ids as $eid) {
+			$cid = get_user_meta((int)$eid, '_cptt_bale_chat_id', true);
+			if (!$cid) continue;
+			$msg = $this->render_order_card($order_id, $client_user, /*for_admin*/ false);
+			$kb  = ['inline_keyboard' => [
+				[['text' => '➕ ایجاد پروژه از این سفارش', 'callback_data' => 'order_create_proj_' . $order_id]],
+				[['text' => '👁 مشاهده جزئیات', 'callback_data' => 'order_view_' . $order_id]],
+			]];
+			self::send_message($cid, $msg, $kb);
+			$this->order_send_files($cid, $order_id);
+
+			// نوتیف داخلی وردپرس برای کارشناس
+			if (class_exists('CPTT_Expert')) {
+				CPTT_Expert::instance()->insert_notification(
+					(int)$eid, 'new_order',
+					'سفارش جدید از ' . $client_user->display_name . ' دریافت شد.',
+					$order_id, admin_url('post.php?post=' . $order_id . '&action=edit')
+				);
+			}
+		}
+	}
+
+	/** ارسال فایل‌های پیوست به chat */
+	private function order_send_files($chat_id, $order_id) {
+		$files = get_post_meta($order_id, '_cptt_order_files', true);
+		if (!is_array($files) || empty($files)) return;
+		$settings = self::get_settings();
+		$token = trim($settings['token']);
+		if ($token === '') return;
+		foreach ($files as $f) {
+			$url = isset($f['url']) ? (string)$f['url'] : '';
+			$name = isset($f['name']) ? (string)$f['name'] : '';
+			if ($url === '') continue;
+			// از sendMessage با لینک استفاده می‌کنیم (ساده و پایدارتر)
+			self::send_message($chat_id, "📎 *فایل پیوست:* " . esc_html($name) . "\n" . $url);
+		}
+	}
+
+	/** ساخت متن کارت سفارش — برای مدیر/کارشناس */
+	private function render_order_card($order_id, $client_user, $for_admin = false) {
+		$type   = (string) get_post_meta($order_id, '_cptt_order_type', true);
+		$desc   = (string) get_post_meta($order_id, '_cptt_order_description', true);
+		$addr   = (string) get_post_meta($order_id, '_cptt_order_address', true);
+		$files  = get_post_meta($order_id, '_cptt_order_files', true);
+		$files  = is_array($files) ? $files : [];
+		$status = (string) get_post_meta($order_id, '_cptt_order_status', true) ?: 'pending';
+		$created_fa = (string) get_post_meta($order_id, '_cptt_order_created_at_fa', true);
+		$assigned_exp = (int) get_post_meta($order_id, '_cptt_order_assigned_expert', true);
+		$proj_id = (int) get_post_meta($order_id, '_cptt_order_project_id', true);
+
+		// اطلاعات مشتری
+		$phone = (string) get_user_meta($client_user->ID, 'billing_phone', true);
+		if ($phone === '') $phone = (string) get_user_meta($client_user->ID, 'cptt_user_phone', true);
+		if ($phone === '') $phone = $client_user->user_login;
+		$bale_chat = (string) get_user_meta($client_user->ID, '_cptt_bale_chat_id', true);
+
+		$type_label = $type === 'ship' ? '🚚 ارسال به آدرس' : '🏬 حضوری';
+		$status_label = $this->order_status_label($status);
+
+		$header = $for_admin ? "🆕 *سفارش جدید* — نیازمند تخصیص کارشناس" : "🆕 *سفارش جدید* — به شما ارجاع شد";
+		$msg  = "{$header}\n";
+		$msg .= "━━━━━━━━━━━━━━━━━━\n\n";
+		$msg .= "🧾 *شناسه سفارش:* `{$order_id}`\n";
+		$msg .= "📅 *زمان ثبت:* " . ($created_fa ?: '—') . "\n";
+		$msg .= "📌 *وضعیت:* {$status_label}\n";
+		$msg .= "🛒 *نوع سفارش:* {$type_label}\n\n";
+
+		$msg .= "👤 *مشخصات مشتری*\n";
+		$msg .= "• نام: *" . esc_html($client_user->display_name) . "*\n";
+		$msg .= "• آیدی کاربری: `{$client_user->ID}`\n";
+		if ($phone !== '') $msg .= "• شماره تماس: `{$phone}`\n";
+		if ($bale_chat !== '') $msg .= "• آیدی بله: `{$bale_chat}`\n";
+		if (!empty($client_user->user_email)) $msg .= "• ایمیل: " . esc_html($client_user->user_email) . "\n";
+		$msg .= "\n";
+
+		$msg .= "📝 *توضیحات سفارش:*\n";
+		$msg .= ($desc !== '' ? "_" . $this->shorten($desc, 600) . "_" : "_توضیحی ثبت نشده است._") . "\n\n";
+
+		if ($type === 'ship') {
+			$msg .= "🏠 *آدرس ارسال:*\n";
+			$msg .= ($addr !== '' ? "_" . $this->shorten($addr, 400) . "_" : "_ثبت نشده (نیاز به هماهنگی)_") . "\n\n";
+		}
+
+		$msg .= "📎 *فایل‌های پیوست:* " . count($files) . " فایل" . (count($files) ? " (در پیام‌های بعدی)" : "") . "\n";
+
+		if ($assigned_exp) {
+			$ue = get_user_by('id', $assigned_exp);
+			if ($ue) $msg .= "\n🧑‍💼 *کارشناس مسئول:* " . esc_html($ue->display_name) . "\n";
+		}
+		if ($proj_id) {
+			$msg .= "\n📁 *پروژه ساخته‌شده:* " . esc_html(get_the_title($proj_id)) . " (#{$proj_id})\n";
+		}
+		return $msg;
+	}
+
+	/** نگاشت وضعیت سفارش به برچسب فارسی */
+	private function order_status_label($s) {
+		switch ($s) {
+			case 'pending':  return '⏳ در انتظار بررسی';
+			case 'assigned': return '🧑‍💼 تخصیص داده‌شده';
+			case 'project':  return '📁 تبدیل به پروژه';
+			case 'cancelled':return '✖ لغو شده';
+		}
+		return $s;
+	}
+
+	/** نمایش جزئیات سفارش به مشتری/کارشناس/ادمین (دوباره با کارت) */
+	private function order_view($chat_id, $msg_id, $order_id, $user) {
+		$p = get_post($order_id);
+		if (!$p || $p->post_type !== 'cptt_order') {
+			$this->edit_or_send($chat_id, $msg_id, "⚠️ این سفارش پیدا نشد.", $this->kb_back()); return;
+		}
+		$client_id = (int) get_post_meta($order_id, '_cptt_order_client_id', true);
+		$client = get_user_by('id', $client_id);
+		if (!$client) { $this->edit_or_send($chat_id, $msg_id, "⚠️ اطلاعات مشتری ناقص است.", $this->kb_back()); return; }
+
+		$role = $this->get_user_role($user);
+		$is_admin = ($role === 'admin');
+		$is_expert = ($role === 'expert');
+		$is_owner = ((int)$user->ID === $client_id);
+		if (!$is_admin && !$is_expert && !$is_owner) {
+			$this->edit_or_send($chat_id, $msg_id, "⚠️ دسترسی به این سفارش ندارید.", $this->kb_back()); return;
+		}
+		$msg = $this->render_order_card($order_id, $client, $is_admin);
+		$rows = [];
+		if ($is_admin) {
+			$rows[] = [['text' => '👥 تخصیص کارشناس', 'callback_data' => 'order_assign_' . $order_id]];
+			$rows[] = [['text' => '🔗 ویرایش در پنل', 'url' => get_edit_post_link($order_id, '')]];
+		}
+		if ($is_expert) {
+			$rows[] = [['text' => '➕ ایجاد پروژه از این سفارش', 'callback_data' => 'order_create_proj_' . $order_id]];
+		}
+		$rows[] = [['text' => '🏠 منوی اصلی', 'callback_data' => 'back_to_menu']];
+		$this->edit_or_send($chat_id, $msg_id, $msg, ['inline_keyboard' => $rows]);
+	}
+
+	/** لیست سفارش‌های مشتری */
+	private function cust_orders_list($chat_id, $msg_id, $user) {
+		$orders = get_posts([
+			'post_type' => 'cptt_order', 'post_status' => 'any', 'numberposts' => 20,
+			'meta_key' => '_cptt_order_client_id', 'meta_value' => (int)$user->ID,
+			'orderby' => 'date', 'order' => 'DESC',
+		]);
+		if (empty($orders)) {
+			$this->edit_or_send($chat_id, $msg_id,
+				"📭 *سفارش‌های شما*\n\nهنوز سفارشی ثبت نکرده‌اید. برای ثبت سفارش اول روی دکمه‌ی زیر کلیک کنید 👇",
+				['inline_keyboard' => [
+					[['text' => '🛒 ثبت سفارش جدید', 'callback_data' => 'cust_new_order']],
+					[['text' => '🏠 منوی اصلی', 'callback_data' => 'back_to_menu']],
+				]]
+			);
+			return;
+		}
+		$kb = [];
+		$msg = "📦 *سفارش‌های شما:*\n\n";
+		foreach ($orders as $o) {
+			$st = (string)get_post_meta($o->ID, '_cptt_order_status', true);
+			$ic = $st === 'project' ? '📁' : ($st === 'assigned' ? '🧑‍💼' : ($st === 'cancelled' ? '✖' : '⏳'));
+			$created = (string)get_post_meta($o->ID, '_cptt_order_created_at_fa', true);
+			$msg .= "{$ic} #{$o->ID} — " . $this->order_status_label($st) . " — _" . $created . "_\n";
+			$kb[] = [['text' => "{$ic} سفارش #{$o->ID}", 'callback_data' => 'cust_view_order_' . $o->ID]];
+		}
+		$kb[] = [['text' => '🛒 سفارش جدید', 'callback_data' => 'cust_new_order']];
+		$kb[] = [['text' => '🏠 منوی اصلی', 'callback_data' => 'back_to_menu']];
+		$this->edit_or_send($chat_id, $msg_id, $msg, ['inline_keyboard' => $kb]);
+	}
+
+	/** نمایش سفارش به مشتری */
+	private function cust_view_order($chat_id, $msg_id, $order_id, $user) {
+		$this->order_view($chat_id, $msg_id, $order_id, $user);
+	}
+
+	/* ====================================================================
+	 * v5.4.7 — ADMIN: ASSIGN EXPERT TO ORDER
+	 * ==================================================================== */
+
+	/** نمایش لیست کارشناسان برای تخصیص */
+	private function admin_show_assign_experts($chat_id, $msg_id, $order_id, $user) {
+		if ($this->get_user_role($user) !== 'admin') {
+			$this->edit_or_send($chat_id, $msg_id, "⚠️ دسترسی ندارید.", $this->kb_back()); return;
+		}
+		$experts = get_users(['role' => 'cptt_expert', 'orderby' => 'display_name']);
+		if (empty($experts)) {
+			$this->edit_or_send($chat_id, $msg_id, "⚠️ کارشناسی در سیستم ثبت نشده است.", $this->kb_back()); return;
+		}
+		$kb = [];
+		foreach ($experts as $e) {
+			$has_bale = get_user_meta($e->ID, '_cptt_bale_chat_id', true) ? '🟢' : '⚪';
+			$kb[] = [['text' => $has_bale . ' ' . $e->display_name, 'callback_data' => 'order_setexp_' . $order_id . '_' . $e->ID]];
+		}
+		$kb[] = [['text' => '↩ بازگشت', 'callback_data' => 'order_view_' . $order_id]];
+		$msg  = "👥 *تخصیص کارشناس به سفارش #{$order_id}*\n\n";
+		$msg .= "یک کارشناس را برای رسیدگی به این سفارش انتخاب کنید. کارشناس انتخاب‌شده نوتیف دریافت می‌کند و می‌تواند مستقیماً از روی پیام، پروژه‌ی متناظر را ایجاد کند.\n\n";
+		$msg .= "🟢 = به ربات بله متصل است\n⚪ = به ربات بله متصل نیست (فقط نوتیف داخل سایت)";
+		$this->edit_or_send($chat_id, $msg_id, $msg, ['inline_keyboard' => $kb]);
+	}
+
+	/** اعمال تخصیص + ارسال نوتیف به کارشناس و مشتری */
+	private function admin_assign_expert_to_order($chat_id, $msg_id, $order_id, $expert_id, $user) {
+		if ($this->get_user_role($user) !== 'admin') {
+			$this->edit_or_send($chat_id, $msg_id, "⚠️ دسترسی ندارید.", $this->kb_back()); return;
+		}
+		$p = get_post($order_id);
+		if (!$p || $p->post_type !== 'cptt_order') { $this->edit_or_send($chat_id, $msg_id, "⚠️ سفارش پیدا نشد.", $this->kb_back()); return; }
+		$expert = get_user_by('id', $expert_id);
+		if (!$expert) { $this->edit_or_send($chat_id, $msg_id, "⚠️ کارشناس پیدا نشد.", $this->kb_back()); return; }
+
+		update_post_meta($order_id, '_cptt_order_assigned_expert', (int)$expert_id);
+		update_post_meta($order_id, '_cptt_order_status', 'assigned');
+
+		// نوتیف داخل وردپرس برای کارشناس
+		if (class_exists('CPTT_Expert')) {
+			CPTT_Expert::instance()->insert_notification(
+				(int)$expert_id, 'order_assigned',
+				'سفارش #' . $order_id . ' به شما تخصیص داده شد. برای ایجاد پروژه اقدام کنید.',
+				$order_id, admin_url('post.php?post=' . $order_id . '&action=edit')
+			);
+		}
+
+		// نوتیف بله برای کارشناس + دکمه‌ی ایجاد پروژه
+		$client_id = (int) get_post_meta($order_id, '_cptt_order_client_id', true);
+		$client = get_user_by('id', $client_id);
+		$exp_chat = get_user_meta((int)$expert_id, '_cptt_bale_chat_id', true);
+		if ($exp_chat && $client) {
+			$msg = "🆕 *سفارش جدید به شما تخصیص داده شد*\n\n" . $this->render_order_card($order_id, $client, false);
+			$kb  = ['inline_keyboard' => [
+				[['text' => '➕ ایجاد پروژه از این سفارش', 'callback_data' => 'order_create_proj_' . $order_id]],
+				[['text' => '👁 جزئیات سفارش', 'callback_data' => 'order_view_' . $order_id]],
+			]];
+			self::send_message($exp_chat, $msg, $kb);
+			$this->order_send_files($exp_chat, $order_id);
+		}
+
+		// نوتیف بله برای مشتری
+		if ($client) {
+			$cli_chat = get_user_meta($client_id, '_cptt_bale_chat_id', true);
+			if ($cli_chat) {
+				self::send_message($cli_chat,
+					"✅ *به‌روزرسانی سفارش #{$order_id}*\n\nسفارش شما به کارشناس *" . esc_html($expert->display_name) . "* تخصیص داده شد و در حال بررسی است. به‌زودی با شما تماس گرفته خواهد شد.",
+					['inline_keyboard' => [[['text' => '📦 سفارش‌های من', 'callback_data' => 'cust_orders']]]]
+				);
+			}
+		}
+
+		$kb = ['inline_keyboard' => [
+			[['text' => '👁 جزئیات سفارش', 'callback_data' => 'order_view_' . $order_id]],
+			[['text' => '🛒 سفارش‌های دیگر', 'callback_data' => 'admin_orders']],
+			[['text' => '🏠 منوی اصلی', 'callback_data' => 'back_to_menu']],
+		]];
+		$this->edit_or_send($chat_id, $msg_id,
+			"✅ *تخصیص با موفقیت انجام شد!*\n\nسفارش *#{$order_id}* به کارشناس *" . esc_html($expert->display_name) . "* واگذار شد و به مشتری اطلاع داده شد.",
+			$kb
+		);
+	}
+
+	/** لیست سفارش‌ها برای مدیر (در منو) */
+	private function admin_orders_list($chat_id, $msg_id) {
+		$orders = get_posts([
+			'post_type' => 'cptt_order', 'post_status' => 'any', 'numberposts' => 20,
+			'orderby' => 'date', 'order' => 'DESC',
+		]);
+		if (empty($orders)) {
+			$this->edit_or_send($chat_id, $msg_id, "📭 سفارشی ثبت نشده است.", $this->kb_back());
+			return;
+		}
+		$kb = [];
+		$msg = "🛒 *آخرین سفارش‌ها:*\n\n";
+		foreach ($orders as $o) {
+			$st = (string)get_post_meta($o->ID, '_cptt_order_status', true);
+			$ic = $st === 'project' ? '📁' : ($st === 'assigned' ? '🧑‍💼' : ($st === 'cancelled' ? '✖' : '⏳'));
+			$cid = (int)get_post_meta($o->ID, '_cptt_order_client_id', true);
+			$cu  = get_user_by('id', $cid);
+			$cname = $cu ? $cu->display_name : '—';
+			$msg .= "{$ic} #{$o->ID} — " . esc_html($cname) . " — " . $this->order_status_label($st) . "\n";
+			$kb[] = [['text' => "{$ic} #{$o->ID} — " . $this->shorten($cname, 18), 'callback_data' => 'order_view_' . $o->ID]];
+		}
+		$kb[] = [['text' => '🏠 منوی اصلی', 'callback_data' => 'back_to_menu']];
+		$this->edit_or_send($chat_id, $msg_id, $msg, ['inline_keyboard' => $kb]);
+	}
+
+	/* ====================================================================
+	 * v5.4.7 — EXPERT: CREATE PROJECT FROM ORDER (uses wizard)
+	 * ==================================================================== */
+
+	/** شروع wizard ایجاد پروژه با اطلاعات از پیش پر شده از سفارش */
+	private function order_start_create_project($chat_id, $msg_id, $order_id, $user) {
+		$role = $this->get_user_role($user);
+		if ($role !== 'expert' && $role !== 'admin') {
+			$this->edit_or_send($chat_id, $msg_id, "⚠️ دسترسی ندارید.", $this->kb_back()); return;
+		}
+		$p = get_post($order_id);
+		if (!$p || $p->post_type !== 'cptt_order') { $this->edit_or_send($chat_id, $msg_id, "⚠️ سفارش پیدا نشد.", $this->kb_back()); return; }
+		$client_id = (int) get_post_meta($order_id, '_cptt_order_client_id', true);
+		$client = get_user_by('id', $client_id);
+		if (!$client) { $this->edit_or_send($chat_id, $msg_id, "⚠️ مشتری سفارش پیدا نشد.", $this->kb_back()); return; }
+
+		// state اولیه‌ی wizard را با مشتری از سفارش پر می‌کنیم
+		$desc = (string) get_post_meta($order_id, '_cptt_order_description', true);
+		$suggested_title = 'پروژه از سفارش #' . $order_id;
+		$d = [
+			'title'       => $suggested_title,
+			'client_id'   => $client_id,
+			'client_name' => $client->display_name,
+			'_from_order' => (int)$order_id,
+		];
+		$this->set_state($chat_id, 'wiz_cp_title', $d);
+
+		$msg  = "➕ *ایجاد پروژه از سفارش #{$order_id}*\n\n";
+		$msg .= "👤 مشتری: *" . esc_html($client->display_name) . "*\n";
+		if ($desc !== '') {
+			$msg .= "📝 خلاصه سفارش: _" . $this->shorten($desc, 200) . "_\n";
+		}
+		$msg .= "\n📝 *مرحله ۱ از ۵ — عنوان پروژه*\n\nلطفاً عنوان پروژه را در پیام بعدی ارسال کنید.\n(پیشنهاد ما: «" . esc_html($suggested_title) . "»)\n\n_برای لغو_: `/cancel`";
+		$this->edit_or_send($chat_id, $msg_id, $msg, $this->kb_cancel());
+	}
+
+
 }

@@ -2,14 +2,14 @@
 /**
  * Plugin Name: هماهنگ - افزونه ی مدیریت پروژه و تیم
  * Description: مدیریت پروژه‌های مشتری و نمایش مراحل پیشرفت داخل پنل کاربری (Stepper + Popup).
- * Version: 5.4.5
+ * Version: 5.4.7
  * Author: Your Name
  * Text Domain: cptt
  */
 
 if ( ! defined('ABSPATH') ) exit;
 
-define('CPTT_VERSION', '5.4.5');
+define('CPTT_VERSION', '5.4.7');
 define('CPTT_PATH', plugin_dir_path(__FILE__));
 define('CPTT_URL', plugin_dir_url(__FILE__));
 

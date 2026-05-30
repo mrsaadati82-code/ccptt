@@ -1263,17 +1263,38 @@
           }
       }
 
-      if (e.target.classList.contains('cptt-delete-notif-btn')) {
+      var delBtn = e.target.closest('.cptt-delete-notif-btn');
+      if (delBtn) {
           e.preventDefault(); e.stopPropagation();
-          var id = e.target.getAttribute('data-id');
+          if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+          var id = delBtn.getAttribute('data-id');
           if (id) {
+              var wrap = delBtn.closest('.cptt-notification-item-wrap');
+              // optimistic UI: حذف فوری از DOM
+              if (wrap) {
+                  wrap.style.transition = 'opacity .15s ease, transform .15s ease';
+                  wrap.style.opacity = '0';
+                  wrap.style.transform = 'translateX(-12px)';
+                  setTimeout(function(){ if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 160);
+              }
               var fd = new FormData();
               fd.append('action', 'cptt_expert_delete_notification');
-              fd.append('nonce', window.CPTT_EXPERT ? CPTT_EXPERT.nonce : window.CPTT_ADMIN.nonce);
+              fd.append('nonce', (window.CPTT_EXPERT && CPTT_EXPERT.nonce) ? CPTT_EXPERT.nonce : (window.CPTT_ADMIN && CPTT_ADMIN.nonce) ? CPTT_ADMIN.nonce : '');
               fd.append('id', id);
-              fetch(window.CPTT_EXPERT ? CPTT_EXPERT.ajax : window.CPTT_ADMIN.ajax, { method: 'POST', body: fd });
-              e.target.closest('.cptt-notification-item-wrap').remove();
+              var ajaxUrl = (window.CPTT_EXPERT && CPTT_EXPERT.ajax) ? CPTT_EXPERT.ajax : (window.CPTT_ADMIN && CPTT_ADMIN.ajax) ? CPTT_ADMIN.ajax : '/wp-admin/admin-ajax.php';
+              fetch(ajaxUrl, { method: 'POST', body: fd, credentials: 'same-origin', keepalive: true }).catch(function(){});
+              // کاهش badge اگر اعلان خوانده‌نشده بود
+              var anchor = wrap ? wrap.querySelector('.cptt-notification-item') : null;
+              if (anchor && !anchor.classList.contains('is-read')) {
+                  var badge = document.querySelector('.cptt-bell-badge');
+                  if (badge) {
+                      var n = parseInt(badge.textContent || '0', 10) - 1;
+                      if (n > 0) { badge.textContent = String(n); }
+                      else { badge.style.display = 'none'; badge.textContent = '0'; }
+                  }
+              }
           }
+          return;
       }
       if (e.target.hasAttribute('data-cptt-open-all-notifs')) {
           var modal = qs('.cptt-all-notifs-modal');

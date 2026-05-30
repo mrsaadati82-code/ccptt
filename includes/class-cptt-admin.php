@@ -14,6 +14,7 @@ class CPTT_Admin {
 		add_action('save_post_cptt_project', [$this, 'save_project_meta'], 10, 2);
 		add_action('save_post_cptt_template', [$this, 'save_template_meta'], 10, 2);
 		add_action('save_post_cptt_checklist_tpl', [$this, 'save_checklist_tpl_meta'], 10, 2);
+		add_action('save_post_cptt_order', [$this, 'save_order_meta'], 10, 2);
 		add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_assets']);
 		add_filter('manage_cptt_project_posts_columns', [$this, 'columns']);
 		add_action('manage_cptt_project_posts_custom_column', [$this, 'column_content'], 10, 2);
@@ -66,6 +67,153 @@ class CPTT_Admin {
 		add_meta_box('cptt_checklist_tpl_items','آیتم‌های تمپلیت چک‌لیست',[$this,'render_checklist_tpl_metabox'],'cptt_checklist_tpl','normal','high');
 		add_meta_box('cptt_project_notes','یادداشت‌های کارشناسان',[$this,'render_notes_metabox'],'cptt_project','side','default');
 		add_meta_box('cptt_project_accounting','حساب و کتاب پروژه',[$this,'render_accounting_metabox'],'cptt_project','side','default');
+
+		// === v5.4.7: Order metaboxes ===
+		add_meta_box('cptt_order_details','جزئیات سفارش',[$this,'render_order_details_metabox'],'cptt_order','normal','high');
+		add_meta_box('cptt_order_actions','عملیات سفارش',[$this,'render_order_actions_metabox'],'cptt_order','side','default');
+	}
+
+	/* v5.4.7: metabox برای cptt_order */
+	public function render_order_details_metabox($post) {
+		$client_id = (int) get_post_meta($post->ID, '_cptt_order_client_id', true);
+		$client = $client_id ? get_user_by('id', $client_id) : null;
+		$type   = (string) get_post_meta($post->ID, '_cptt_order_type', true);
+		$desc   = (string) get_post_meta($post->ID, '_cptt_order_description', true);
+		$addr   = (string) get_post_meta($post->ID, '_cptt_order_address', true);
+		$files  = get_post_meta($post->ID, '_cptt_order_files', true);
+		$files  = is_array($files) ? $files : [];
+		$status = (string) get_post_meta($post->ID, '_cptt_order_status', true) ?: 'pending';
+		$created_fa = (string) get_post_meta($post->ID, '_cptt_order_created_at_fa', true);
+		$assigned_exp = (int) get_post_meta($post->ID, '_cptt_order_assigned_expert', true);
+		$proj_id = (int) get_post_meta($post->ID, '_cptt_order_project_id', true);
+
+		$phone = $client ? (string) get_user_meta($client->ID, 'billing_phone', true) : '';
+		$bale  = $client ? (string) get_user_meta($client->ID, '_cptt_bale_chat_id', true) : '';
+
+		$type_label = $type === 'ship' ? '🚚 ارسال به آدرس' : '🏬 حضوری';
+		$status_map = ['pending'=>'⏳ در انتظار بررسی','assigned'=>'🧑‍💼 تخصیص داده‌شده','project'=>'📁 تبدیل به پروژه','cancelled'=>'✖ لغو شده'];
+		$status_label = $status_map[$status] ?? $status;
+		?>
+		<div dir="rtl" style="font-family:inherit;">
+			<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:14px;background:linear-gradient(135deg,#f0f9ff,#f8fafc);border:1px solid #cbd5e1;border-radius:12px;">
+				<div><b>🧾 شناسه:</b> #<?php echo (int)$post->ID; ?></div>
+				<div><b>📅 زمان ثبت:</b> <?php echo esc_html($created_fa ?: '—'); ?></div>
+				<div><b>📌 وضعیت:</b> <?php echo esc_html($status_label); ?></div>
+				<div><b>🛒 نوع:</b> <?php echo esc_html($type_label); ?></div>
+			</div>
+
+			<h3 style="margin:18px 0 8px;border-bottom:2px solid #6366f1;padding-bottom:6px;">👤 مشخصات مشتری</h3>
+			<table class="widefat striped">
+				<tr><th style="width:160px;">نام</th><td><?php echo $client ? esc_html($client->display_name) : '—'; ?></td></tr>
+				<tr><th>شماره موبایل</th><td><?php echo esc_html($phone ?: '—'); ?></td></tr>
+				<tr><th>آیدی کاربری</th><td>#<?php echo (int)$client_id; ?></td></tr>
+				<tr><th>آیدی بله</th><td><?php echo $bale ? '<code>'.esc_html($bale).'</code>' : '—'; ?></td></tr>
+				<?php if ($client && $client->user_email): ?>
+				<tr><th>ایمیل</th><td><?php echo esc_html($client->user_email); ?></td></tr>
+				<?php endif; ?>
+			</table>
+
+			<h3 style="margin:18px 0 8px;border-bottom:2px solid #6366f1;padding-bottom:6px;">📝 توضیحات سفارش</h3>
+			<div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:12px;min-height:80px;white-space:pre-wrap;line-height:1.8;">
+				<?php echo $desc !== '' ? nl2br(esc_html($desc)) : '<em style="color:#94a3b8;">توضیحی ثبت نشده است.</em>'; ?>
+			</div>
+
+			<?php if ($type === 'ship'): ?>
+			<h3 style="margin:18px 0 8px;border-bottom:2px solid #6366f1;padding-bottom:6px;">🏠 آدرس ارسال</h3>
+			<div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:12px;min-height:40px;white-space:pre-wrap;line-height:1.8;">
+				<?php echo $addr !== '' ? nl2br(esc_html($addr)) : '<em style="color:#94a3b8;">آدرس ثبت نشده — هماهنگی بعدی.</em>'; ?>
+			</div>
+			<?php endif; ?>
+
+			<h3 style="margin:18px 0 8px;border-bottom:2px solid #6366f1;padding-bottom:6px;">📎 فایل‌های پیوست (<?php echo count($files); ?>)</h3>
+			<?php if (empty($files)): ?>
+				<div style="padding:12px;color:#64748b;background:#f8fafc;border-radius:8px;">فایلی پیوست نشده است.</div>
+			<?php else: ?>
+				<div style="display:grid;gap:8px;">
+					<?php foreach ($files as $f):
+						$url = isset($f['url']) ? (string)$f['url'] : '';
+						$nm  = isset($f['name']) ? (string)$f['name'] : 'فایل';
+						$ext = strtolower(pathinfo($nm, PATHINFO_EXTENSION));
+						$is_img = in_array($ext, ['jpg','jpeg','png','gif','webp'], true);
+					?>
+						<div style="display:flex;align-items:center;gap:10px;padding:10px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;">
+							<?php if ($is_img && $url): ?>
+								<a href="<?php echo esc_url($url); ?>" target="_blank"><img src="<?php echo esc_url($url); ?>" style="width:56px;height:56px;object-fit:cover;border-radius:8px;" alt=""></a>
+							<?php else: ?>
+								<div style="width:56px;height:56px;background:#f1f5f9;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:22px;">📎</div>
+							<?php endif; ?>
+							<div style="flex:1;min-width:0;">
+								<div style="font-weight:700;color:#0f172a;overflow:hidden;text-overflow:ellipsis;"><?php echo esc_html($nm); ?></div>
+								<a href="<?php echo esc_url($url); ?>" target="_blank" style="font-size:12px;color:#6366f1;">دانلود/مشاهده ↗</a>
+							</div>
+						</div>
+					<?php endforeach; ?>
+				</div>
+			<?php endif; ?>
+
+			<?php if ($assigned_exp): $ue = get_user_by('id', $assigned_exp); ?>
+			<h3 style="margin:18px 0 8px;border-bottom:2px solid #10b981;padding-bottom:6px;">🧑‍💼 کارشناس مسئول</h3>
+			<div style="padding:10px 14px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;">
+				<?php echo $ue ? esc_html($ue->display_name) : 'کاربر #' . (int)$assigned_exp; ?>
+			</div>
+			<?php endif; ?>
+
+			<?php if ($proj_id): ?>
+			<h3 style="margin:18px 0 8px;border-bottom:2px solid #2563eb;padding-bottom:6px;">📁 پروژه‌ی متناظر</h3>
+			<div style="padding:10px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">
+				<span><?php echo esc_html(get_the_title($proj_id)); ?> (#<?php echo (int)$proj_id; ?>)</span>
+				<a class="button button-primary" href="<?php echo esc_url(get_edit_post_link($proj_id)); ?>">ورود به پروژه ↗</a>
+			</div>
+			<?php endif; ?>
+		</div>
+		<?php
+	}
+
+	public function render_order_actions_metabox($post) {
+		$status = (string) get_post_meta($post->ID, '_cptt_order_status', true) ?: 'pending';
+		$assigned_exp = (int) get_post_meta($post->ID, '_cptt_order_assigned_expert', true);
+		$proj_id = (int) get_post_meta($post->ID, '_cptt_order_project_id', true);
+		?>
+		<div dir="rtl">
+			<p><b>📌 وضعیت فعلی:</b><br>
+				<?php
+				$status_map = ['pending'=>'⏳ در انتظار بررسی','assigned'=>'🧑‍💼 تخصیص داده‌شده','project'=>'📁 تبدیل به پروژه','cancelled'=>'✖ لغو شده'];
+				echo esc_html($status_map[$status] ?? $status);
+				?>
+			</p>
+
+			<?php if ($status !== 'project'): ?>
+			<p style="margin-top:10px;">
+				<label><b>تخصیص کارشناس:</b></label><br>
+				<select name="cptt_order_assigned_expert" style="width:100%;">
+					<option value="0">— انتخاب نشده —</option>
+					<?php
+					$experts = get_users(['role' => 'cptt_expert', 'orderby' => 'display_name']);
+					foreach ($experts as $e) {
+						echo '<option value="' . (int)$e->ID . '" ' . selected($assigned_exp, $e->ID, false) . '>' . esc_html($e->display_name) . '</option>';
+					}
+					?>
+				</select>
+			</p>
+			<p>
+				<label><b>تغییر وضعیت:</b></label><br>
+				<select name="cptt_order_status" style="width:100%;">
+					<?php foreach ($status_map as $k => $lbl): ?>
+						<option value="<?php echo esc_attr($k); ?>" <?php selected($status, $k); ?>><?php echo esc_html($lbl); ?></option>
+					<?php endforeach; ?>
+				</select>
+			</p>
+			<?php wp_nonce_field('cptt_order_save', 'cptt_order_nonce'); ?>
+			<p style="color:#64748b;font-size:11px;">با ذخیره‌ی پست، تغییرات اعمال می‌شود.</p>
+			<?php endif; ?>
+
+			<?php if ($proj_id): ?>
+			<p style="margin-top:10px;">
+				<a class="button button-primary" href="<?php echo esc_url(get_edit_post_link($proj_id)); ?>" style="width:100%;text-align:center;">📁 ورود به پروژه</a>
+			</p>
+			<?php endif; ?>
+		</div>
+		<?php
 	}
 	private function product_select_html($name,$selected=0,$class='cptt-select') {
 		$selected=(int)$selected;
@@ -338,6 +486,7 @@ class CPTT_Admin {
 				<label>وضعیت پروژه<select id="cptt-acct-status"><option value="">همه</option><option value="completed">تکمیل شده</option><option value="in_progress">در حال انجام</option></select></label>
 				<button type="button" class="button" id="cptt-acct-reset">پاک کردن</button>
 				<button type="button" class="button" id="cptt-acct-print" style="background:#059669; border-color:#059669; color:#fff; font-weight:bold; margin-right:5px; height:30px; align-self:end;">🖨 چاپ گزارش مالی</button>
+				<button type="button" class="cptt-debtors-trigger" id="cptt-acct-debtors">👥 لیست بدهکاران <span class="cptt-debtors-count" id="cptt-debtors-count-badge">0</span></button>
 			</div>
 
 			<div class="cptt-acct-table-wrap">
@@ -579,6 +728,168 @@ class CPTT_Admin {
 				btnP.addEventListener('click', function(){ submit('partial'); });
 			})();
 			</script>
+
+			<?php
+			/* === v5.4.5: محاسبه‌ی لیست بدهکاران بر اساس مشتری === */
+			$debtors_map = []; // user_id => ['name'=>, 'phone'=>, 'total_cost'=>, 'total_paid'=>, 'remain'=>, 'projects'=>[]]
+			foreach ($rows as $rr) {
+				$cid = (int)$rr['client_id'];
+				if (!$cid) continue;
+				$fin = $rr['fin'];
+				$remain_p = (float)$fin['remain'];
+				if ($remain_p <= 0) continue;
+				if (!isset($debtors_map[$cid])) {
+					$u = get_user_by('id', $cid);
+					$phone = '';
+					if ($u) {
+						$phone = (string) get_user_meta($cid, 'billing_phone', true);
+						if ($phone === '') $phone = (string) get_user_meta($cid, 'cptt_phone', true);
+						if ($phone === '') $phone = (string) get_user_meta($cid, 'mobile', true);
+					}
+					$debtors_map[$cid] = [
+						'id' => $cid,
+						'name' => $rr['client'] ?: ($u ? $u->display_name : '—'),
+						'phone' => $phone,
+						'total_cost' => 0.0,
+						'total_paid' => 0.0,
+						'remain' => 0.0,
+						'projects' => [],
+					];
+				}
+				$debtors_map[$cid]['total_cost'] += (float)$fin['cost'];
+				$debtors_map[$cid]['total_paid'] += (float)$fin['paid'];
+				$debtors_map[$cid]['remain']    += $remain_p;
+				$debtors_map[$cid]['projects'][] = [
+					'id' => (int)$rr['post']->ID,
+					'title' => get_the_title($rr['post']),
+					'remain' => $remain_p,
+				];
+			}
+			// مرتب‌سازی نزولی بر اساس مانده‌ی بدهی
+			uasort($debtors_map, function($a,$b){ return ($b['remain'] <=> $a['remain']); });
+			$debtors_total_remain = 0.0;
+			foreach ($debtors_map as $dd) { $debtors_total_remain += $dd['remain']; }
+			$debtors_count = count($debtors_map);
+			?>
+
+			<!-- Debtors Modal (v5.4.5) -->
+			<div class="cptt-debtors-modal" id="cptt-debtors-modal" hidden>
+				<div class="cptt-debtors-modal__backdrop" data-cptt-debtors-close></div>
+				<div class="cptt-debtors-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="cptt-debtors-title">
+					<div class="cptt-debtors-modal__header">
+						<h3 class="cptt-debtors-modal__title" id="cptt-debtors-title">
+							👥 لیست بدهکاران
+							<span class="cptt-debtors-count"><?php echo number_format_i18n($debtors_count); ?></span>
+						</h3>
+						<button type="button" class="cptt-debtors-modal__close" data-cptt-debtors-close aria-label="بستن">×</button>
+					</div>
+
+					<div class="cptt-debtors-modal__summary">
+						<div>
+							<span>تعداد بدهکاران</span>
+							<strong class="num-debtor"><?php echo number_format_i18n($debtors_count); ?> نفر</strong>
+						</div>
+						<div>
+							<span>کل بدهی</span>
+							<strong class="num-total"><?php echo number_format_i18n((int)$debtors_total_remain); ?> <small style="font-weight:700; font-size:10px; color:#94a3b8;">تومان</small></strong>
+						</div>
+						<div>
+							<span>میانگین بدهی هر نفر</span>
+							<strong><?php echo $debtors_count ? number_format_i18n((int)round($debtors_total_remain / $debtors_count)) : '0'; ?> <small style="font-weight:700; font-size:10px; color:#94a3b8;">تومان</small></strong>
+						</div>
+					</div>
+
+					<div class="cptt-debtors-modal__body">
+						<?php if (empty($debtors_map)): ?>
+							<div class="cptt-debtors-empty">
+								<span class="icn">🎉</span>
+								<div style="font-weight:800; color:#15803d; margin-bottom:4px;">هیچ بدهکاری وجود ندارد!</div>
+								<div style="font-size:12px;">همه‌ی مشتریان تسویه‌ی کامل دارند.</div>
+							</div>
+						<?php else: ?>
+							<div class="cptt-debtors-modal__search">
+								<input type="search" id="cptt-debtors-search" placeholder="🔎 جستجو بر اساس نام مشتری یا شماره تماس...">
+							</div>
+							<ul class="cptt-debtors-list" id="cptt-debtors-list">
+								<?php foreach ($debtors_map as $dd):
+									$search_str = mb_strtolower($dd['name'] . ' ' . $dd['phone']);
+									$projects_str = '';
+									foreach ($dd['projects'] as $pp) {
+										$projects_str .= ' ' . $pp['title'];
+									}
+									$user_edit = get_edit_user_link($dd['id']);
+								?>
+									<li class="cptt-debtors-item" data-search="<?php echo esc_attr($search_str . ' ' . mb_strtolower($projects_str)); ?>">
+										<div>
+											<div class="cptt-debtors-item__name">
+												<?php echo esc_html($dd['name']); ?>
+												<?php if ($user_edit): ?>
+													<a href="<?php echo esc_url($user_edit); ?>" target="_blank" style="font-size:11px; font-weight:600; color:#6366f1; text-decoration:none; margin-right:6px;">↗ مشاهده کاربر</a>
+												<?php endif; ?>
+											</div>
+											<div class="cptt-debtors-item__meta">
+												<?php if ($dd['phone']): ?>
+													<span>📞 <?php echo esc_html($dd['phone']); ?></span>
+												<?php endif; ?>
+												<span>📁 <?php echo count($dd['projects']); ?> پروژه</span>
+												<span>💰 پرداختی: <?php echo number_format_i18n((int)$dd['total_paid']); ?> از <?php echo number_format_i18n((int)$dd['total_cost']); ?></span>
+											</div>
+											<?php if (!empty($dd['projects'])): ?>
+												<div class="cptt-debtors-item__meta" style="margin-top:6px;">
+													<?php foreach ($dd['projects'] as $pp): ?>
+														<a href="<?php echo esc_url(get_edit_post_link($pp['id'])); ?>" target="_blank" title="ویرایش پروژه">• <?php echo esc_html($pp['title']); ?> (<?php echo number_format_i18n((int)$pp['remain']); ?>)</a>
+													<?php endforeach; ?>
+												</div>
+											<?php endif; ?>
+										</div>
+										<div class="cptt-debtors-item__amount">
+											<?php echo number_format_i18n((int)$dd['remain']); ?>
+											<small>تومان مانده</small>
+										</div>
+									</li>
+								<?php endforeach; ?>
+							</ul>
+						<?php endif; ?>
+					</div>
+				</div>
+			</div>
+
+			<script>
+			(function(){
+				// تعداد بدهکاران را روی دکمه نشان بده
+				var badge = document.getElementById('cptt-debtors-count-badge');
+				if (badge) badge.textContent = '<?php echo (int)$debtors_count; ?>';
+
+				var modal = document.getElementById('cptt-debtors-modal');
+				var trigger = document.getElementById('cptt-acct-debtors');
+				if (!modal || !trigger) return;
+
+				function open(){ modal.removeAttribute('hidden'); document.body.style.overflow='hidden'; var s=document.getElementById('cptt-debtors-search'); if(s) setTimeout(function(){s.focus();},100); }
+				function close(){ modal.setAttribute('hidden',''); document.body.style.overflow=''; }
+
+				trigger.addEventListener('click', open);
+				modal.querySelectorAll('[data-cptt-debtors-close]').forEach(function(el){
+					el.addEventListener('click', close);
+				});
+				document.addEventListener('keydown', function(e){
+					if (e.key === 'Escape' && !modal.hasAttribute('hidden')) close();
+				});
+
+				// جستجوی زنده
+				var searchInput = document.getElementById('cptt-debtors-search');
+				if (searchInput) {
+					searchInput.addEventListener('input', function(){
+						var q = this.value.trim().toLowerCase();
+						var items = modal.querySelectorAll('.cptt-debtors-item');
+						items.forEach(function(it){
+							var data = (it.getAttribute('data-search') || '').toLowerCase();
+							it.style.display = (!q || data.indexOf(q) > -1) ? '' : 'none';
+						});
+					});
+				}
+			})();
+			</script>
+
 			<script>window.cpttAdminNonce = '<?php echo esc_js(wp_create_nonce('cptt_admin_nonce')); ?>';</script>
 		</div>
 		<?php
@@ -1542,4 +1853,44 @@ class CPTT_Admin {
 		wp_send_json_success(['msg' => 'ذخیره شد']);
 	}
 
+
+	/* v5.4.7: save metabox سفارش */
+	public function save_order_meta($post_id, $post) {
+		if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) return;
+		if (!isset($_POST['cptt_order_nonce']) || !wp_verify_nonce($_POST['cptt_order_nonce'], 'cptt_order_save')) return;
+		if (!current_user_can('edit_post', $post_id)) return;
+
+		$old_assigned = (int) get_post_meta($post_id, '_cptt_order_assigned_expert', true);
+
+		$new_assigned = isset($_POST['cptt_order_assigned_expert']) ? (int)$_POST['cptt_order_assigned_expert'] : 0;
+		$new_status   = isset($_POST['cptt_order_status']) ? sanitize_text_field($_POST['cptt_order_status']) : 'pending';
+		if (!in_array($new_status, ['pending','assigned','project','cancelled'], true)) $new_status = 'pending';
+
+		if ($new_assigned && $new_status === 'pending') $new_status = 'assigned';
+
+		update_post_meta($post_id, '_cptt_order_assigned_expert', $new_assigned);
+		update_post_meta($post_id, '_cptt_order_status', $new_status);
+
+		if ($new_assigned && $new_assigned !== $old_assigned && class_exists('CPTT_Expert')) {
+			CPTT_Expert::instance()->insert_notification(
+				$new_assigned, 'order_assigned',
+				'سفارش #' . $post_id . ' به شما تخصیص داده شد.',
+				$post_id, admin_url('post.php?post=' . $post_id . '&action=edit')
+			);
+			if (class_exists('CPTT_Bale')) {
+				$exp_chat = get_user_meta($new_assigned, '_cptt_bale_chat_id', true);
+				$client_id = (int) get_post_meta($post_id, '_cptt_order_client_id', true);
+				$client = $client_id ? get_user_by('id', $client_id) : null;
+				if ($exp_chat && $client) {
+					CPTT_Bale::send_message($exp_chat,
+						"🆕 *سفارش جدید به شما تخصیص داده شد*\n\nسفارش #{$post_id} از مشتری " . $client->display_name . " توسط ادمین به شما واگذار شد.",
+						['inline_keyboard' => [
+							[['text' => '➕ ایجاد پروژه از این سفارش', 'callback_data' => 'order_create_proj_' . $post_id]],
+							[['text' => '👁 جزئیات', 'callback_data' => 'order_view_' . $post_id]],
+						]]
+					);
+				}
+			}
+		}
+	}
 }
