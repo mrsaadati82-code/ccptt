@@ -37,8 +37,14 @@ class CPTT_Auth {
 
 		// Rewrite + template
 		add_action('init',                  [$this, 'add_rewrites']);
+		add_action('init',                  [$this, 'maybe_render_login_page_direct'], 0);
 		add_filter('query_vars',            [$this, 'add_query_vars']);
-		add_action('template_redirect',     [$this, 'maybe_render_login_page']);
+		add_action('parse_request',         [$this, 'maybe_mark_login_request']);
+		add_filter('pre_handle_404',        [$this, 'maybe_prevent_login_404'], 10, 2);
+		add_action('template_redirect',     [$this, 'maybe_render_login_page'], 0);
+		add_action('admin_init',            [$this, 'ensure_login_page']);
+		add_action('update_option_cptt_bale_settings', [$this, 'ensure_login_page'], 10, 0);
+		add_action('add_option_cptt_bale_settings',    [$this, 'ensure_login_page'], 10, 0);
 
 		// Force-redirect WP login → custom
 		add_action('login_init',            [$this, 'maybe_force_redirect_login']);
@@ -53,15 +59,83 @@ class CPTT_Auth {
 	/* ====================================================================
 	 * Rewrites + page rendering
 	 * ==================================================================== */
+	/**
+	 * Ensure a real WordPress page exists at /cptt-login/ when custom login is enabled.
+	 * This prevents hard 404s on hosts/sites where rewrite/query-var handling is blocked
+	 * or cached (for example after SSL/permalink migrations).
+	 */
+	public function ensure_login_page() {
+		if (!$this->is_enabled()) return;
+		$existing = get_page_by_path('cptt-login', OBJECT, 'page');
+		if ($existing && $existing->post_status !== 'trash') {
+			update_option('cptt_login_page_id', (int)$existing->ID, false);
+			return;
+		}
+		$page_id = wp_insert_post([
+			'post_type'    => 'page',
+			'post_status'  => 'publish',
+			'post_title'   => 'ورود اختصاصی',
+			'post_name'    => 'cptt-login',
+			'post_content' => '<!-- HAM_CPTT_LOGIN_PAGE: این برگه توسط افزونه هماهنگ برای صفحه ورود اختصاصی ساخته شده است. محتوای واقعی توسط افزونه رندر می‌شود. -->',
+			'comment_status' => 'closed',
+			'ping_status'    => 'closed',
+		]);
+		if ($page_id && !is_wp_error($page_id)) {
+			update_option('cptt_login_page_id', (int)$page_id, false);
+			flush_rewrite_rules(false);
+		}
+	}
+
 	public function add_rewrites() {
 		add_rewrite_rule('^cptt-login/?$', 'index.php?cptt_login=1', 'top');
 	}
 	public function add_query_vars($vars) { $vars[] = 'cptt_login'; return $vars; }
 
+	public function maybe_render_login_page_direct() {
+		if (is_admin() || wp_doing_ajax()) return;
+		$path = isset($_SERVER['REQUEST_URI']) ? trim(parse_url((string)$_SERVER['REQUEST_URI'], PHP_URL_PATH), '/') : '';
+		$home_path = trim(parse_url(home_url('/'), PHP_URL_PATH) ?: '', '/');
+		if ($home_path && strpos($path, $home_path . '/') === 0) $path = substr($path, strlen($home_path) + 1);
+		$login_page_id = (int) get_option('cptt_login_page_id', 0);
+		$is_page_id_request = $login_page_id && isset($_GET['page_id']) && (int)$_GET['page_id'] === $login_page_id;
+		if ($path !== 'cptt-login' && !$is_page_id_request) return;
+		if (is_user_logged_in()) {
+			$redir = $this->get_redirect_for(wp_get_current_user(), !empty($_GET['redirect_to']) ? esc_url_raw($_GET['redirect_to']) : '');
+			wp_safe_redirect($redir); exit;
+		}
+		status_header(200);
+		nocache_headers();
+		$this->render_login_page();
+		exit;
+	}
+
+	public function maybe_mark_login_request($wp) {
+		$path = isset($_SERVER['REQUEST_URI']) ? trim(parse_url((string)$_SERVER['REQUEST_URI'], PHP_URL_PATH), '/') : '';
+		$home_path = trim(parse_url(home_url('/'), PHP_URL_PATH) ?: '', '/');
+		if ($home_path && strpos($path, $home_path . '/') === 0) $path = substr($path, strlen($home_path) + 1);
+		if ($path === 'cptt-login' || $path === 'cptt-login/') {
+			$wp->query_vars['cptt_login'] = 1;
+		}
+	}
+
+	public function maybe_prevent_login_404($preempt, $wp_query) {
+		$is_qv = (int)get_query_var('cptt_login') === 1;
+		$is_uri = isset($_SERVER['REQUEST_URI']) && preg_match('#/cptt-login/?(?:\?.*)?$#', (string)$_SERVER['REQUEST_URI']);
+		$login_page_id = (int) get_option('cptt_login_page_id', 0);
+		$is_page_id_request = $login_page_id && isset($_GET['page_id']) && (int)$_GET['page_id'] === $login_page_id;
+		if ($is_qv || $is_uri || $is_page_id_request) {
+			if ($wp_query && method_exists($wp_query, 'set')) $wp_query->set('cptt_login', 1);
+			return true;
+		}
+		return $preempt;
+	}
+
 	public function maybe_render_login_page() {
 		$is_qv  = (int) get_query_var('cptt_login') === 1;
 		$is_uri = isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], 'cptt-login') !== false;
-		if (!$is_qv && !$is_uri) return;
+		$login_page_id = (int) get_option('cptt_login_page_id', 0);
+		$is_login_page = ($login_page_id && (int)get_queried_object_id() === $login_page_id) || (function_exists('is_page') && is_page('cptt-login'));
+		if (!$is_qv && !$is_uri && !$is_login_page) return;
 		if (is_user_logged_in()) {
 			$redir = $this->get_redirect_for(wp_get_current_user(), !empty($_GET['redirect_to']) ? esc_url_raw($_GET['redirect_to']) : '');
 			wp_safe_redirect($redir); exit;

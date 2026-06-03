@@ -373,13 +373,29 @@ jQuery(function ($) {
   $(document).on('click', '#cptt-dash-reset', function(){ $('.cptt-dashboard__filters input,.cptt-dashboard__filters select').val(''); filterDashboard(); });
 
   /* ===== Accounting filters ===== */
+  function parseFaDateToTs(faStr) {
+    if (!faStr) return 0;
+    const s = cpttToEn(String(faStr)).trim();
+    const m = s.match(/(\d{4})\/(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}):(\d{1,2}))?/);
+    if (!m) return 0;
+    const jy = parseInt(m[1], 10), jm = parseInt(m[2], 10), jd = parseInt(m[3], 10);
+    const hh = m[4] ? parseInt(m[4], 10) : 0, ii = m[5] ? parseInt(m[5], 10) : 0;
+    const g = j2g(jy, jm, jd);
+    const d = new Date(g[0], g[1] - 1, g[2], hh, ii, 0);
+    return Math.floor(d.getTime() / 1000);
+  }
+
   function filterAccounting(){
     const q=($('#cptt-acct-search').val()||'').toLowerCase().trim();
     const client=$('#cptt-acct-client').val()||'';
     const settled=$('#cptt-acct-settled').val();
     const status=$('#cptt-acct-status').val()||'';
-    const from=$('#cptt-acct-from').val()?Math.floor(new Date($('#cptt-acct-from').val()).getTime()/1000):0;
-    const to=$('#cptt-acct-to').val()?Math.floor(new Date($('#cptt-acct-to').val()).getTime()/1000)+86399:0;
+    
+    const fromStr = $('#cptt-acct-from').val();
+    const toStr = $('#cptt-acct-to').val();
+    const from = fromStr ? parseFaDateToTs(fromStr) : 0;
+    const to = toStr ? parseFaDateToTs(toStr) + 86399 : 0;
+
     let count=0;
     $('.cptt-acct-row').each(function(){
       const $r=$(this); let ok=true;
@@ -752,12 +768,7 @@ jQuery(function($){
   };
   var oldFilter = window.cpttAcctFilterHooked;
   $(document).on('input change', '#cptt-acct-from,#cptt-acct-to', function(){ $('#cptt-acct-search').trigger('input'); });
-  $(document).on('click', '#cptt-acct-excel', function(){
-    var rows=[['عنوان پروژه','مشتری','موبایل','تاریخ ایجاد','کل هزینه','دریافتی','طلب از مشتری','سود ناخالص']];
-    visibleAcctRows().each(function(){ var $r=$(this); rows.push([$r.find('.cptt-acct-title').text().trim(),$r.find('td').eq(1).text().trim(),$r.attr('data-phone')||'',$r.attr('data-created')||'',$r.attr('data-cost')||0,$r.attr('data-paid')||0,$r.attr('data-remain')||0,$r.attr('data-profit')||0]); });
-    var csv='\ufeff'+rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
-    var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'})); a.download='cptt-finance-report.csv'; a.click();
-  });
-  $(document).on('click', '#cptt-acct-pdf', function(){ $('#cptt-acct-print').trigger('click'); setTimeout(function(){ try{ window.print(); }catch(e){} },500); });
+  // v5.4.17: دکمه‌های اکسل/PDF از UI حذف شدند (طبق درخواست). handlerها نگه‌داشته نشدند.
   setTimeout(window.cpttRenderAccountingCharts, 300);
 });
+

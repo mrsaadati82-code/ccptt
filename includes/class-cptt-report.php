@@ -87,6 +87,7 @@ class CPTT_Report {
 		$primary = $brand['primary_color'] ?: '#6366f1';
 
 		$title = get_the_title($project_id);
+		$project_code = class_exists('CPTT_Core') ? CPTT_Core::get_project_code($project_id) : (string)$project_id;
 		$created_fa = class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime((int) current_time('timestamp', true)) : date('Y-m-d H:i');
 
 		$client_id = (int)get_post_meta($project_id, '_cptt_client_user_id', true);
@@ -118,6 +119,52 @@ class CPTT_Report {
 		// Get toggles
 		$toggles = class_exists('CPTT_Settings') && method_exists('CPTT_Settings', 'get_branding_toggles') ? CPTT_Settings::get_branding_toggles() : [];
 
+		$style_settings = class_exists('CPTT_Settings') ? CPTT_Settings::get_styles() : [];
+		$font_family_opt = !empty($style_settings['font_family']) ? $style_settings['font_family'] : 'vazir';
+		$base_url_font = CPTT_URL . 'assets/fonts/';
+		$font_faces_css = '';
+		$font_stack_css = "'Vazirmatn', Tahoma, sans-serif";
+
+		if ($font_family_opt === 'dana') {
+			$font_faces_css = "
+				@font-face { font-family: 'Dana'; src: url('{$base_url_font}Dana/Dana-FaNum-Regular.ttf') format('truetype'); font-weight: 400; }
+				@font-face { font-family: 'Dana'; src: url('{$base_url_font}Dana/Dana-FaNum-Medium.ttf') format('truetype'); font-weight: 500; }
+				@font-face { font-family: 'Dana'; src: url('{$base_url_font}Dana/Dana-FaNum-Bold.ttf') format('truetype'); font-weight: 700; }
+			";
+			$font_stack_css = "'Dana', Tahoma, sans-serif";
+		} elseif ($font_family_opt === 'iransans') {
+			$font_faces_css = "
+				@font-face { font-family: 'IranSans'; src: url('{$base_url_font}iransans/IRANSansWeb(FaNum).woff2') format('woff2'); font-weight: 400; }
+				@font-face { font-family: 'IranSans'; src: url('{$base_url_font}iransans/IRANSansWeb(FaNum)_Medium.woff2') format('woff2'); font-weight: 500; }
+				@font-face { font-family: 'IranSans'; src: url('{$base_url_font}iransans/IRANSansWeb(FaNum)_Bold.woff2') format('woff2'); font-weight: 700; }
+			";
+			$font_stack_css = "'IranSans', Tahoma, sans-serif";
+		} elseif ($font_family_opt === 'iranyekan') {
+			$font_faces_css = "
+				@font-face { font-family: 'IranYekan'; src: url('{$base_url_font}iranyekan/IRANYekanX-Regular.woff2') format('woff2'); font-weight: 400; }
+				@font-face { font-family: 'IranYekan'; src: url('{$base_url_font}iranyekan/IRANYekanX-Bold.woff2') format('woff2'); font-weight: 700; }
+			";
+			$font_stack_css = "'IranYekan', Tahoma, sans-serif";
+		} elseif ($font_family_opt === 'kalameh') {
+			$font_faces_css = "
+				@font-face { font-family: 'Kalameh'; src: url('{$base_url_font}kalameh/KalamehWebFaNum-Medium.woff2') format('woff2'); font-weight: 400; }
+				@font-face { font-family: 'Kalameh'; src: url('{$base_url_font}kalameh/KalamehWebFaNum-Bold.woff2') format('woff2'); font-weight: 700; }
+			";
+			$font_stack_css = "'Kalameh', Tahoma, sans-serif";
+		} elseif ($font_family_opt === 'peyda') {
+			$font_faces_css = "
+				@font-face { font-family: 'Peyda'; src: url('{$base_url_font}peyda/PeydaWeb-Regular.woff') format('woff'); font-weight: 400; }
+				@font-face { font-family: 'Peyda'; src: url('{$base_url_font}peyda/PeydaWeb-Bold.woff') format('woff'); font-weight: 700; }
+			";
+			$font_stack_css = "'Peyda', Tahoma, sans-serif";
+		} else {
+			$font_faces_css = "
+				@font-face { font-family: 'Vazirmatn'; src: url('{$base_url_font}Vazirmatn-Regular.ttf') format('truetype'); font-weight: 400; }
+				@font-face { font-family: 'Vazirmatn'; src: url('{$base_url_font}Vazirmatn-Bold.ttf') format('truetype'); font-weight: 700; }
+			";
+			$font_stack_css = "'Vazirmatn', Tahoma, sans-serif";
+		}
+
 		header('Content-Type: text/html; charset=utf-8');
 		?>
 <!doctype html>
@@ -127,6 +174,7 @@ class CPTT_Report {
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title><?php echo esc_html('گزارش پروژه - ' . $title); ?></title>
 	<style>
+		<?php echo $font_faces_css; ?>
 		:root{
 			--primary: <?php echo esc_html($primary); ?>;
 			--primary-light: rgba(99, 102, 241, 0.08);
@@ -136,11 +184,11 @@ class CPTT_Report {
 			--bg: #f8fafc;
 			--white: #ffffff;
 		}
-		*{ box-sizing:border-box; margin: 0; padding: 0; }
+		*{ box-sizing:border-box; margin: 0; padding: 0; font-family: <?php echo $font_stack_css; ?> !important; }
 		body{
 			background: var(--bg);
 			color: var(--text);
-			font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+			font-family: <?php echo $font_stack_css; ?> !important;
 			font-size: 13px;
 			line-height: 1.7;
 			padding: 20px 10px;
@@ -461,6 +509,7 @@ class CPTT_Report {
 			<div class="metadata-grid">
 				<div class="metadata-box">
 					<div class="metadata-item"><b>عنوان پروژه:</b> <?php echo esc_html($title); ?></div>
+					<div class="metadata-item"><b>کد پیگیری:</b> #<?php echo esc_html($project_code); ?></div>
 					<?php if ($client_name && ($toggles['report_show_client'] ?? '1') === '1'): ?>
 						<div class="metadata-item"><b>مشتری:</b> <?php echo esc_html($client_name); ?></div>
 					<?php endif; ?>
@@ -628,6 +677,7 @@ class CPTT_Report {
 		$primary = $brand['primary_color'] ?: '#6366f1';
 
 		$title = get_the_title($project_id);
+		$project_code = class_exists('CPTT_Core') ? CPTT_Core::get_project_code($project_id) : (string)$project_id;
 		$created_fa = class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime((int) current_time('timestamp', true)) : date('Y-m-d H:i');
 
 		$client_id = (int)get_post_meta($project_id, '_cptt_client_user_id', true);
@@ -660,6 +710,52 @@ class CPTT_Report {
 		// Get toggles
 		$toggles = class_exists('CPTT_Settings') && method_exists('CPTT_Settings', 'get_branding_toggles') ? CPTT_Settings::get_branding_toggles() : [];
 
+		$style_settings = class_exists('CPTT_Settings') ? CPTT_Settings::get_styles() : [];
+		$font_family_opt = !empty($style_settings['font_family']) ? $style_settings['font_family'] : 'vazir';
+		$base_url_font = CPTT_URL . 'assets/fonts/';
+		$font_faces_css = '';
+		$font_stack_css = "'Vazirmatn', Tahoma, sans-serif";
+
+		if ($font_family_opt === 'dana') {
+			$font_faces_css = "
+				@font-face { font-family: 'Dana'; src: url('{$base_url_font}Dana/Dana-FaNum-Regular.ttf') format('truetype'); font-weight: 400; }
+				@font-face { font-family: 'Dana'; src: url('{$base_url_font}Dana/Dana-FaNum-Medium.ttf') format('truetype'); font-weight: 500; }
+				@font-face { font-family: 'Dana'; src: url('{$base_url_font}Dana/Dana-FaNum-Bold.ttf') format('truetype'); font-weight: 700; }
+			";
+			$font_stack_css = "'Dana', Tahoma, sans-serif";
+		} elseif ($font_family_opt === 'iransans') {
+			$font_faces_css = "
+				@font-face { font-family: 'IranSans'; src: url('{$base_url_font}iransans/IRANSansWeb(FaNum).woff2') format('woff2'); font-weight: 400; }
+				@font-face { font-family: 'IranSans'; src: url('{$base_url_font}iransans/IRANSansWeb(FaNum)_Medium.woff2') format('woff2'); font-weight: 500; }
+				@font-face { font-family: 'IranSans'; src: url('{$base_url_font}iransans/IRANSansWeb(FaNum)_Bold.woff2') format('woff2'); font-weight: 700; }
+			";
+			$font_stack_css = "'IranSans', Tahoma, sans-serif";
+		} elseif ($font_family_opt === 'iranyekan') {
+			$font_faces_css = "
+				@font-face { font-family: 'IranYekan'; src: url('{$base_url_font}iranyekan/IRANYekanX-Regular.woff2') format('woff2'); font-weight: 400; }
+				@font-face { font-family: 'IranYekan'; src: url('{$base_url_font}iranyekan/IRANYekanX-Bold.woff2') format('woff2'); font-weight: 700; }
+			";
+			$font_stack_css = "'IranYekan', Tahoma, sans-serif";
+		} elseif ($font_family_opt === 'kalameh') {
+			$font_faces_css = "
+				@font-face { font-family: 'Kalameh'; src: url('{$base_url_font}kalameh/KalamehWebFaNum-Medium.woff2') format('woff2'); font-weight: 400; }
+				@font-face { font-family: 'Kalameh'; src: url('{$base_url_font}kalameh/KalamehWebFaNum-Bold.woff2') format('woff2'); font-weight: 700; }
+			";
+			$font_stack_css = "'Kalameh', Tahoma, sans-serif";
+		} elseif ($font_family_opt === 'peyda') {
+			$font_faces_css = "
+				@font-face { font-family: 'Peyda'; src: url('{$base_url_font}peyda/PeydaWeb-Regular.woff') format('woff'); font-weight: 400; }
+				@font-face { font-family: 'Peyda'; src: url('{$base_url_font}peyda/PeydaWeb-Bold.woff') format('woff'); font-weight: 700; }
+			";
+			$font_stack_css = "'Peyda', Tahoma, sans-serif";
+		} else {
+			$font_faces_css = "
+				@font-face { font-family: 'Vazirmatn'; src: url('{$base_url_font}Vazirmatn-Regular.ttf') format('truetype'); font-weight: 400; }
+				@font-face { font-family: 'Vazirmatn'; src: url('{$base_url_font}Vazirmatn-Bold.ttf') format('truetype'); font-weight: 700; }
+			";
+			$font_stack_css = "'Vazirmatn', Tahoma, sans-serif";
+		}
+
 		header('Content-Type: text/html; charset=utf-8');
 		?>
 <!doctype html>
@@ -669,6 +765,7 @@ class CPTT_Report {
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title><?php echo esc_html($invoice_short . ' - ' . $title); ?></title>
 	<style>
+		<?php echo $font_faces_css; ?>
 		:root{
 			--primary: <?php echo esc_html($primary); ?>;
 			--text: #1e293b;
@@ -677,11 +774,11 @@ class CPTT_Report {
 			--bg: #f8fafc;
 			--white: #ffffff;
 		}
-		*{ box-sizing:border-box; margin: 0; padding: 0; }
+		*{ box-sizing:border-box; margin: 0; padding: 0; font-family: <?php echo $font_stack_css; ?> !important; }
 		body{
 			background: var(--bg);
 			color: var(--text);
-			font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+			font-family: <?php echo $font_stack_css; ?> !important;
 			font-size: 13px;
 			line-height: 1.7;
 			padding: 20px 10px;
@@ -921,6 +1018,7 @@ class CPTT_Report {
 			<div class="metadata-grid">
 				<div class="metadata-box">
 					<div class="metadata-item"><b>عنوان پروژه:</b> <?php echo esc_html($title); ?></div>
+					<div class="metadata-item"><b>کد پیگیری:</b> #<?php echo esc_html($project_code); ?></div>
 					<?php if ($client_name && ($toggles['invoice_show_client'] ?? '1') === '1'): ?>
 						<div class="metadata-item"><b>خریدار / مشتری:</b> <?php echo esc_html($client_name); ?></div>
 					<?php endif; ?>
@@ -980,9 +1078,7 @@ class CPTT_Report {
 								<td class="text-center"><?php echo esc_html($row_idx++); ?></td>
 								<td>
 									<div style="font-weight:700; color:#0f172a;"><?php echo esc_html($st_title); ?></div>
-									<?php if (!empty($s['desc'])): ?>
-										<div style="font-size:11px; color:var(--muted); margin-top:2px;"><?php echo esc_html(wp_strip_all_tags($s['desc'])); ?></div>
-									<?php endif; ?>
+									<?php /* v5.4.17: نمایش توضیحات مرحله از فاکتور حذف شد. */ ?>
 								</td>
 								<td class="text-left"><?php echo esc_html(number_format($cost)); ?></td>
 								<td class="text-left" style="color:#059669;"><?php echo esc_html(number_format($paid)); ?></td>
