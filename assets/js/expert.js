@@ -5210,7 +5210,9 @@
     recordStream: null,
     recordChunks: [],
     recordStartedAt: 0,
-    recordTimer: null
+    recordTimer: null,
+    pendingVoiceFile: null,
+    _menuBubbleId: ''
   };
 
   function normBody(rawBody){
@@ -5298,9 +5300,10 @@
   function stopPolling(){ if (state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer = null; } }
   function closeChat(){
     stopPolling();
+    closeMenu();
     if (state.recordStream) { state.recordStream.getTracks().forEach(function(t){ t.stop(); }); state.recordStream = null; }
-    state.recorder = null; state.recordChunks = []; state.replyId=''; state.replyText = ''; state.selected.clear(); if(state.recordTimer){clearInterval(state.recordTimer); state.recordTimer=null;} state.recordStartedAt=0;
-    if (app) app.hidden = true;
+    state.recorder = null; state.recordChunks = []; state.replyId=''; state.replyText = ''; state.selected.clear(); state.pendingVoiceFile = null; if(state.recordTimer){clearInterval(state.recordTimer); state.recordTimer=null;} state.recordStartedAt=0;
+    if (app) { app.hidden = true; app.classList.remove('is-context-open'); }
     document.body.classList.remove('ham-chat-open');
   }
 
@@ -5328,20 +5331,50 @@
       if (act === 'forward' && texts) { openForwardSheet(texts); }
       if (act === 'delete') { batchDeleteSelected(); }
     });
+    /* v5.7.1: context-menu opens for the nearest bubble row, even if user
+       clicks/long-presses the empty area beside the bubble (inside messages area) */
+    function findBubbleFromEvent(target){
+      var bubble = target.closest('.ham-chat__bubble');
+      if (bubble) return bubble;
+      /* Clicked beside a bubble — find the parent row / nearest bubble */
+      var msgArea = target.closest('.ham-chat__messages');
+      if (!msgArea) return null;
+      return null; /* will be resolved by row-scan in handler */
+    }
+    function findBubbleRowAt(y){
+      var bubbles = qsa('.ham-chat__bubble', qs('.ham-chat__messages', app));
+      var best = null, bestDist = Infinity;
+      for (var i = 0; i < bubbles.length; i++){
+        var r = bubbles[i].getBoundingClientRect();
+        var cy = r.top + r.height / 2;
+        var d = Math.abs(y - cy);
+        if (d < bestDist){ bestDist = d; best = bubbles[i]; }
+      }
+      /* only match if within 60px vertical */
+      return (best && bestDist < 60) ? best : null;
+    }
+
     app.addEventListener('contextmenu', function(e){
-      var bubble = e.target.closest('.ham-chat__bubble');
+      /* Don't open on composer area */
+      if (e.target.closest('.ham-chat__composer,.ham-chat__header,.ham-chat__bulkbar,.ham-chat__recipientRow')) return;
+      var bubble = e.target.closest('.ham-chat__bubble') || findBubbleRowAt(e.clientY);
       if (!bubble) return;
       e.preventDefault();
       openMenuForBubble(bubble, e.clientX, e.clientY);
     });
-    var pressTimer = null;
+    var pressTimer = null, pressStartY = 0;
     app.addEventListener('touchstart', function(e){
-      var bubble = e.target.closest('.ham-chat__bubble');
+      if (e.target.closest('.ham-chat__composer,.ham-chat__header,.ham-chat__bulkbar,.ham-chat__recipientRow,audio,a')) return;
+      var bubble = e.target.closest('.ham-chat__bubble') || findBubbleRowAt(e.touches[0].clientY);
       if (!bubble) return;
       var t = e.touches[0];
+      pressStartY = t.clientY;
       pressTimer = setTimeout(function(){ openMenuForBubble(bubble, t.clientX, t.clientY); }, 430);
     }, { passive:true });
-    app.addEventListener('touchend', function(){ clearTimeout(pressTimer); }, { passive:true });
+    app.addEventListener('touchmove', function(e){
+      if (pressTimer && e.touches[0] && Math.abs(e.touches[0].clientY - pressStartY) > 10) { clearTimeout(pressTimer); pressTimer = null; }
+    }, { passive:true });
+    app.addEventListener('touchend', function(){ clearTimeout(pressTimer); pressTimer = null; }, { passive:true });
     qs('.ham-chat__menu', app).addEventListener('click', function(e){
       var act = e.target.getAttribute('data-act');
       var bubble = app._menuBubble;
@@ -5434,6 +5467,7 @@
         if (state._recordCancel) {
           state._recordCancel = false;
           state.recordChunks = [];
+          state.pendingVoiceFile = null;
           _stopRecordStream();
           _hideRecordingUI();
           state.recordStartedAt = 0; state._recordElapsed = 0;
@@ -5442,7 +5476,8 @@
         var blob = new Blob(state.recordChunks, { type: (state.recorder && state.recorder.mimeType) || 'audio/webm' });
         var ext = (blob.type || '').indexOf('ogg') > -1 ? 'ogg' : 'webm';
         var file = new File([blob], 'voice-message.' + ext, { type: blob.type || 'audio/webm' });
-        try { var dt = new DataTransfer(); dt.items.add(file); fileInput.files = dt.files; } catch(err) {}
+        /* Store voice file directly in state — DataTransfer is unreliable */
+        state.pendingVoiceFile = file;
         _stopRecordStream();
         _hideRecordingUI();
         state.recordStartedAt = 0; state._recordElapsed = 0;
@@ -5452,7 +5487,7 @@
           var form = qs('.ham-chat__composer', app);
           if (form) form.requestSubmit ? form.requestSubmit() : form.dispatchEvent(new Event('submit', {cancelable:true,bubbles:true}));
         } else {
-          syncFilePreview();
+          syncFilePreviewChat();
         }
       };
       state._recordCancel = false;
@@ -5514,14 +5549,63 @@
 
   function openMenuForBubble(bubble, x, y){
     var menu = qs('.ham-chat__menu', app);
+    /* Close any existing context first */
+    if (app._menuBubble && app._menuBubble !== bubble) {
+      app._menuBubble.classList.remove('is-context-focus');
+    }
     app._menuBubble = bubble;
-    menu.hidden = false;
-    menu.style.left = Math.max(12, Math.min(window.innerWidth - 180, x)) + 'px';
-    menu.style.top = Math.max(12, Math.min(window.innerHeight - 260, y)) + 'px';
-    qsa('button[data-act="delete"]', menu).forEach(function(btn){ btn.style.display = bubble.getAttribute('data-owned') === '1' ? '' : 'none'; });
+    state._menuBubbleId = bubble.getAttribute('data-id') || '';
+
+    /* v5.7.1: allow deleting any message */
+    qsa('button[data-act="delete"]', menu).forEach(function(btn){ btn.style.display = ''; });
     qsa('button[data-act="download"]', menu).forEach(function(btn){ btn.style.display = bubble.getAttribute('data-file-url') ? '' : 'none'; });
+
+    /* v5.7.0 — focus effect: highlight bubble, blur rest */
+    bubble.classList.add('is-context-focus');
+    app.classList.add('is-context-open');
+
+    /* Show menu to measure its size, then position smartly */
+    menu.hidden = false;
+    menu.style.left = '0px';
+    menu.style.top = '0px';
+    menu.style.visibility = 'hidden';
+
+    requestAnimationFrame(function(){
+      var menuRect = menu.getBoundingClientRect();
+      var bubbleRect = bubble.getBoundingClientRect();
+      var vw = window.innerWidth, vh = window.innerHeight;
+      var mW = menuRect.width || 160, mH = menuRect.height || 200;
+
+      /* Horizontal: center on click X, clamp to viewport */
+      var left = Math.max(10, Math.min(vw - mW - 10, x - mW / 2));
+
+      /* Vertical: if bubble is in lower half → show menu ABOVE the bubble (upward)
+         if bubble is in upper half → show menu BELOW the bubble (downward) */
+      var top;
+      var bubbleMidY = bubbleRect.top + bubbleRect.height / 2;
+      if (bubbleMidY > vh * 0.5) {
+        /* Bubble is low — menu opens upward */
+        top = bubbleRect.top - mH - 8;
+        if (top < 10) top = 10;
+      } else {
+        /* Bubble is high — menu opens downward */
+        top = bubbleRect.bottom + 8;
+        if (top + mH > vh - 10) top = vh - mH - 10;
+      }
+
+      menu.style.left = Math.round(left) + 'px';
+      menu.style.top = Math.round(top) + 'px';
+      menu.style.visibility = '';
+    });
   }
-  function closeMenu(){ var menu = qs('.ham-chat__menu', app); menu.hidden = true; app._menuBubble = null; }
+  function closeMenu(){
+    var menu = qs('.ham-chat__menu', app); menu.hidden = true;
+    /* v5.7.0 — remove focus effect */
+    if (app._menuBubble) app._menuBubble.classList.remove('is-context-focus');
+    app._menuBubble = null;
+    state._menuBubbleId = '';
+    app.classList.remove('is-context-open');
+  }
   document.addEventListener('click', function(e){ if (app && !qs('.ham-chat__menu', app).contains(e.target)) closeMenu(); });
 
   function currentSelectedBubbles(){
@@ -5539,8 +5623,15 @@
 
   function sortItems(items){
     return (items || []).slice().sort(function(a,b){
+      /* Use server-provided seq (insertion order) as primary key — guarantees
+         correct order even when legacy messages have time=0 */
+      var sa = parseInt(a.seq, 10), sb = parseInt(b.seq, 10);
+      if (!isNaN(sa) && !isNaN(sb) && sa !== sb) return sa - sb;
       var ta = parseInt(a.time || 0, 10), tb = parseInt(b.time || 0, 10);
       if (ta !== tb) return ta - tb;
+      /* direct-chat rows: numeric id = database AUTO_INCREMENT */
+      var ia = parseInt(a.id, 10), ib = parseInt(b.id, 10);
+      if (!isNaN(ia) && !isNaN(ib) && ia !== ib) return ia - ib;
       return String(a.id || '').localeCompare(String(b.id || ''));
     });
   }
@@ -5555,7 +5646,13 @@
     var cls = isMe ? 'ham-chat__bubble--me' : 'ham-chat__bubble--other';
     var reply = (norm.replyId && norm.replyText) ? '<button type="button" class="ham-chat__replySnippet" data-reply-id="' + escapeHtml(norm.replyId) + '">' + escapeHtml(norm.replyText) + '</button>' : '';
     var fwdBadge = norm.fwdFrom ? '<div class="ham-chat__fwdBadge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17l5-5-5-5"></path><path d="M20 12H9a4 4 0 0 0-4 4v3"></path></svg>فوروارد از ' + escapeHtml(norm.fwdFrom) + '</div>' : '';
-    return '<div class="ham-chat__bubble ' + cls + '" data-id="' + escapeHtml(String(message.id || '')) + '" data-owned="' + (isMe ? '1' : '0') + '" data-text="' + escapeHtml(norm.text) + '" data-file-url="' + escapeHtml(norm.fileUrl || '') + '"><div class="ham-chat__bubbleHead"><strong>' + head + '</strong><span>' + time + '</span></div>' + fwdBadge + reply + '<div class="ham-chat__bubbleBody">' + norm.html + '</div></div>';
+    /* v5.7.1: data-text includes file indicator so reply/forward always has content */
+    var replyLabel = norm.text || '';
+    if (!replyLabel && norm.fileUrl) {
+      var isAudio = norm.fileExt && ['mp3','wav','ogg','oga','m4a','aac','webm'].indexOf(norm.fileExt) > -1;
+      replyLabel = isAudio ? '🎤 پیام صوتی' : '📎 فایل پیوست';
+    }
+    return '<div class="ham-chat__bubble ' + cls + '" data-id="' + escapeHtml(String(message.id || '')) + '" data-owned="' + (isMe ? '1' : '0') + '" data-text="' + escapeHtml(replyLabel) + '" data-file-url="' + escapeHtml(norm.fileUrl || '') + '"><div class="ham-chat__bubbleHead"><strong>' + head + '</strong><span>' + time + '</span></div>' + fwdBadge + reply + '<div class="ham-chat__bubbleBody">' + norm.html + '</div></div>';
   }
 
   function isNearBottom(wrap){
@@ -5670,19 +5767,23 @@
     var fileInput = qs('.ham-chat__fileInput', app);
     var msg = qs('.ham-chat__msg', app);
     var text = (ta.value || '').trim();
-    if (!text && !(fileInput.files && fileInput.files.length)) return;
+    var voiceFile = state.pendingVoiceFile || null;
+    var hasFile = voiceFile || (fileInput.files && fileInput.files.length);
+    if (!text && !hasFile) return;
     var fd = new FormData();
     var submitBtn = qs('.ham-chat__send', app);
     submitBtn.disabled = true; msg.textContent = 'در حال ارسال...';
     try {
       if (state.replyId) text = '[[REPLY:' + state.replyId + '|' + state.replyText + ']] ' + text;
+      /* Determine the actual file to send: voice recording takes priority */
+      var actualFile = voiceFile || ((fileInput.files && fileInput.files.length) ? fileInput.files[0] : null);
       if (state.mode === 'project') {
         fd.append('action', 'cptt_expert_send_message');
         fd.append('nonce', nonce());
         fd.append('project_id', String(state.projectId));
         fd.append('recipient_id', String(qs('.ham-chat__recipient', app).value || '0'));
         fd.append('content', text);
-        if (fileInput.files && fileInput.files.length) fd.append('chat_file', fileInput.files[0]);
+        if (actualFile) fd.append('chat_file', actualFile, actualFile.name || 'voice.webm');
         var res = await fetch(ajax(), { method:'POST', credentials:'same-origin', body:fd });
         var json = await res.json();
         if (!(json && json.success)) throw new Error((json && json.data) ? json.data : 'خطا در ارسال پیام');
@@ -5692,14 +5793,14 @@
         fd.append('nonce', nonce());
         fd.append('receiver_id', String(state.directId));
         fd.append('message', text);
-        if (fileInput.files && fileInput.files.length) fd.append('chat_file', fileInput.files[0]);
+        if (actualFile) fd.append('chat_file', actualFile, actualFile.name || 'voice.webm');
         var res2 = await fetch(ajax(), { method:'POST', credentials:'same-origin', body:fd });
         var json2 = await res2.json();
         if (!(json2 && json2.success)) throw new Error((json2 && json2.data) ? json2.data : 'خطا در ارسال پیام');
         renderItems(json2.data || []);
       }
       ta.value = ''; autoGrowChat();
-      fileInput.value = ''; syncFilePreviewChat();
+      fileInput.value = ''; state.pendingVoiceFile = null; syncFilePreviewChat();
       state.replyId=''; state.replyText = ''; syncReplyChat();
       msg.textContent = '';
     } catch(err) {
@@ -5716,11 +5817,14 @@
   function syncReplyChat(){ var row = qs('.ham-chat__reply', app); qs('.ham-chat__replyText', app).textContent = state.replyText || ''; row.hidden = !state.replyText; row.style.display = state.replyText ? 'flex' : 'none'; }
   function syncFilePreviewChat(){
     var input = qs('.ham-chat__fileInput', app), preview = qs('.ham-chat__filePreview', app);
-    if (!input.files || !input.files.length) { preview.hidden = true; preview.innerHTML = ''; return; }
+    var hasInputFile = input.files && input.files.length;
+    var hasVoice = !!state.pendingVoiceFile;
+    if (!hasInputFile && !hasVoice) { preview.hidden = true; preview.style.display='none'; preview.innerHTML = ''; return; }
+    var name = hasVoice ? (state.pendingVoiceFile.name || 'voice-message.webm') : input.files[0].name;
     preview.hidden = false;
     preview.style.display = 'flex';
-    preview.innerHTML = '<span>' + escapeHtml(input.files[0].name) + '</span><button type="button" class="ham-chat__fileRemove">×</button>';
-    qs('.ham-chat__fileRemove', preview).onclick = function(){ input.value = ''; syncFilePreviewChat(); };
+    preview.innerHTML = '<span>' + (hasVoice ? '🎤 ' : '') + escapeHtml(name) + '</span><button type="button" class="ham-chat__fileRemove">×</button>';
+    qs('.ham-chat__fileRemove', preview).onclick = function(){ input.value = ''; state.pendingVoiceFile = null; syncFilePreviewChat(); };
   }
 
   function batchDeleteSelected(){ currentSelectedBubbles().forEach(deleteSingleBubble); }
@@ -5754,8 +5858,22 @@
       var id = item.getAttribute('data-expert-id'); if (!id || seen[id]) return; seen[id] = 1;
       // skip self
       if (parseInt(id,10) === myId()) return;
-      var nameEl = item.querySelector('span');
-      var name = nameEl ? nameEl.textContent.trim() : ('کارشناس #' + id);
+      /* Find the expert name — skip spans that are avatar wrappers or mood badges */
+      var nameEl = null;
+      var allSpans = Array.prototype.slice.call(item.querySelectorAll(':scope > span'));
+      for (var si = 0; si < allSpans.length; si++) {
+        var sp = allSpans[si];
+        if (sp.classList.contains('cptt-moodAvatarWrap') || sp.classList.contains('cptt-moodAvatarBadge')) continue;
+        if (sp.querySelector('img')) continue; /* wrapper containing avatar img */
+        nameEl = sp; break;
+      }
+      var name = nameEl ? nameEl.textContent.trim() : '';
+      /* Fallback: use data attribute or alt text from img */
+      if (!name) {
+        var altImg = item.querySelector('img[alt]');
+        if (altImg && altImg.getAttribute('alt')) name = altImg.getAttribute('alt').trim();
+      }
+      if (!name) name = 'کارشناس #' + id;
       var imgEl = item.querySelector('img');
       var avatar = imgEl ? imgEl.getAttribute('src') : '';
       if (!avatar) {

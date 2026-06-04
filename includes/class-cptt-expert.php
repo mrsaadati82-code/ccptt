@@ -1012,7 +1012,7 @@ class CPTT_Expert {
 			'user_tasks_total' => $user_tasks_total,
 			'user_tasks_done' => $user_tasks_done,
 			'notes' => $this->get_recent_notes($project_id, 4),
-			'messages' => $this->get_recent_messages($project_id, 8),
+			'messages' => $this->get_recent_messages($project_id, 50),
 			'delivery_method' => $delivery_method_raw,
 			'delivery_method_label' => $delivery_method_label,
 			'delivery_province' => (string)get_post_meta($project_id, '_cptt_delivery_province', true),
@@ -2235,23 +2235,25 @@ class CPTT_Expert {
 		return is_wp_error($terms) ? [] : $terms;
 	}
 
-	private function get_recent_messages($project_id, $limit = 8) {
+	private function get_recent_messages($project_id, $limit = 50) {
 		$messages = get_post_meta($project_id, '_cptt_expert_messages', true);
 		if (!is_array($messages)) return [];
-		$messages = array_reverse($messages);
-		$messages = array_slice($messages, 0, $limit);
+		$messages = array_slice($messages, -$limit);
 		$out = [];
+		$idx = 0;
 		foreach ($messages as $message) {
 			$sender = !empty($message['sender_id']) ? get_user_by('id', (int)$message['sender_id']) : null;
 			$recipient = !empty($message['recipient_id']) ? get_user_by('id', (int)$message['recipient_id']) : null;
+			$ts = (int)($message['time'] ?? 0);
 			$out[] = [
 				'id' => (string)($message['id'] ?? ('m_' . md5(wp_json_encode($message)))),
 				'sender_id' => (int)($message['sender_id'] ?? 0),
 				'recipient_id' => (int)($message['recipient_id'] ?? 0),
 				'sender_name' => $sender ? $sender->display_name : 'کاربر',
 				'recipient_name' => $recipient ? $recipient->display_name : 'همه',
-				'time' => (int)($message['time'] ?? 0),
-				'time_fa' => !empty($message['time']) && class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime((int)$message['time']) : '',
+				'time' => $ts,
+				'seq' => $idx++,
+				'time_fa' => ($ts > 0 && class_exists('CPTT_Core')) ? CPTT_Core::jalali_datetime($ts) : '',
 				'content' => (string)($message['content'] ?? ''),
 			];
 		}
@@ -2309,7 +2311,7 @@ class CPTT_Expert {
 		update_post_meta($project_id, '_cptt_expert_messages', $messages);
 		$sender = get_user_by('id', get_current_user_id());
 		$this->notify_project_experts($project_id, get_current_user_id(), 'project_chat', ($sender ? $sender->display_name : 'کارشناس') . ' پیامی در چت پروژه ارسال کرد.', self::dashboard_url() . "#project-" . $project_id . '#chat-' . $project_id);
-		wp_send_json_success(['messages' => $this->get_recent_messages($project_id, 8)]);
+		wp_send_json_success(['messages' => $this->get_recent_messages($project_id, 50)]);
 	}
 
 	
@@ -2526,7 +2528,7 @@ class CPTT_Expert {
 		foreach ($messages as $m) {
 			$mid = (string)($m['id'] ?? '');
 			if ($mid === $message_id) {
-				if ((int)($m['sender_id'] ?? 0) !== (int)get_current_user_id() && !current_user_can('manage_options')) wp_send_json_error('forbidden', 403);
+				/* v5.7.1: any participant of the project can delete any message */
 				$deleted = true;
 				continue;
 			}
@@ -2546,9 +2548,11 @@ class CPTT_Expert {
 		$table = $wpdb->prefix . 'cptt_expert_chats';
 		$row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id = %d", $message_id));
 		if (!$row) wp_send_json_error('not_found', 404);
-		if ((int)$row->sender_id !== (int)get_current_user_id() && !current_user_can('manage_options')) wp_send_json_error('forbidden', 403);
+		/* v5.7.1: both sender and receiver can delete the message */
+		$uid = (int)get_current_user_id();
+		if ($uid !== (int)$row->sender_id && $uid !== (int)$row->receiver_id && !current_user_can('manage_options')) wp_send_json_error('forbidden', 403);
 		$wpdb->delete($table, ['id' => $message_id], ['%d']);
-		$other_id = ((int)$row->sender_id === (int)get_current_user_id()) ? (int)$row->receiver_id : (int)$row->sender_id;
+		$other_id = ($uid === (int)$row->sender_id) ? (int)$row->receiver_id : (int)$row->sender_id;
 		wp_send_json_success($this->get_direct_messages($other_id));
 	}
 
@@ -4352,14 +4356,15 @@ class CPTT_Expert {
 		header('Service-Worker-Allowed: /');
 		header('Cache-Control: no-cache, must-revalidate, max-age=0');
 		$cache = 'hamahang-pwa-' . preg_replace('/[^a-zA-Z0-9._-]/', '-', CPTT_VERSION);
+		$v = CPTT_VERSION;
 		$precache = [
 			$this->pwa_start_url(),
 			add_query_arg(self::QUERY_VAR, 1, home_url('/')),
 			add_query_arg(self::PUBLIC_QUERY_VAR, 1, home_url('/')),
-			CPTT_URL . 'assets/css/expert.css',
-			CPTT_URL . 'assets/css/frontend.css',
-			CPTT_URL . 'assets/js/expert.js',
-			CPTT_URL . 'assets/js/frontend.js',
+			CPTT_URL . 'assets/css/expert.css?ver=' . $v,
+			CPTT_URL . 'assets/css/frontend.css?ver=' . $v,
+			CPTT_URL . 'assets/js/expert.js?ver=' . $v,
+			CPTT_URL . 'assets/js/frontend.js?ver=' . $v,
 			CPTT_URL . 'assets/images/icon-192.png',
 			CPTT_URL . 'assets/images/icon-512.png',
 			$this->pwa_manifest_url(),

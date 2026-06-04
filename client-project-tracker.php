@@ -2,14 +2,14 @@
 /**
  * Plugin Name: هماهنگ - افزونه ی مدیریت پروژه و تیم
  * Description: هماهنگ، اولین افزونه ی اختصاصی ایرانی مدیریت پروژه است که امکاناتی فراتر از مدیریت پروژه دارد و مطابق با نیاز کسب و کار های ایرانی ساخته شده است. 
- * Version: 5.6.11
+ * Version: 5.7.1
  * Author: امیرحسین سعادتی
  * Text Domain: cptt
  */
 
 if ( ! defined('ABSPATH') ) exit;
 
-define('CPTT_VERSION', '5.6.11');
+define('CPTT_VERSION', '5.7.1');
 define('CPTT_PATH', plugin_dir_path(__FILE__));
 define('CPTT_URL', plugin_dir_url(__FILE__));
 
