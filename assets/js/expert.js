@@ -5236,7 +5236,22 @@
         body += '<br><a href="' + escapeHtml(fileUrl) + '" target="_blank" class="ham-chat__fileBtn">مشاهده فایل</a>';
       }
     }
-    return { text: cleanText.trim(), html: body, replyId: replyId, replyText: replyText, fileUrl: fileUrl, fileExt: ext };
+    // Detect forward marker [[FWD:name]]
+    var fwdFrom = '';
+    var fwdMatch = cleanText.match(/^\s*\[\[FWD:([^\]]+)\]\]\s*/);
+    if (fwdMatch) {
+      fwdFrom = String(fwdMatch[1] || '').trim();
+      cleanText = cleanText.replace(fwdMatch[0], '');
+      body = escapeHtml(cleanText.trim()).replace(/\n/g, '<br>');
+      if (fileUrl) {
+        if (['mp3','wav','ogg','oga','m4a','aac','webm'].indexOf(ext) > -1) {
+          body += '<div class="ham-chat__audioWrap"><audio controls preload="metadata" class="ham-chat__audio" src="' + escapeHtml(fileUrl) + '"></audio></div>';
+        } else {
+          body += '<br><a href="' + escapeHtml(fileUrl) + '" target="_blank" class="ham-chat__fileBtn">مشاهده فایل</a>';
+        }
+      }
+    }
+    return { text: cleanText.trim(), html: body, replyId: replyId, replyText: replyText, fileUrl: fileUrl, fileExt: ext, fwdFrom: fwdFrom };
   }
 
   function ensureApp(){
@@ -5261,7 +5276,7 @@
         '<div class="ham-chat__messages"></div>' +
         '<form class="ham-chat__composer">' +
           '<div class="ham-chat__reply" hidden><div class="ham-chat__replyText"></div><button type="button" class="ham-chat__replyClose">×</button></div>' +
-          '<div class="ham-chat__recording" hidden><span class="ham-chat__recordDot"></span><b class="ham-chat__recordTime">00:00</b><small>در حال ضبط ویس...</small></div>' +
+          '<div class="ham-chat__recording" hidden><div class="ham-chat__recLeft"><span class="ham-chat__recordDot"></span><b class="ham-chat__recordTime">00:00</b><small class="ham-chat__recordState">در حال ضبط...</small></div><div class="ham-chat__recControls"><button type="button" class="ham-chat__recBtn ham-chat__recBtn--cancel" data-rec="cancel" title="لغو" aria-label="لغو">✕</button><button type="button" class="ham-chat__recBtn ham-chat__recBtn--pause" data-rec="pause" title="توقف موقت" aria-label="توقف موقت">⏸</button><button type="button" class="ham-chat__recBtn ham-chat__recBtn--send" data-rec="send" title="ارسال" aria-label="ارسال">➤</button></div></div>' +
           '<input type="file" class="ham-chat__fileInput" hidden>' +
           '<div class="ham-chat__composeRow">' +
             '<button type="button" class="ham-chat__attach" aria-label="پیوست">📎</button>' +
@@ -5274,7 +5289,7 @@
         '</form>' +
       '</div>' +
       '<div class="ham-chat__menu" hidden><button type="button" data-act="copy">کپی</button><button type="button" data-act="reply">پاسخ</button><button type="button" data-act="forward">فوروارد</button><button type="button" data-act="select">انتخاب</button><button type="button" data-act="download">دانلود</button><button type="button" data-act="delete">حذف</button></div>' +
-      '<div class="ham-chat__forward" hidden><div class="ham-chat__forwardBox"><div class="ham-chat__forwardHead"><strong>فوروارد پیام</strong><button type="button" class="ham-chat__forwardClose">×</button></div><div class="ham-chat__forwardList"></div></div></div>';
+      '<div class="ham-chat__forward" hidden><div class="ham-chat__forwardBox"><div class="ham-chat__forwardHead"><strong>فوروارد به کارشناس</strong><button type="button" class="ham-chat__forwardClose">×</button></div><div class="ham-chat__forwardSearch"><input type="text" class="ham-chat__forwardSearchInput" placeholder="جستجوی کارشناس..."></div><div class="ham-chat__forwardList"></div></div></div>';
     document.body.appendChild(app);
     bindApp();
     return app;
@@ -5296,6 +5311,11 @@
     qs('.ham-chat__attach', app).addEventListener('click', function(){ qs('.ham-chat__fileInput', app).click(); });
     qs('.ham-chat__fileInput', app).addEventListener('change', syncFilePreview);
     qs('.ham-chat__voice', app).addEventListener('click', toggleVoiceRecord);
+    qs('.ham-chat__recording', app).addEventListener('click', function(e){
+      var btn = e.target.closest('.ham-chat__recBtn'); if (!btn) return;
+      e.preventDefault(); e.stopPropagation();
+      handleRecAction(btn.getAttribute('data-rec'));
+    });
     qs('.ham-chat__composer', app).addEventListener('submit', sendCurrentMessage);
     qs('.ham-chat__forwardClose', app).addEventListener('click', closeForwardSheet);
     qs('.ham-chat__clearSelect', app).addEventListener('click', function(){ state.selected.clear(); syncSelection(); });
@@ -5383,50 +5403,114 @@
     qs('.ham-chat__fileRemove', preview).onclick = function(){ input.value = ''; syncFilePreview(); };
   }
 
-  async function toggleVoiceRecord(){
-    var btn = qs('.ham-chat__voice', app);
+  function _stopRecordStream(){
+    if (state.recordStream) { try { state.recordStream.getTracks().forEach(function(t){ t.stop(); }); } catch(e){} state.recordStream = null; }
+  }
+  function _hideRecordingUI(){
+    var rec = qs('.ham-chat__recording', app);
+    if (rec) { rec.hidden = true; rec.style.display='none'; rec.classList.remove('is-paused'); }
+    var row = qs('.ham-chat__composeRow', app); if (row) row.classList.remove('is-hidden');
+    var btn = qs('.ham-chat__voice', app); if (btn) { btn.classList.remove('is-recording'); btn.textContent = '🎙'; }
+    if (state.recordTimer) { clearInterval(state.recordTimer); state.recordTimer = null; }
+  }
+  function _setRecState(text, paused){
+    var s = qs('.ham-chat__recordState', app);
+    if (s) s.textContent = text || '';
+    var rec = qs('.ham-chat__recording', app);
+    if (rec) rec.classList.toggle('is-paused', !!paused);
+    var pBtn = qs('.ham-chat__recBtn--pause', app);
+    if (pBtn) { pBtn.textContent = paused ? '▶' : '⏸'; pBtn.title = paused ? 'ادامه' : 'توقف موقت'; pBtn.setAttribute('aria-label', pBtn.title); }
+  }
+
+  async function _startRecording(){
     var fileInput = qs('.ham-chat__fileInput', app);
-    if (!window.MediaRecorder || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
-    if (state.recorder && state.recorder.state === 'recording') {
-      state.recorder.stop();
-      if(state.recordTimer){ clearInterval(state.recordTimer); state.recordTimer = null; }
-      qs('.ham-chat__recording', app).hidden = true; qs('.ham-chat__recording', app).style.display='none';
-      qs('.ham-chat__composeRow', app).classList.remove('is-hidden');
-      btn.classList.remove('is-recording');
-      btn.textContent = '🎙';
-      return;
-    }
     try {
       state.recordStream = await navigator.mediaDevices.getUserMedia({ audio:true });
       state.recordChunks = [];
       state.recorder = new MediaRecorder(state.recordStream);
       state.recorder.ondataavailable = function(e){ if (e.data && e.data.size) state.recordChunks.push(e.data); };
       state.recorder.onstop = function(){
-        var blob = new Blob(state.recordChunks, { type: state.recorder.mimeType || 'audio/webm' });
-        var ext = blob.type.indexOf('ogg') > -1 ? 'ogg' : 'webm';
+        // Only auto-send if user chose to send
+        if (state._recordCancel) {
+          state._recordCancel = false;
+          state.recordChunks = [];
+          _stopRecordStream();
+          _hideRecordingUI();
+          state.recordStartedAt = 0; state._recordElapsed = 0;
+          return;
+        }
+        var blob = new Blob(state.recordChunks, { type: (state.recorder && state.recorder.mimeType) || 'audio/webm' });
+        var ext = (blob.type || '').indexOf('ogg') > -1 ? 'ogg' : 'webm';
         var file = new File([blob], 'voice-message.' + ext, { type: blob.type || 'audio/webm' });
-        try {
-          var dt = new DataTransfer();
-          dt.items.add(file);
-          fileInput.files = dt.files;
-        } catch(err) {}
-        syncFilePreview();
-        if(state.recordTimer){ clearInterval(state.recordTimer); state.recordTimer = null; }
-        state.recordStartedAt = 0;
-        qs('.ham-chat__recording', app).hidden = true; qs('.ham-chat__recording', app).style.display='none';
-        qs('.ham-chat__composeRow', app).classList.remove('is-hidden');
-        if (state.recordStream) { state.recordStream.getTracks().forEach(function(t){ t.stop(); }); state.recordStream = null; }
+        try { var dt = new DataTransfer(); dt.items.add(file); fileInput.files = dt.files; } catch(err) {}
+        _stopRecordStream();
+        _hideRecordingUI();
+        state.recordStartedAt = 0; state._recordElapsed = 0;
+        if (state._recordSendAfterStop) {
+          state._recordSendAfterStop = false;
+          // trigger send
+          var form = qs('.ham-chat__composer', app);
+          if (form) form.requestSubmit ? form.requestSubmit() : form.dispatchEvent(new Event('submit', {cancelable:true,bubbles:true}));
+        } else {
+          syncFilePreview();
+        }
       };
+      state._recordCancel = false;
+      state._recordSendAfterStop = false;
+      state._recordElapsed = 0;
       state.recorder.start();
       state.recordStartedAt = Date.now();
       if(state.recordTimer) clearInterval(state.recordTimer);
-      state.recordTimer = setInterval(function(){ var sec = Math.floor((Date.now()-state.recordStartedAt)/1000); var mm = String(Math.floor(sec/60)).padStart(2,'0'); var ss = String(sec%60).padStart(2,'0'); var rt = qs('.ham-chat__recordTime', app); if(rt) rt.textContent = mm + ':' + ss; }, 250);
-      qs('.ham-chat__recording', app).hidden = false; qs('.ham-chat__recording', app).style.display='flex';
-      qs('.ham-chat__composeRow', app).classList.add('is-hidden');
-      btn.classList.add('is-recording');
-      btn.textContent = '⏹';
-    } catch(err) {}
+      state.recordTimer = setInterval(function(){
+        if (state.recorder && state.recorder.state === 'paused') return;
+        var sec = Math.floor(((Date.now()-state.recordStartedAt) + (state._recordElapsed||0))/1000);
+        var mm = String(Math.floor(sec/60)).padStart(2,'0');
+        var ss = String(sec%60).padStart(2,'0');
+        var rt = qs('.ham-chat__recordTime', app); if(rt) rt.textContent = mm + ':' + ss;
+      }, 250);
+      var rec = qs('.ham-chat__recording', app);
+      if (rec) { rec.hidden = false; rec.style.display='flex'; }
+      var row = qs('.ham-chat__composeRow', app); if (row) row.classList.add('is-hidden');
+      var btn = qs('.ham-chat__voice', app); if (btn) { btn.classList.add('is-recording'); btn.textContent = '●'; }
+      _setRecState('در حال ضبط...', false);
+    } catch(err) {
+      _hideRecordingUI();
+    }
   }
+
+  async function toggleVoiceRecord(){
+    if (!window.MediaRecorder || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert('مرورگر شما از ضبط صدا پشتیبانی نمی‌کند');
+      return;
+    }
+    if (state.recorder && (state.recorder.state === 'recording' || state.recorder.state === 'paused')) {
+      // Already recording: don't toggle (controls are in the recording bar)
+      return;
+    }
+    await _startRecording();
+  }
+
+  function handleRecAction(action){
+    if (!state.recorder) return;
+    if (action === 'pause') {
+      if (state.recorder.state === 'recording') {
+        try { state.recorder.pause(); } catch(e){}
+        state._recordElapsed = (state._recordElapsed||0) + (Date.now() - state.recordStartedAt);
+        _setRecState('متوقف شد', true);
+      } else if (state.recorder.state === 'paused') {
+        try { state.recorder.resume(); } catch(e){}
+        state.recordStartedAt = Date.now();
+        _setRecState('در حال ضبط...', false);
+      }
+    } else if (action === 'cancel') {
+      state._recordCancel = true;
+      try { if (state.recorder.state !== 'inactive') state.recorder.stop(); } catch(e){}
+    } else if (action === 'send') {
+      state._recordSendAfterStop = true;
+      try { if (state.recorder.state !== 'inactive') state.recorder.stop(); } catch(e){}
+    }
+  }
+
 
   function openMenuForBubble(bubble, x, y){
     var menu = qs('.ham-chat__menu', app);
@@ -5461,22 +5545,74 @@
     });
   }
 
+  function buildBubbleHtml(message){
+    var isMe = parseInt(message.sender_id, 10) === myId();
+    var head = state.mode === 'project'
+      ? escapeHtml((message.sender_name || 'کاربر') + (message.recipient_name && message.recipient_name !== 'همه' ? ' → ' + message.recipient_name : ''))
+      : escapeHtml(message.sender_name || 'کاربر');
+    var time = escapeHtml(message.time_fa || '');
+    var norm = normBody(message.content || '');
+    var cls = isMe ? 'ham-chat__bubble--me' : 'ham-chat__bubble--other';
+    var reply = (norm.replyId && norm.replyText) ? '<button type="button" class="ham-chat__replySnippet" data-reply-id="' + escapeHtml(norm.replyId) + '">' + escapeHtml(norm.replyText) + '</button>' : '';
+    var fwdBadge = norm.fwdFrom ? '<div class="ham-chat__fwdBadge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17l5-5-5-5"></path><path d="M20 12H9a4 4 0 0 0-4 4v3"></path></svg>فوروارد از ' + escapeHtml(norm.fwdFrom) + '</div>' : '';
+    return '<div class="ham-chat__bubble ' + cls + '" data-id="' + escapeHtml(String(message.id || '')) + '" data-owned="' + (isMe ? '1' : '0') + '" data-text="' + escapeHtml(norm.text) + '" data-file-url="' + escapeHtml(norm.fileUrl || '') + '"><div class="ham-chat__bubbleHead"><strong>' + head + '</strong><span>' + time + '</span></div>' + fwdBadge + reply + '<div class="ham-chat__bubbleBody">' + norm.html + '</div></div>';
+  }
+
+  function isNearBottom(wrap){
+    if (!wrap) return true;
+    return (wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight) < 120;
+  }
+
   function renderItems(items){
     var wrap = qs('.ham-chat__messages', app);
     items = sortItems(items);
-    if (!items.length) { wrap.innerHTML = '<div class="ham-chat__empty">هنوز پیامی ثبت نشده است.</div>'; syncSelection(); return; }
-    wrap.innerHTML = items.map(function(message){
-      var isMe = parseInt(message.sender_id, 10) === myId();
-      var head = state.mode === 'project'
-        ? escapeHtml((message.sender_name || 'کاربر') + (message.recipient_name && message.recipient_name !== 'همه' ? ' → ' + message.recipient_name : ''))
-        : escapeHtml(message.sender_name || 'کاربر');
-      var time = escapeHtml(message.time_fa || '');
-      var norm = normBody(message.content || '');
-      var cls = isMe ? 'ham-chat__bubble--me' : 'ham-chat__bubble--other';
-      var reply = (norm.replyId && norm.replyText) ? '<button type="button" class="ham-chat__replySnippet" data-reply-id="' + escapeHtml(norm.replyId) + '">' + escapeHtml(norm.replyText) + '</button>' : '';
-      return '<div class="ham-chat__bubble ' + cls + '" data-id="' + escapeHtml(String(message.id || '')) + '" data-owned="' + (isMe ? '1' : '0') + '" data-text="' + escapeHtml(norm.text) + '" data-file-url="' + escapeHtml(norm.fileUrl || '') + '"><div class="ham-chat__bubbleHead"><strong>' + head + '</strong><span>' + time + '</span></div>' + reply + '<div class="ham-chat__bubbleBody">' + norm.html + '</div></div>';
-    }).join('');
-    wrap.scrollTop = wrap.scrollHeight;
+    if (!items.length) {
+      wrap.innerHTML = '<div class="ham-chat__empty">هنوز پیامی ثبت نشده است.</div>';
+      app._renderedIds = new Set();
+      syncSelection();
+      return;
+    }
+    var existing = app._renderedIds instanceof Set ? app._renderedIds : null;
+    var empty = wrap.querySelector('.ham-chat__empty,.ham-chat__loading');
+    if (empty) { wrap.innerHTML = ''; existing = null; }
+    if (!existing) {
+      // Full render (first time / cleared)
+      app._renderedIds = new Set();
+      var html = '';
+      items.forEach(function(m){
+        html += buildBubbleHtml(m);
+        app._renderedIds.add(String(m.id || ''));
+      });
+      wrap.innerHTML = html;
+      requestAnimationFrame(function(){ wrap.scrollTop = wrap.scrollHeight; enhanceAudioPlayers(wrap); });
+      syncSelection();
+      return;
+    }
+    var stickToBottom = isNearBottom(wrap);
+    var appended = false;
+    var seenNow = new Set();
+    var lastNode = null;
+    items.forEach(function(m){
+      var id = String(m.id || '');
+      seenNow.add(id);
+      if (existing.has(id)) return;
+      existing.add(id);
+      var temp = document.createElement('div');
+      temp.innerHTML = buildBubbleHtml(m);
+      var node = temp.firstChild;
+      wrap.appendChild(node);
+      lastNode = node;
+      appended = true;
+    });
+    // Remove bubbles that were deleted server-side
+    Array.prototype.slice.call(wrap.querySelectorAll('.ham-chat__bubble')).forEach(function(el){
+      var id = el.getAttribute('data-id') || '';
+      if (id && !seenNow.has(id)) { existing.delete(id); el.parentNode && el.parentNode.removeChild(el); }
+    });
+    if (appended) {
+      enhanceAudioPlayers(wrap);
+      if (stickToBottom) requestAnimationFrame(function(){ wrap.scrollTop = wrap.scrollHeight; });
+    }
     syncSelection();
   }
 
@@ -5610,50 +5746,108 @@
   }
 
 
-  function buildForwardTargets(){
+  function buildExpertForwardTargets(){
     var targets = [];
-    qsa('.cptt-expertCard[data-project-id]').forEach(function(card){
-      var titleEl = card.querySelector('h3');
-      if (!titleEl) return;
-      var clone = titleEl.cloneNode(true); qsa('.cptt-project-code', clone).forEach(function(el){ el.remove(); });
-      targets.push({ kind:'project', id:card.getAttribute('data-project-id'), title:clone.textContent.trim() });
+    var seen = {};
+    // 1) Live directory items (with avatar)
+    Array.prototype.slice.call(document.querySelectorAll('.cptt-expert-list-item[data-expert-id]')).forEach(function(item){
+      var id = item.getAttribute('data-expert-id'); if (!id || seen[id]) return; seen[id] = 1;
+      // skip self
+      if (parseInt(id,10) === myId()) return;
+      var nameEl = item.querySelector('span');
+      var name = nameEl ? nameEl.textContent.trim() : ('کارشناس #' + id);
+      var imgEl = item.querySelector('img');
+      var avatar = imgEl ? imgEl.getAttribute('src') : '';
+      if (!avatar) {
+        avatar = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 60 60"><rect width="60" height="60" rx="30" fill="%234f46e5"/><text x="30" y="38" text-anchor="middle" font-size="24" font-weight="900" fill="white" font-family="sans-serif">' + encodeURIComponent((name||'?').charAt(0)) + '</text></svg>';
+      }
+      var hint = '';
+      var sub = item.querySelector('small,.cptt-expert-list-item__role,.cptt-expert-list-item__sub');
+      if (sub) hint = sub.textContent.trim();
+      targets.push({ id:id, name:name, avatar:avatar, hint:hint });
     });
-    var added = {};
-    qsa('.cptt-expert-list-item[data-expert-id]').forEach(function(item){
-      var id = item.getAttribute('data-expert-id'); if (!id || added[id]) return; added[id]=1;
-      var label = item.querySelector('span');
-      targets.push({ kind:'direct', id:id, title:(label ? label.textContent.trim() : ('کارشناس #' + id)) });
-    });
+    // 2) Fallback: experts from project cards if directory not present
+    if (!targets.length) {
+      Array.prototype.slice.call(document.querySelectorAll('.cptt-expertCard select[name="recipient_id"] option')).forEach(function(opt){
+        var id = String(opt.value || '0'); if (id === '0' || seen[id]) return; seen[id] = 1;
+        if (parseInt(id,10) === myId()) return;
+        var name = (opt.textContent || '').trim();
+        targets.push({ id:id, name:name, avatar:'', hint:'' });
+      });
+    }
     return targets;
   }
+
   function closeForwardSheet(){ var sheet = qs('.ham-chat__forward', app); if (sheet) sheet.hidden = true; }
-  function openForwardSheet(texts){
-    var sheet = qs('.ham-chat__forward', app), list = qs('.ham-chat__forwardList', app); if (!sheet || !list) return;
-    app._forwardPayload = texts || '';
-    var targets = buildForwardTargets();
-    list.innerHTML = targets.map(function(t){ return '<button type="button" class="ham-chat__forwardItem" data-kind="' + t.kind + '" data-id="' + escapeHtml(String(t.id)) + '"><span>' + escapeHtml(t.title) + '</span><small>' + (t.kind === 'project' ? 'چت پروژه' : 'چت مستقیم') + '</small></button>'; }).join('');
-    sheet.hidden = false;
-    list.onclick = function(e){ var item = e.target.closest('.ham-chat__forwardItem'); if (!item) return; sendForwardPayload(item.getAttribute('data-kind'), item.getAttribute('data-id'), app._forwardPayload || ''); };
-  }
-  async function sendForwardPayload(kind, id, payload){
-    if (!payload) return;
-    var fd = new FormData();
-    if (kind === 'project') {
-      fd.append('action', 'cptt_expert_send_message');
-      fd.append('nonce', nonce());
-      fd.append('project_id', String(id || '0'));
-      fd.append('recipient_id', '0');
-      fd.append('content', '↪️ فوروارد:\n' + payload);
-      await fetch(ajax(), { method:'POST', credentials:'same-origin', body:fd });
-    } else {
-      fd.append('action', 'cptt_expert_send_direct_message');
-      fd.append('nonce', nonce());
-      fd.append('receiver_id', String(id || '0'));
-      fd.append('message', '↪️ فوروارد:\n' + payload);
-      await fetch(ajax(), { method:'POST', credentials:'same-origin', body:fd });
+
+  function _renderForwardList(targets, q){
+    var list = qs('.ham-chat__forwardList', app); if (!list) return;
+    q = (q || '').toLowerCase().trim();
+    var filtered = q ? targets.filter(function(t){ return (t.name || '').toLowerCase().indexOf(q) !== -1; }) : targets;
+    if (!filtered.length) {
+      list.innerHTML = '<div class="ham-chat__forwardEmpty">کارشناسی برای فوروارد یافت نشد.</div>';
+      return;
     }
-    closeForwardSheet();
+    list.innerHTML = filtered.map(function(t){
+      var av = t.avatar ? '<img src="' + escapeHtml(t.avatar) + '" alt="">' : '<img alt="">';
+      var meta = '<div class="ham-chat__fwdMeta"><span class="ham-chat__fwdName">' + escapeHtml(t.name) + '</span>' + (t.hint ? '<span class="ham-chat__fwdHint">' + escapeHtml(t.hint) + '</span>' : '') + '</div>';
+      return '<button type="button" class="ham-chat__forwardItem" data-id="' + escapeHtml(String(t.id)) + '">' + av + meta + '</button>';
+    }).join('');
   }
+
+  function _showForwardToast(text){
+    var box = qs('.ham-chat__forwardBox', app); if (!box) return;
+    var t = document.createElement('div'); t.className = 'ham-chat__forwardToast'; t.textContent = text || 'پیام ارسال شد';
+    box.appendChild(t);
+    setTimeout(function(){ if (t.parentNode) t.parentNode.removeChild(t); }, 2400);
+  }
+
+  function openForwardSheet(texts){
+    var sheet = qs('.ham-chat__forward', app); if (!sheet) return;
+    app._forwardPayload = texts || '';
+    var targets = buildExpertForwardTargets();
+    app._forwardTargets = targets;
+    _renderForwardList(targets, '');
+    var search = qs('.ham-chat__forwardSearchInput', app);
+    if (search) {
+      search.value = '';
+      search.oninput = function(){ _renderForwardList(app._forwardTargets || [], this.value); };
+    }
+    sheet.hidden = false;
+    var list = qs('.ham-chat__forwardList', app);
+    if (list) {
+      list.onclick = function(e){
+        var item = e.target.closest('.ham-chat__forwardItem');
+        if (!item || item.classList.contains('is-sending') || item.classList.contains('is-sent')) return;
+        item.classList.add('is-sending');
+        sendForwardPayload(item.getAttribute('data-id'), app._forwardPayload || '').then(function(ok){
+          item.classList.remove('is-sending');
+          if (ok) {
+            item.classList.add('is-sent');
+            var name = (item.querySelector('.ham-chat__fwdName') || {}).textContent || 'کارشناس';
+            _showForwardToast('پیام به ' + name + ' ارسال شد ✓');
+          }
+        });
+      };
+    }
+  }
+
+  async function sendForwardPayload(id, payload){
+    if (!payload || !id || String(id) === '0') return false;
+    var senderName = (window.CPTT_EXPERT && CPTT_EXPERT.wpUserName) ? CPTT_EXPERT.wpUserName : 'کاربر';
+    var marked = '[[FWD:' + senderName + ']] ' + payload;
+    var fd = new FormData();
+    fd.append('action', 'cptt_expert_send_direct_message');
+    fd.append('nonce', nonce());
+    fd.append('receiver_id', String(id || '0'));
+    fd.append('message', marked);
+    try {
+      var res = await fetch(ajax(), { method:'POST', credentials:'same-origin', body:fd });
+      var json = await res.json();
+      return !!(json && json.success);
+    } catch (e) { return false; }
+  }
+
   function openProjectChat(card){
     ensureApp();
     state.mode = 'project';
@@ -5700,6 +5894,122 @@
     await refreshHeaderPresence().catch(function(){});
     await fetchDirectMessages().catch(function(){});
     startPolling();
+  }
+
+  /* ===== Custom Audio Player (Telegram-like) ===== */
+  function _fmtTime(s){
+    if (!isFinite(s) || s < 0) s = 0;
+    var m = Math.floor(s/60), ss = Math.floor(s%60);
+    return String(m).padStart(2,'0') + ':' + String(ss).padStart(2,'0');
+  }
+  function _buildAudioPlayer(audio){
+    var url = audio.getAttribute('src') || '';
+    var wrap = document.createElement('div');
+    wrap.className = 'ham-cap';
+    var BARS = 32;
+    var barsHtml = '';
+    // pseudo-random but stable heights based on URL hash
+    var seed = 0; for (var i=0;i<url.length;i++) seed = (seed*31 + url.charCodeAt(i)) >>> 0;
+    function rnd(){ seed = (seed * 1664525 + 1013904223) >>> 0; return (seed >>> 8) / 16777216; }
+    var heights = [];
+    for (var j=0;j<BARS;j++){
+      var h = 30 + Math.floor(rnd() * 70); // 30%..100%
+      heights.push(h);
+      barsHtml += '<span class="ham-cap__bar" style="height:' + h + '%"></span>';
+    }
+    wrap.innerHTML = ''
+      + '<button type="button" class="ham-cap__btn" aria-label="پخش">'
+      +   '<svg class="ham-cap__icoPlay" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>'
+      +   '<svg class="ham-cap__icoPause" viewBox="0 0 24 24" fill="currentColor" style="display:none"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>'
+      + '</button>'
+      + '<div class="ham-cap__body">'
+      +   '<div class="ham-cap__wave" role="slider" aria-label="موقعیت پخش">' + barsHtml + '<span class="ham-cap__head"></span></div>'
+      +   '<div class="ham-cap__meta"><span class="ham-cap__cur">00:00</span><span class="ham-cap__dur">--:--</span></div>'
+      + '</div>'
+      + '<button type="button" class="ham-cap__speed" aria-label="سرعت پخش">1x</button>';
+    var btn = wrap.querySelector('.ham-cap__btn');
+    var icoP = wrap.querySelector('.ham-cap__icoPlay');
+    var icoPa = wrap.querySelector('.ham-cap__icoPause');
+    var wave = wrap.querySelector('.ham-cap__wave');
+    var head = wrap.querySelector('.ham-cap__head');
+    var curEl = wrap.querySelector('.ham-cap__cur');
+    var durEl = wrap.querySelector('.ham-cap__dur');
+    var spdBtn = wrap.querySelector('.ham-cap__speed');
+    var bars = Array.prototype.slice.call(wrap.querySelectorAll('.ham-cap__bar'));
+    var speeds = [1, 1.5, 2, 0.75];
+    var spdIdx = 0;
+
+    function updateUI(){
+      var d = audio.duration; var c = audio.currentTime;
+      if (isFinite(d) && d > 0) {
+        wrap.classList.add('is-loaded');
+        durEl.textContent = _fmtTime(d);
+        var pct = Math.max(0, Math.min(1, c/d));
+        var activeCount = Math.round(pct * bars.length);
+        bars.forEach(function(b, i){ b.classList.toggle('is-active', i < activeCount); });
+        var waveRect = wave.getBoundingClientRect();
+        head.style.left = (pct * waveRect.width) + 'px';
+      }
+      curEl.textContent = _fmtTime(c);
+    }
+    function setPlayingUI(playing){
+      icoP.style.display = playing ? 'none' : '';
+      icoPa.style.display = playing ? '' : 'none';
+      btn.setAttribute('aria-label', playing ? 'توقف' : 'پخش');
+    }
+    btn.addEventListener('click', function(e){
+      e.preventDefault();
+      // Pause other players first
+      Array.prototype.slice.call(document.querySelectorAll('audio.ham-chat__audio')).forEach(function(a){ if (a !== audio) try{ a.pause(); }catch(e){} });
+      if (audio.paused) audio.play().catch(function(){}); else audio.pause();
+    });
+    audio.addEventListener('play', function(){ setPlayingUI(true); });
+    audio.addEventListener('pause', function(){ setPlayingUI(false); });
+    audio.addEventListener('ended', function(){ setPlayingUI(false); audio.currentTime = 0; updateUI(); });
+    audio.addEventListener('loadedmetadata', updateUI);
+    audio.addEventListener('timeupdate', updateUI);
+    audio.addEventListener('durationchange', updateUI);
+
+    function seekFromEvent(e){
+      var rect = wave.getBoundingClientRect();
+      var x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+      var pct = Math.max(0, Math.min(1, x / rect.width));
+      if (isFinite(audio.duration) && audio.duration > 0) {
+        audio.currentTime = audio.duration * pct;
+        updateUI();
+      }
+    }
+    var dragging = false;
+    wave.addEventListener('mousedown', function(e){ dragging = true; seekFromEvent(e); });
+    document.addEventListener('mousemove', function(e){ if (dragging) seekFromEvent(e); });
+    document.addEventListener('mouseup', function(){ dragging = false; });
+    wave.addEventListener('touchstart', function(e){ dragging = true; seekFromEvent(e); }, {passive:true});
+    wave.addEventListener('touchmove', function(e){ if (dragging) seekFromEvent(e); }, {passive:true});
+    wave.addEventListener('touchend', function(){ dragging = false; });
+
+    spdBtn.addEventListener('click', function(e){
+      e.preventDefault();
+      spdIdx = (spdIdx + 1) % speeds.length;
+      audio.playbackRate = speeds[spdIdx];
+      spdBtn.textContent = speeds[spdIdx] + 'x';
+    });
+
+    // Force load metadata
+    if (audio.readyState >= 1) updateUI();
+    else { try { audio.load(); } catch(e){} }
+
+    return wrap;
+  }
+  function enhanceAudioPlayers(root){
+    if (!root) return;
+    Array.prototype.slice.call(root.querySelectorAll('.ham-chat__audioWrap')).forEach(function(w){
+      if (w.dataset.capReady === '1') return;
+      var audio = w.querySelector('audio.ham-chat__audio');
+      if (!audio) return;
+      w.dataset.capReady = '1';
+      var player = _buildAudioPlayer(audio);
+      w.appendChild(player);
+    });
   }
 
   function interceptOldChatButtons(){

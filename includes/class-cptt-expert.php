@@ -140,6 +140,16 @@ class CPTT_Expert {
 			'publicHubUrl' => self::public_hub_url(),
 			'dashboardLoginUrl' => wp_login_url(self::dashboard_url()),
 			'wpUserId' => get_current_user_id(),
+			'wpUserName' => (function(){
+				if (!is_user_logged_in()) return '';
+				$u = wp_get_current_user();
+				if (!$u || !$u->ID) return '';
+				$name = trim((string)$u->display_name);
+				if ($name === '') $name = trim(trim((string)$u->first_name) . ' ' . trim((string)$u->last_name));
+				if ($name === '') $name = (string)$u->user_login;
+				return $name;
+			})(),
+			'wpUserAvatar' => is_user_logged_in() ? (string)get_avatar_url(get_current_user_id(), ['size'=>96]) : '',
 			'userTheme' => is_user_logged_in() ? (string)get_user_meta(get_current_user_id(), 'cptt_expert_dashboard_theme', true) : '',
 			'texts' => [
 				'saving' => 'در حال ذخیره...',
