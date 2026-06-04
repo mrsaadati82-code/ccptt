@@ -623,8 +623,10 @@ class CPTT_Admin {
 				<table class="cptt-acct-table" id="cptt-acct-table">
 					<thead>
 						<tr>
-							<th style="width:28%">پروژه</th>
+							<th style="width:24%">پروژه</th>
 							<th>مشتری</th>
+							<th>شماره موبایل</th>
+							<th>تاریخ ایجاد</th>
 							<th>پیشرفت</th>
 							<th>وضعیت</th>
 							<th style="text-align:left">کل هزینه</th>
@@ -651,6 +653,8 @@ class CPTT_Admin {
 								<div class="cptt-acct-meta"><?php echo esc_html($r['experts']); ?></div>
 							</td>
 							<td><?php echo esc_html($r['client']); ?></td>
+							<td><?php echo esc_html($r['client_phone'] ?: '—'); ?></td>
+							<td><?php echo esc_html($r['created_fa'] ?: '—'); ?></td>
 							<td>
 								<div class="cptt-acct-minibar"><span style="width:<?php echo (int)$prog['percent']; ?>%;"></span></div>
 								<small><?php echo (int)$prog['percent']; ?>%</small>
@@ -672,7 +676,7 @@ class CPTT_Admin {
 						</tr>
 					<?php endforeach; ?>
 					<?php if (empty($rows)): ?>
-					<tr><td colspan="10" style="text-align:center; padding:28px;">پروژه‌ای یافت نشد.</td></tr>
+					<tr><td colspan="12" style="text-align:center; padding:28px;">پروژه‌ای یافت نشد.</td></tr>
 					<?php endif; ?>
 					</tbody>
 				</table>

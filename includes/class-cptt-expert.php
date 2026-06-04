@@ -63,6 +63,9 @@ class CPTT_Expert {
 		add_action('wp_ajax_cptt_expert_send_direct_message', [$this, 'ajax_send_direct_message']);
 		add_action('wp_ajax_cptt_expert_fetch_direct_messages', [$this, 'ajax_fetch_direct_messages']);
 		add_action('wp_ajax_cptt_expert_get_expert_info', [$this, 'ajax_get_expert_info']);
+		add_action('wp_ajax_cptt_expert_ping_presence', [$this, 'ajax_ping_presence']);
+		add_action('wp_ajax_cptt_expert_delete_project_message', [$this, 'ajax_delete_project_message']);
+		add_action('wp_ajax_cptt_expert_delete_direct_message', [$this, 'ajax_delete_direct_message']);
 
 		add_action('wp_ajax_cptt_expert_delete_project', [$this, 'ajax_delete_project']);
 		add_action('wp_ajax_cptt_expert_delete_step', [$this, 'ajax_delete_step']);
@@ -98,6 +101,8 @@ class CPTT_Expert {
 	public function query_vars($vars) {
 		$vars[] = self::QUERY_VAR;
 		$vars[] = self::PUBLIC_QUERY_VAR;
+		$vars[] = 'cptt_pwa_manifest';
+		$vars[] = 'cptt_pwa_sw';
 		return $vars;
 	}
 
@@ -186,6 +191,14 @@ class CPTT_Expert {
 	}
 
 	public function maybe_render_virtual_dashboard() {
+		if (get_query_var('cptt_pwa_manifest')) {
+			$this->render_pwa_manifest();
+			exit;
+		}
+		if (get_query_var('cptt_pwa_sw')) {
+			$this->render_pwa_service_worker();
+			exit;
+		}
 		if (get_query_var(self::PUBLIC_QUERY_VAR)) {
 			$this->enqueue_assets();
 			status_header(200);
@@ -1801,7 +1814,7 @@ class CPTT_Expert {
 		return $map[$status] ?? $map['todo'];
 	}
 
-	private function build_public_project_payload($project_id, $full_details = false) {
+	private function build_public_project_payload($project_id, $full_details = false, $limited_public = false) {
 		$steps = get_post_meta($project_id, '_cptt_steps', true);
 		if (!is_array($steps)) $steps = [];
 		$items = [];
@@ -1878,6 +1891,14 @@ class CPTT_Expert {
 			];
 		}
 		$card = $this->project_card_data($project_id);
+		$customer_id = (int)($card['customer_id'] ?? 0);
+		$customer_obj = $customer_id ? get_user_by('id', $customer_id) : null;
+		$customer_phone = '';
+		if ($customer_id) {
+			$customer_phone = (string) get_user_meta($customer_id, 'billing_phone', true);
+			if ($customer_phone === '') $customer_phone = (string) get_user_meta($customer_id, 'cptt_phone', true);
+			if ($customer_phone === '') $customer_phone = (string) get_user_meta($customer_id, 'mobile', true);
+		}
 		$hub_notes = [];
 		if ($full_details) {
 			foreach ($this->get_recent_notes($project_id, 20) as $n) {
@@ -1897,7 +1918,9 @@ class CPTT_Expert {
 			'start_fa' => $this->project_start_fa($project_id),
 			'last_update' => (string) ($card['last_update'] ?? ''),
 			'deadline' => (string) ($card['deadline'] ?? ''),
-			'customer' => $full_details ? (string) ($card['customer'] ?? '') : '',
+			'customer' => ($full_details && !$limited_public) ? (string) ($card['customer'] ?? '') : '',
+			'customer_phone' => ($full_details && !$limited_public) ? (string)$customer_phone : '',
+			'customer_email' => ($full_details && !$limited_public && $customer_obj) ? (string)$customer_obj->user_email : '',
 			'product' => (string) ($card['product'] ?? ''),
 			'categories' => isset($card['term_names']) && is_array($card['term_names']) ? $card['term_names'] : [],
 			'experts' => isset($card['experts']) && is_array($card['experts']) ? $card['experts'] : [],
@@ -1919,7 +1942,7 @@ class CPTT_Expert {
 		];
 	}
 
-	private function get_hub_projects($allow_projects, $full_details = false) {
+	private function get_hub_projects($allow_projects, $full_details = false, $limited_public = false) {
 		if (!$allow_projects) return [];
 		$posts = get_posts([
 			'post_type' => 'cptt_project',
@@ -1939,7 +1962,7 @@ class CPTT_Expert {
 			elseif ($deadline_ts < $now) $deadline_state = 'overdue';
 			elseif ($deadline_ts <= $week) $deadline_state = 'soon';
 			else $deadline_state = 'future';
-			$payload = $this->build_public_project_payload($post->ID, $full_details);
+			$payload = $this->build_public_project_payload($post->ID, $full_details, $limited_public);
 			$mini_steps = [];
 			foreach (array_slice($payload['steps'], 0, 3) as $step) {
 				$mini_steps[] = ['title' => $step['title'], 'status' => $step['status']];
@@ -2061,7 +2084,7 @@ class CPTT_Expert {
 			$data = $this->get_expert_profile_data($expert->ID);
 			if ($data) $experts[] = $data;
 		}
-		$projects = $this->get_hub_projects($allow_projects, $full_details);
+		$projects = $this->get_hub_projects($allow_projects, $full_details, $limited_public);
 		$expert_map = []; $product_map = []; $cat_map = [];
 		foreach ($projects as $project) {
 			foreach ((array) $project['expert_ids'] as $id) {
@@ -2212,6 +2235,7 @@ class CPTT_Expert {
 			$sender = !empty($message['sender_id']) ? get_user_by('id', (int)$message['sender_id']) : null;
 			$recipient = !empty($message['recipient_id']) ? get_user_by('id', (int)$message['recipient_id']) : null;
 			$out[] = [
+				'id' => (string)($message['id'] ?? ('m_' . md5(wp_json_encode($message)))),
 				'sender_id' => (int)($message['sender_id'] ?? 0),
 				'recipient_id' => (int)($message['recipient_id'] ?? 0),
 				'sender_name' => $sender ? $sender->display_name : 'کاربر',
@@ -2271,7 +2295,7 @@ class CPTT_Expert {
 
 		$messages = get_post_meta($project_id, '_cptt_expert_messages', true);
 		if (!is_array($messages)) $messages = [];
-		$messages[] = ['sender_id' => get_current_user_id(), 'recipient_id' => $recipient_id, 'time' => (int)current_time('timestamp', true), 'content' => $content];
+		$messages[] = ['id' => (function_exists('wp_generate_uuid4') ? wp_generate_uuid4() : ('m_' . wp_rand(1000,9999))), 'sender_id' => get_current_user_id(), 'recipient_id' => $recipient_id, 'time' => (int)current_time('timestamp', true), 'content' => $content];
 		update_post_meta($project_id, '_cptt_expert_messages', $messages);
 		$sender = get_user_by('id', get_current_user_id());
 		$this->notify_project_experts($project_id, get_current_user_id(), 'project_chat', ($sender ? $sender->display_name : 'کارشناس') . ' پیامی در چت پروژه ارسال کرد.', self::dashboard_url() . "#project-" . $project_id . '#chat-' . $project_id);
@@ -2323,6 +2347,30 @@ class CPTT_Expert {
 		wp_send_json_success($this->get_direct_messages($receiver_id));
 	}
 	
+	private function get_presence_payload($user_id) {
+		$user_id = (int)$user_id;
+		$last_seen = (int)get_user_meta($user_id, 'cptt_expert_last_seen', true);
+		$now = (int) current_time('timestamp', true);
+		$online = $last_seen && ($now - $last_seen) <= 150;
+		$last_seen_fa = $last_seen && class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime($last_seen) : '';
+		return [
+			'online' => $online ? 1 : 0,
+			'last_seen' => $last_seen,
+			'last_seen_fa' => $last_seen_fa,
+			'text' => $online ? 'آنلاین' : ($last_seen_fa ? ('آخرین بازدید: ' . $last_seen_fa) : 'آخرین بازدید نامشخص'),
+		];
+	}
+
+	public function ajax_ping_presence() {
+		if (!is_user_logged_in()) wp_send_json_error('login_required', 401);
+		check_ajax_referer('cptt_expert_nonce', 'nonce');
+		$uid = get_current_user_id();
+		$now = (int) current_time('timestamp', true);
+		update_user_meta($uid, 'cptt_expert_last_seen', $now);
+		update_user_meta($uid, 'cptt_expert_last_seen_fa', class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime($now) : date('Y-m-d H:i', $now));
+		wp_send_json_success($this->get_presence_payload($uid));
+	}
+
 	public function ajax_get_expert_info() {
 		if (!is_user_logged_in()) wp_send_json_error('login_required', 401);
 		check_ajax_referer('cptt_expert_nonce', 'nonce');
@@ -2355,10 +2403,13 @@ class CPTT_Expert {
 			if ($settled) $completed++; else $in_progress++;
 		}
 		
+		$presence = $this->get_presence_payload($expert_id);
 		wp_send_json_success([
 			'name' => $user->display_name,
 			'avatar' => $avatar,
-			'stats' => "پروژه های مشترک: {$total_shared} (در حال انجام: {$in_progress} ، تکمیل شده: {$completed})"
+			'stats' => "پروژه های مشترک: {$total_shared} (در حال انجام: {$in_progress} ، تکمیل شده: {$completed})",
+			'presence' => $presence,
+			'presence_text' => $presence['text'],
 		]);
 	}
 
@@ -2379,6 +2430,7 @@ class CPTT_Expert {
 " . '<a href="' . esc_url($row->file_url) . '" target="_blank" class="cptt-chat-file-link">دانلود فایل</a>';
 			}
 			$messages[] = [
+				'id' => (int)$row->id,
 				'sender_id' => $row->sender_id,
 				'content' => $msg_content,
 				'time_fa' => CPTT_Core::jalali_datetime(strtotime(get_gmt_from_date($row->created_at))),
@@ -2447,7 +2499,47 @@ class CPTT_Expert {
 		$project_id = isset($_POST['project_id']) ? absint($_POST['project_id']) : 0;
 		if (!$project_id || get_post_type($project_id) !== 'cptt_project') wp_send_json_error('invalid_project', 400);
 		if (!$this->can_manage_project($project_id, get_current_user_id())) wp_send_json_error('no_access', 403);
-		wp_send_json_success(['messages' => $this->get_recent_messages($project_id, 8)]);
+		wp_send_json_success(['messages' => $this->get_recent_messages($project_id, 50)]);
+	}
+
+	public function ajax_delete_project_message() {
+		if (!is_user_logged_in()) wp_send_json_error('login_required', 401);
+		check_ajax_referer('cptt_expert_nonce', 'nonce');
+		$project_id = isset($_POST['project_id']) ? absint($_POST['project_id']) : 0;
+		$message_id = isset($_POST['message_id']) ? sanitize_text_field((string)$_POST['message_id']) : '';
+		if (!$project_id || $message_id === '' || get_post_type($project_id) !== 'cptt_project') wp_send_json_error('invalid', 400);
+		if (!$this->can_manage_project($project_id, get_current_user_id())) wp_send_json_error('no_access', 403);
+		$messages = get_post_meta($project_id, '_cptt_expert_messages', true);
+		if (!is_array($messages)) $messages = [];
+		$new_messages = [];
+		$deleted = false;
+		foreach ($messages as $m) {
+			$mid = (string)($m['id'] ?? '');
+			if ($mid === $message_id) {
+				if ((int)($m['sender_id'] ?? 0) !== (int)get_current_user_id() && !current_user_can('manage_options')) wp_send_json_error('forbidden', 403);
+				$deleted = true;
+				continue;
+			}
+			$new_messages[] = $m;
+		}
+		if (!$deleted) wp_send_json_error('not_found', 404);
+		update_post_meta($project_id, '_cptt_expert_messages', $new_messages);
+		wp_send_json_success(['messages' => $this->get_recent_messages($project_id, 50)]);
+	}
+
+	public function ajax_delete_direct_message() {
+		if (!is_user_logged_in()) wp_send_json_error('login_required', 401);
+		check_ajax_referer('cptt_expert_nonce', 'nonce');
+		global $wpdb;
+		$message_id = isset($_POST['message_id']) ? absint($_POST['message_id']) : 0;
+		if (!$message_id) wp_send_json_error('invalid', 400);
+		$table = $wpdb->prefix . 'cptt_expert_chats';
+		$row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id = %d", $message_id));
+		if (!$row) wp_send_json_error('not_found', 404);
+		if ((int)$row->sender_id !== (int)get_current_user_id() && !current_user_can('manage_options')) wp_send_json_error('forbidden', 403);
+		$wpdb->delete($table, ['id' => $message_id], ['%d']);
+		$other_id = ((int)$row->sender_id === (int)get_current_user_id()) ? (int)$row->receiver_id : (int)$row->sender_id;
+		wp_send_json_success($this->get_direct_messages($other_id));
 	}
 
 	private function prepare_template_steps_for_project($steps) {
@@ -4201,14 +4293,178 @@ class CPTT_Expert {
 	}
 
 
+	private function pwa_manifest_url() {
+		return add_query_arg('cptt_pwa_manifest', 1, home_url('/'));
+	}
+
+	private function pwa_service_worker_url() {
+		return add_query_arg('cptt_pwa_sw', 1, home_url('/'));
+	}
+
+	private function pwa_start_url() {
+		return add_query_arg([
+			self::QUERY_VAR => 1,
+			'pwa' => 1,
+			'source' => 'pwa',
+		], home_url('/'));
+	}
+
+	public function render_pwa_manifest() {
+		status_header(200);
+		header('Content-Type: application/manifest+json; charset=utf-8');
+		header('Cache-Control: no-cache, must-revalidate, max-age=0');
+		$manifest = [
+			'id' => $this->pwa_start_url(),
+			'name' => 'هماهنگ - اپلیکیشن مدیریت پروژه',
+			'short_name' => 'هماهنگ',
+			'description' => 'اپلیکیشن داشبورد کارشناس هماهنگ',
+			'dir' => 'rtl',
+			'lang' => 'fa-IR',
+			'display' => 'standalone',
+			'display_override' => ['standalone', 'minimal-ui'],
+			'orientation' => 'portrait-primary',
+			'start_url' => $this->pwa_start_url(),
+			'scope' => home_url('/'),
+			'background_color' => '#f8fafc',
+			'theme_color' => '#4f46e5',
+			'prefer_related_applications' => false,
+			'icons' => [
+				['src' => CPTT_URL . 'assets/images/icon-192.png', 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any maskable'],
+				['src' => CPTT_URL . 'assets/images/icon-512.png', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any maskable'],
+			],
+		];
+		echo wp_json_encode($manifest, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+	}
+
+	public function render_pwa_service_worker() {
+		status_header(200);
+		header('Content-Type: application/javascript; charset=utf-8');
+		header('Service-Worker-Allowed: /');
+		header('Cache-Control: no-cache, must-revalidate, max-age=0');
+		$cache = 'hamahang-pwa-' . preg_replace('/[^a-zA-Z0-9._-]/', '-', CPTT_VERSION);
+		$precache = [
+			$this->pwa_start_url(),
+			add_query_arg(self::QUERY_VAR, 1, home_url('/')),
+			add_query_arg(self::PUBLIC_QUERY_VAR, 1, home_url('/')),
+			CPTT_URL . 'assets/css/expert.css',
+			CPTT_URL . 'assets/css/frontend.css',
+			CPTT_URL . 'assets/js/expert.js',
+			CPTT_URL . 'assets/js/frontend.js',
+			CPTT_URL . 'assets/images/icon-192.png',
+			CPTT_URL . 'assets/images/icon-512.png',
+			$this->pwa_manifest_url(),
+		];
+		?>
+const HAM_CACHE = <?php echo wp_json_encode($cache); ?>;
+const PRECACHE_URLS = <?php echo wp_json_encode(array_values(array_unique($precache)), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+const DASHBOARD_URL = <?php echo wp_json_encode(add_query_arg(self::QUERY_VAR, 1, home_url('/'))); ?>;
+const DASH_QUERY = <?php echo wp_json_encode(self::QUERY_VAR . '=1'); ?>;
+const HUB_QUERY = <?php echo wp_json_encode(self::PUBLIC_QUERY_VAR . '=1'); ?>;
+
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(HAM_CACHE).then(cache => cache.addAll(PRECACHE_URLS)).catch(() => null)
+  );
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(keys => Promise.all(keys.map(key => key !== HAM_CACHE ? caches.delete(key) : Promise.resolve())))
+      .then(() => self.clients.claim())
+  );
+});
+
+async function networkThenCache(request) {
+  const cache = await caches.open(HAM_CACHE);
+  try {
+    const response = await fetch(request);
+    if (response && response.ok && request.method === 'GET') {
+      cache.put(request, response.clone()).catch(() => null);
+    }
+    return response;
+  } catch (error) {
+    const cached = await cache.match(request, { ignoreSearch: false });
+    if (cached) return cached;
+    if (request.mode === 'navigate') {
+      const dashboard = await cache.match(DASHBOARD_URL, { ignoreSearch: true });
+      if (dashboard) return dashboard;
+      return new Response('<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>هماهنگ</title><body style="margin:0;font-family:sans-serif;background:#0f172a;color:#fff;display:grid;place-items:center;min-height:100vh"><div style="text-align:center;padding:24px"><h2 style="margin:0 0 10px">آفلاین</h2><p style="margin:0;opacity:.8">نسخه ذخیره‌شده‌ای برای این صفحه پیدا نشد.</p></div></body></html>', { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+    }
+    throw error;
+  }
+}
+
+self.addEventListener('fetch', event => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+  const url = new URL(request.url);
+  if (url.pathname.includes('/wp-admin/admin-ajax.php')) return;
+
+  const isSameOrigin = url.origin === self.location.origin;
+  const isStatic = isSameOrigin && /(\/assets\/|\.(?:css|js|png|jpg|jpeg|webp|svg|woff2?|ttf))(\?|$)/i.test(url.pathname + url.search);
+  const isNavigate = request.mode === 'navigate';
+
+  if (isNavigate) {
+    event.respondWith(networkThenCache(request));
+    return;
+  }
+
+  if (isStatic) {
+    event.respondWith(
+      caches.match(request, { ignoreSearch: false }).then(cached => {
+        const network = fetch(request).then(response => {
+          if (response && response.ok) {
+            caches.open(HAM_CACHE).then(cache => cache.put(request, response.clone())).catch(() => null);
+          }
+          return response;
+        }).catch(() => cached);
+        return cached || network;
+      })
+    );
+    return;
+  }
+
+  if (isSameOrigin && (url.search.includes(DASH_QUERY) || url.search.includes(HUB_QUERY))) {
+    event.respondWith(networkThenCache(request));
+  }
+});
+		<?php
+	}
+
+	private function get_pwa_logo_url() {
+		$logo = '';
+		if (class_exists('CPTT_Settings') && method_exists('CPTT_Settings', 'get')) {
+			$branding = CPTT_Settings::get();
+			$logo_id = isset($branding['logo_id']) ? absint($branding['logo_id']) : 0;
+			if ($logo_id) $logo = (string) wp_get_attachment_image_url($logo_id, 'medium');
+		}
+		if ($logo === '') {
+			$custom_logo_id = (int) get_theme_mod('custom_logo');
+			if ($custom_logo_id) $logo = (string) wp_get_attachment_image_url($custom_logo_id, 'medium');
+		}
+		if ($logo === '') $logo = (string) get_site_icon_url(192);
+		return $logo;
+	}
+
 	public function pwa_head() {
-		if (!get_query_var(self::QUERY_VAR) && !get_query_var(self::PUBLIC_QUERY_VAR)) return;
-		$manifest = CPTT_URL . 'assets/pwa/manifest.json';
-		$sw = CPTT_URL . 'assets/pwa/service-worker.js';
+		if (!get_query_var(self::QUERY_VAR)) return;
+		$manifest = $this->pwa_manifest_url();
+		$sw = $this->pwa_service_worker_url();
+		$logo = $this->get_pwa_logo_url();
 		echo '<link rel="manifest" href="' . esc_url($manifest) . '">' . "\n";
 		echo '<meta name="theme-color" content="#4f46e5">' . "\n";
-		echo '<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="هماهنگ">' . "\n";
-		echo '<script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("' . esc_js($sw) . '").catch(function(){});});}</script>' . "\n";
+		echo '<meta name="mobile-web-app-capable" content="yes">' . "\n";
+		echo '<meta name="apple-mobile-web-app-capable" content="yes">' . "\n";
+		echo '<meta name="apple-mobile-web-app-status-bar-style" content="default">' . "\n";
+		echo '<meta name="apple-mobile-web-app-title" content="هماهنگ">' . "\n";
+		echo '<link rel="apple-touch-icon" href="' . esc_url(CPTT_URL . 'assets/images/icon-192.png') . '">' . "\n";
+		echo '<script>window.CPTT_PWA_CONFIG=' . wp_json_encode([
+			'manifest' => $manifest,
+			'startUrl' => $this->pwa_start_url(),
+			'sw' => $sw,
+			'logo' => $logo,
+		]) . ';window.CPTT_PWA_CAPTURE=window.CPTT_PWA_CAPTURE||{deferred:null,installed:false};window.addEventListener("beforeinstallprompt",function(e){e.preventDefault();window.CPTT_PWA_CAPTURE.deferred=e;try{window.dispatchEvent(new CustomEvent("cptt:pwa-ready"));}catch(_e){}});window.addEventListener("appinstalled",function(){window.CPTT_PWA_CAPTURE.installed=true;try{window.dispatchEvent(new CustomEvent("cptt:pwa-installed"));}catch(_e){}});if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("' . esc_js($sw) . '",{scope:"/"}).catch(function(){});});}</script>' . "\n";
 	}
 
 	public function add_isolation_body_class($classes) {

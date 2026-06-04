@@ -478,9 +478,9 @@ jQuery(function ($) {
       var phone = $row.attr('data-phone') || '';
       var created = $row.attr('data-created') || '';
       
-      var cost = parseFloat($row.find('td').eq(4).text().replace(/,/g, '')) || 0;
-      var paid = parseFloat($row.find('td').eq(5).text().replace(/,/g, '')) || 0;
-      var remain = parseFloat($row.find('td').eq(6).text().replace(/,/g, '')) || 0;
+      var cost = parseFloat($row.find('td').eq(6).text().replace(/,/g, '')) || 0;
+      var paid = parseFloat($row.find('td').eq(7).text().replace(/,/g, '')) || 0;
+      var remain = parseFloat($row.find('td').eq(8).text().replace(/,/g, '')) || 0;
       
       totalCost += cost;
       totalPaid += paid;

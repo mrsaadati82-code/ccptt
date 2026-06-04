@@ -816,7 +816,7 @@
       }
 
       var cls = isMe ? 'cptt-chat-bubble--me' : 'cptt-chat-bubble--other';
-      return '<div class="cptt-chat-bubble ' + cls + '"><div class="cptt-chat-bubble__head"><strong>' + head + '</strong><span>' + time + '</span></div><div class="cptt-chat-bubble__body">' + body + '</div></div>';
+      return '<div class="cptt-chat-bubble ' + cls + '" data-chat-kind="project" data-id="' + escapeHtml(String(message.id || '')) + '" data-owned="' + (isMe ? '1' : '0') + '" data-text="' + escapeHtml(cleanText.trim()) + '"><div class="cptt-chat-bubble__head"><strong>' + head + '</strong><span>' + time + '</span></div><div class="cptt-chat-bubble__body">' + body + '</div></div>';
     }).join('');
     container.innerHTML = html;
     container.scrollTop = container.scrollHeight;
@@ -928,7 +928,7 @@
       var form = qs('.cptt-expert-message-form', modal);
       var timer = null;
       function close() { modal.hidden = true; document.body.classList.remove('cptt-chat-modal-open'); if (timer) { window.clearInterval(timer); timer = null; } }
-      async function open() { if (modal.parentNode !== document.body) document.body.appendChild(modal); modal.hidden = false; document.body.classList.add('cptt-chat-modal-open'); await refreshMessages(form); if (timer) window.clearInterval(timer); timer = window.setInterval(function () { refreshMessages(form); }, 8000); }
+      async function open() { if (modal.parentNode !== document.body) document.body.appendChild(modal); modal.hidden = false; document.body.classList.add('cptt-chat-modal-open'); await refreshMessages(form); if (timer) window.clearInterval(timer); timer = window.setInterval(function () { refreshMessages(form); }, 2500); }
       if (openBtn) openBtn.addEventListener('click', open);
       if (closeBtn) closeBtn.addEventListener('click', close);
       if (backdrop) backdrop.addEventListener('click', close);
@@ -957,7 +957,7 @@
       }
 
       var cls = isMe ? 'cptt-chat-bubble--me' : 'cptt-chat-bubble--other';
-      return '<div class="cptt-chat-bubble ' + cls + '"><div class="cptt-chat-bubble__head"><strong>' + escapeHtml(m.sender_name || 'کاربر') + '</strong><span>' + time + '</span></div><div class="cptt-chat-bubble__body">' + body + '</div></div>';
+      return '<div class="cptt-chat-bubble ' + cls + '" data-chat-kind="direct" data-id="' + escapeHtml(String(m.id || '')) + '" data-owned="' + (isMe ? '1' : '0') + '" data-text="' + escapeHtml(cleanText.trim()) + '"><div class="cptt-chat-bubble__head"><strong>' + escapeHtml(m.sender_name || 'کاربر') + '</strong><span>' + time + '</span></div><div class="cptt-chat-bubble__body">' + body + '</div></div>';
     }).join('');
     wrap.innerHTML = html;
     wrap.scrollTop = wrap.scrollHeight;
@@ -2013,6 +2013,8 @@
       // Meta chips
       var meta = [];
       if (project.customer) meta.push('👤 مشتری: ' + project.customer);
+      if (project.customer_phone) meta.push('📞 موبایل: ' + project.customer_phone);
+      if (project.customer_email) meta.push('✉️ ایمیل: ' + project.customer_email);
       if (project.experts && project.experts.length) meta.push('🧑‍💼 کارشناسان: ' + project.experts.join('، '));
       if (project.deadline) {
         var dlDay = jalaliDayOfWeek(project.deadline);
@@ -3691,4 +3693,2040 @@
   ready(function(){ initSimpleNav(); restoreAccountingTable(document); initPwaPrompt(); initSplash(); updateSaveState(); });
   document.addEventListener('click', function(e){ if(e.target.closest('.cptt-expert-toggleProject')) setTimeout(updateSaveState,180); });
   document.addEventListener('cptt:adminBridgeLoaded', function(e){ restoreAccountingTable(e.detail && e.detail.container); });
+})();
+
+/* =========================================================
+   HAM v5.6.0 — mobile notch nav, robust accounting table modal,
+   real PWA install flow, standalone splash, offline banner
+   ========================================================= */
+(function(){
+  'use strict';
+  function ready(fn){ if(document.readyState !== 'loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
+  function qs(sel, ctx){ return (ctx || document).querySelector(sel); }
+  function qsa(sel, ctx){ return Array.prototype.slice.call((ctx || document).querySelectorAll(sel)); }
+  function isMobile(){ return !!(window.matchMedia && window.matchMedia('(max-width: 820px)').matches); }
+  function isStandalone(){
+    try {
+      return !!((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true || String(document.referrer||'').indexOf('android-app://') === 0);
+    } catch(e){ return false; }
+  }
+  function isIOS(){
+    var ua = navigator.userAgent || '';
+    return /iphone|ipad|ipod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+  function fmtPercent(v){ return Math.max(0, Math.min(100, Math.round(v))); }
+
+  function removeLegacyMobileUi(){
+    qsa('.ham-simple-nav,.ham-gooey-nav,.ham-gooey-svg-defs,.cptt-fluid-nav,.ham-pwa-install,.ham-pwa-splash').forEach(function(el){ el.remove(); });
+  }
+
+  function triggerSave(){
+    var btn = document.querySelector('body > .cptt-expert-save-floating, .cptt-expertCard.is-expanded .cptt-expert-save-floating');
+    if (btn && getComputedStyle(btn).display !== 'none') btn.click();
+  }
+
+  function openAllNotifications(){
+    var modal = qs('.cptt-all-notifs-modal');
+    if (!modal) return;
+    modal.removeAttribute('hidden');
+    var list = qs('.cptt-all-notifs-list', modal);
+    if (!list || !(window.CPTT_EXPERT && CPTT_EXPERT.ajax)) return;
+    list.innerHTML = 'در حال بارگذاری...';
+    var fd = new FormData();
+    fd.append('action', 'cptt_expert_fetch_all_notifications');
+    fd.append('nonce', (window.CPTT_EXPERT && CPTT_EXPERT.nonce) ? CPTT_EXPERT.nonce : '');
+    fetch(CPTT_EXPERT.ajax, { method:'POST', credentials:'same-origin', body:fd })
+      .then(function(r){ return r.json(); })
+      .then(function(res){ if (res && res.success) list.innerHTML = (res.data && res.data.html) ? res.data.html : ''; })
+      .catch(function(){ list.innerHTML = '<div class="cptt-expert-emptyMini">خطا در بارگذاری اعلان‌ها</div>'; });
+  }
+
+  function openProfilePanel(){
+    var btn = qs('.cptt-open-edit-profile,[href*="cptt_edit_profile=1"]');
+    if (btn) { btn.click(); return; }
+    var box = qs('.cptt-sideBox--profile');
+    if (box) box.scrollIntoView({ behavior:'smooth', block:'start' });
+  }
+
+  function syncNotchNav(){
+    if (!document.body.classList.contains('cptt-expert-dashboard-page')) return;
+    var nav = qs('.ham-notch-nav');
+    if (!nav) return;
+    if (window.cpttUpdateSaveState) {
+      try { window.cpttUpdateSaveState(); } catch(e){}
+    }
+    var hasExpanded = !!qs('.cptt-expertCard.is-expanded');
+    nav.classList.toggle('has-save', hasExpanded);
+  }
+
+  function createIcon(type){
+    var map = {
+      projects: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="6.5" height="6.5" rx="1.6"></rect><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6"></rect><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6"></rect><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6"></rect></svg>',
+      chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18.5H4.9A1.9 1.9 0 0 1 3 16.6V7.9A1.9 1.9 0 0 1 4.9 6h14.2A1.9 1.9 0 0 1 21 7.9v8.7a1.9 1.9 0 0 1-1.9 1.9H12l-5 3z"></path><path d="M8 11h8"></path><path d="M8 14.5h5"></path></svg>',
+      notifications: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4.25a4.25 4.25 0 0 1 4.25 4.25v1.18c0 .9.28 1.77.8 2.5l1 1.43a1.35 1.35 0 0 1-1.1 2.14H7.05a1.35 1.35 0 0 1-1.1-2.14l1-1.43a4.32 4.32 0 0 0 .8-2.5V8.5A4.25 4.25 0 0 1 12 4.25z"></path><path d="M10.2 18.1a2 2 0 0 0 3.6 0"></path></svg>',
+      profile: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12.2a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"></path><path d="M4.8 19.3a7.2 7.2 0 0 1 14.4 0"></path></svg>',
+      save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4.75h9.1l2.9 2.9v11.6H6z"></path><path d="M9 4.75v5.1h5.4v-5.1"></path><path d="M9 19.25v-5.4h6v5.4"></path></svg>'
+    };
+    return map[type] || '';
+  }
+
+  function initNotchMobileNav(){
+    if (!document.body.classList.contains('cptt-expert-dashboard-page') || !isMobile()) return;
+    removeLegacyMobileUi();
+    if (qs('.ham-notch-nav')) { syncNotchNav(); return; }
+    var nav = document.createElement('nav');
+    nav.className = 'ham-notch-nav';
+    nav.setAttribute('dir', 'rtl');
+    nav.innerHTML = '' +
+      '<div class="ham-notch-nav__bar">' +
+        '<button type="button" class="ham-notch-nav__item is-active" data-nav="projects" aria-label="پروژه‌ها">' + createIcon('projects') + '</button>' +
+        '<button type="button" class="ham-notch-nav__item" data-nav="chat" aria-label="گفتگوها">' + createIcon('chat') + '</button>' +
+        '<span class="ham-notch-nav__gap" aria-hidden="true"></span>' +
+        '<button type="button" class="ham-notch-nav__item" data-nav="notifications" aria-label="اعلان‌ها">' + createIcon('notifications') + '</button>' +
+        '<button type="button" class="ham-notch-nav__item" data-nav="profile" aria-label="پروفایل">' + createIcon('profile') + '</button>' +
+      '</div>' +
+      '<button type="button" class="ham-notch-nav__save" data-nav="save" aria-label="ذخیره تغییرات">' + createIcon('save') + '</button>';
+    document.body.appendChild(nav);
+
+    function setActive(btn){
+      qsa('.ham-notch-nav__item', nav).forEach(function(item){ item.classList.remove('is-active'); });
+      if (btn) btn.classList.add('is-active');
+    }
+
+    nav.addEventListener('click', function(e){
+      var btn = e.target.closest('[data-nav]');
+      if (!btn) return;
+      var action = btn.getAttribute('data-nav');
+      if (action === 'projects') {
+        setActive(qs('[data-nav="projects"]', nav));
+        var grid = qs('#cptt-expert-grid');
+        if (grid) grid.scrollIntoView({ behavior:'smooth', block:'start' });
+      }
+      if (action === 'chat') {
+        setActive(qs('[data-nav="chat"]', nav));
+        var chat = qs('.cptt-open-experts-modal-btn');
+        if (chat) chat.click();
+      }
+      if (action === 'notifications') {
+        setActive(qs('[data-nav="notifications"]', nav));
+        openAllNotifications();
+      }
+      if (action === 'profile') {
+        setActive(qs('[data-nav="profile"]', nav));
+        openProfilePanel();
+      }
+      if (action === 'save') {
+        triggerSave();
+      }
+    });
+
+    syncNotchNav();
+  }
+
+  function stabilizeAccountingTable(scope){
+    scope = scope && scope.nodeType === 1 ? scope : document;
+    var acct = scope.querySelector('.cptt-accounting') || (scope.closest ? scope.closest('.cptt-accounting') : null) || document.querySelector('.cptt-accounting');
+    if (!acct) return;
+    qsa('.cptt-acct-projects-open,.cptt-acct-table-placeholder,.cptt-acct-projects-modal', acct).forEach(function(el){ el.remove(); });
+    var wrap = acct.querySelector('.cptt-acct-table-wrap');
+    if (!wrap) return;
+
+    if (!wrap.dataset.hamStableClone) {
+      var cleanWrap = wrap.cloneNode(true);
+      wrap.parentNode.replaceChild(cleanWrap, wrap);
+      wrap = cleanWrap;
+      wrap.dataset.hamStableClone = '1';
+    }
+    if (wrap.dataset.hamAccountingReady === '1') return;
+    wrap.dataset.hamAccountingReady = '1';
+    wrap.classList.add('cptt-acct-table-clickable');
+
+    var table = wrap.querySelector('#cptt-acct-table');
+    if (!table) return;
+
+    var modal = document.createElement('div');
+    modal.className = 'ham-acct-modal';
+    modal.hidden = true;
+    modal.innerHTML = '' +
+      '<div class="ham-acct-modal__backdrop"></div>' +
+      '<div class="ham-acct-modal__dialog">' +
+        '<div class="ham-acct-modal__head"><strong>لیست پروژه‌ها</strong><button type="button" class="ham-acct-modal__close" aria-label="بستن">×</button></div>' +
+        '<div class="ham-acct-modal__body"></div>' +
+        '<div class="ham-acct-modal__pager"><button type="button" data-dir="prev">قبلی</button><span></span><button type="button" data-dir="next">بعدی</button></div>' +
+      '</div>';
+    acct.appendChild(modal);
+
+    var modalBody = qs('.ham-acct-modal__body', modal);
+    var pagerText = qs('.ham-acct-modal__pager span', modal);
+    var prevBtn = qs('[data-dir="prev"]', modal);
+    var nextBtn = qs('[data-dir="next"]', modal);
+    var page = 1;
+    var perPage = 10;
+    var state = { rows: [], table: null };
+
+    function sourceRows(){
+      return qsa('tbody tr.cptt-acct-row', table).filter(function(row){
+        return row.style.display !== 'none' && getComputedStyle(row).display !== 'none';
+      });
+    }
+
+    function rebuildModalTable(){
+      var cloneTable = table.cloneNode(true);
+      var cloneBody = qs('tbody', cloneTable);
+      if (!cloneBody) return;
+      cloneBody.innerHTML = '';
+      var visibleRows = sourceRows();
+      if (!visibleRows.length) {
+        cloneBody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:26px;">پروژه‌ای برای نمایش وجود ندارد.</td></tr>';
+        state.rows = [];
+      } else {
+        visibleRows.forEach(function(row){ cloneBody.appendChild(row.cloneNode(true)); });
+        state.rows = qsa('tbody tr.cptt-acct-row', cloneTable);
+      }
+      state.table = cloneTable;
+      modalBody.innerHTML = '';
+      modalBody.appendChild(cloneTable);
+    }
+
+    function renderModalPage(){
+      var totalRows = state.rows.length;
+      var totalPages = Math.max(1, Math.ceil(totalRows / perPage));
+      if (page > totalPages) page = totalPages;
+      state.rows.forEach(function(row, index){
+        row.style.display = (index >= (page - 1) * perPage && index < page * perPage) ? '' : 'none';
+      });
+      pagerText.textContent = 'صفحه ' + page + ' از ' + totalPages + (totalRows ? (' — ' + totalRows + ' پروژه') : '');
+      prevBtn.disabled = page <= 1;
+      nextBtn.disabled = page >= totalPages;
+    }
+
+    function openModal(){
+      page = 1;
+      rebuildModalTable();
+      modal.hidden = false;
+      document.body.style.overflow = 'hidden';
+      renderModalPage();
+    }
+
+    function closeModal(){
+      modal.hidden = true;
+      document.body.style.overflow = '';
+      modalBody.innerHTML = '';
+    }
+
+    wrap.addEventListener('click', function(e){
+      if (e.target.closest('a,button,input,select,textarea')) return;
+      openModal();
+    });
+    qs('.ham-acct-modal__close', modal).addEventListener('click', closeModal);
+    qs('.ham-acct-modal__backdrop', modal).addEventListener('click', closeModal);
+    prevBtn.addEventListener('click', function(){ if (page > 1) { page--; renderModalPage(); } });
+    nextBtn.addEventListener('click', function(){ page++; renderModalPage(); });
+  }
+
+  function showPwaCard(kind, deferredPrompt){
+    if (!document.body.classList.contains('cptt-expert-dashboard-page') || isStandalone() || !isMobile()) return;
+    if (localStorage.getItem('ham_pwa_install_dismissed_v560') === '1') return;
+    var existing = qs('.ham-pwa-card');
+    if (existing) existing.remove();
+    var card = document.createElement('div');
+    card.className = 'ham-pwa-card ham-pwa-card--' + kind;
+    if (kind === 'prompt') {
+      card.innerHTML = '<div class="ham-pwa-card__inner"><div class="ham-pwa-card__logo">هما</div><div class="ham-pwa-card__text"><strong>نصب اپلیکیشن هماهنگ</strong><p>برای دسترسی سریع‌تر و تجربه بهتر، داشبورد را به صفحه اصلی گوشی اضافه کن.</p></div><div class="ham-pwa-card__actions"><button type="button" class="ham-pwa-card__later">بعداً</button><button type="button" class="ham-pwa-card__install">نصب</button></div></div>';
+    } else {
+      card.innerHTML = '<div class="ham-pwa-card__inner"><div class="ham-pwa-card__logo">هما</div><div class="ham-pwa-card__text"><strong>نصب در آیفون / آیپد</strong><p>از دکمه <b>Share</b> مرورگر Safari گزینه <b>Add to Home Screen</b> را بزن تا اپلیکیشن نصب شود.</p></div><div class="ham-pwa-card__actions"><button type="button" class="ham-pwa-card__later">بستن</button><button type="button" class="ham-pwa-card__guide">متوجه شدم</button></div></div>';
+    }
+    document.body.appendChild(card);
+    var later = qs('.ham-pwa-card__later', card);
+    if (later) later.onclick = function(){ localStorage.setItem('ham_pwa_install_dismissed_v560', '1'); card.remove(); };
+    var installBtn = qs('.ham-pwa-card__install', card);
+    if (installBtn) {
+      installBtn.onclick = function(){
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        Promise.resolve(deferredPrompt.userChoice).finally(function(){ card.remove(); });
+      };
+    }
+    var guideBtn = qs('.ham-pwa-card__guide', card);
+    if (guideBtn) guideBtn.onclick = function(){ card.remove(); };
+  }
+
+  function initPwaInstallFlow(){
+    if (!document.body.classList.contains('cptt-expert-dashboard-page') || isStandalone() || !isMobile()) return;
+    var deferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', function(e){
+      e.preventDefault();
+      deferredPrompt = e;
+      showPwaCard('prompt', deferredPrompt);
+    });
+    window.addEventListener('appinstalled', function(){
+      localStorage.removeItem('ham_pwa_install_dismissed_v560');
+      qsa('.ham-pwa-card').forEach(function(el){ el.remove(); });
+    });
+    if (isIOS()) {
+      setTimeout(function(){ if (!deferredPrompt && !isStandalone()) showPwaCard('ios'); }, 1200);
+    }
+  }
+
+  function initStandaloneSplash(){
+    if (!document.body.classList.contains('cptt-expert-dashboard-page') || !isStandalone()) return;
+    qsa('.ham-pwa-splash,.ham-pwa-install,.ham-pwa-card').forEach(function(el){ el.remove(); });
+    var splash = document.createElement('div');
+    splash.className = 'ham-standalone-splash';
+    splash.innerHTML = '<div class="ham-standalone-splash__box"><strong>به اپلیکیشن هماهنگ خوش آمدی</strong><span>در حال آماده‌سازی داشبورد...</span><div class="ham-standalone-splash__progress"><i></i></div><b>0%</b></div>';
+    document.body.appendChild(splash);
+    var bar = qs('i', splash), pct = qs('b', splash);
+    var start = null;
+    var duration = 1250;
+    function tick(ts){
+      if (!start) start = ts;
+      var progress = Math.min(1, (ts - start) / duration);
+      var value = fmtPercent(progress * 100);
+      if (bar) bar.style.width = value + '%';
+      if (pct) pct.textContent = value + '%';
+      if (progress < 1) requestAnimationFrame(tick);
+      else {
+        splash.classList.add('is-hide');
+        setTimeout(function(){ splash.remove(); }, 360);
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function initStandaloneOfflineBanner(){
+    if (!document.body.classList.contains('cptt-expert-dashboard-page') || !isStandalone()) return;
+    var banner = qs('.ham-offline-banner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.className = 'ham-offline-banner';
+      banner.textContent = 'آفلاین - فقط مشاهده';
+      document.body.appendChild(banner);
+    }
+    function sync(){ banner.classList.toggle('is-show', !navigator.onLine); }
+    window.addEventListener('online', sync);
+    window.addEventListener('offline', sync);
+    sync();
+  }
+
+  ready(function(){
+    removeLegacyMobileUi();
+    initNotchMobileNav();
+    initPwaInstallFlow();
+    initStandaloneSplash();
+    initStandaloneOfflineBanner();
+    stabilizeAccountingTable(document);
+    syncNotchNav();
+  });
+
+  document.addEventListener('click', function(e){
+    if (e.target.closest('.cptt-expert-toggleProject,.cptt-expert-add-step,.cptt-expert-remove-step,.cptt-expert-save-floating')) {
+      setTimeout(syncNotchNav, 120);
+    }
+  });
+  window.addEventListener('resize', function(){ setTimeout(function(){ initNotchMobileNav(); syncNotchNav(); }, 80); }, { passive:true });
+  document.addEventListener('cptt:adminBridgeLoaded', function(e){
+    stabilizeAccountingTable(e.detail && e.detail.container ? e.detail.container : document);
+  });
+})();
+
+/* =========================================================
+   HAM v5.6.1 — hide save outside visible project form + edge-to-edge nav
+   ========================================================= */
+(function(){
+  'use strict';
+  function ready(fn){ if(document.readyState !== 'loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
+  function qs(sel, ctx){ return (ctx || document).querySelector(sel); }
+  function qsa(sel, ctx){ return Array.prototype.slice.call((ctx || document).querySelectorAll(sel)); }
+  function isMobile(){ return !!(window.matchMedia && window.matchMedia('(max-width: 820px)').matches); }
+  function isVisible(el){ return !!(el && !el.hidden && getComputedStyle(el).display !== 'none' && el.offsetParent !== null); }
+
+  function getVisibleExpandedCard(){
+    var cards = qsa('.cptt-expertCard.is-expanded');
+    for (var i = 0; i < cards.length; i++) {
+      if (isVisible(cards[i])) return cards[i];
+    }
+    return null;
+  }
+
+  function submitVisibleProjectForm(){
+    var card = getVisibleExpandedCard();
+    if (!card) return;
+    var form = qs('.cptt-expert-project-form', card);
+    if (!form) return;
+    if (typeof form.requestSubmit === 'function') { form.requestSubmit(); return; }
+    var ev = document.createEvent('Event');
+    ev.initEvent('submit', true, true);
+    form.dispatchEvent(ev);
+  }
+
+  function updateSaveStateV561(){
+    var card = getVisibleExpandedCard();
+    var inBridge = !!qs('.cptt-expertMain.cptt-admin-bridge-mode');
+    var showDesktopSave = !!card && !inBridge && !isMobile();
+    document.body.classList.toggle('cptt-has-expanded-project', !!card && !inBridge);
+    qsa('body > .cptt-expert-save-floating, .cptt-expertCard .cptt-expert-save-floating').forEach(function(btn){
+      if (card) {
+        var form = qs('.cptt-expert-project-form', card);
+        if (form) {
+          if (!form.id) form.id = 'cptt-form-' + (card.getAttribute('data-project-id') || Date.now());
+          btn.setAttribute('form', form.id);
+        }
+      }
+      if (btn.parentNode !== document.body) document.body.appendChild(btn);
+      btn.style.setProperty('display', showDesktopSave ? 'inline-flex' : 'none', 'important');
+      btn.style.setProperty('z-index', '999995', 'important');
+    });
+    var nav = qs('.ham-edge-nav');
+    if (nav) nav.classList.toggle('has-save', !!card && !inBridge);
+  }
+  window.cpttUpdateSaveState = updateSaveStateV561;
+
+  function removeAllMobileNavs(){
+    qsa('.ham-notch-nav,.ham-simple-nav,.ham-gooey-nav,.ham-gooey-svg-defs,.cptt-fluid-nav').forEach(function(el){ el.remove(); });
+  }
+
+  function navIcon(name){
+    var icons = {
+      projects: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7.5h16"></path><path d="M4 12h16"></path><path d="M4 16.5h10"></path></svg>',
+      chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.5 18.5 4 21l4.2-1.1c1.1.4 2.3.6 3.6.6 4.8 0 8.7-3.2 8.7-7.2S16.6 6 11.8 6 3 9.2 3 13.2c0 2 .9 3.8 2.5 5.3Z"></path><path d="M8.5 12.5h6"></path><path d="M8.5 15.5h3.5"></path></svg>',
+      notifications: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 18.5h5"></path><path d="M6.7 15.8c.8-1 1.2-2.4 1.2-3.8V10a4.1 4.1 0 1 1 8.2 0v2c0 1.4.4 2.8 1.2 3.8l.4.5H6.3l.4-.5Z"></path></svg>',
+      profile: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12.5a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"></path><path d="M5 19.5a7 7 0 0 1 14 0"></path></svg>',
+      save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4.5h11l3 3v12H5z"></path><path d="M9 4.5v5h6v-5"></path><path d="M9 19.5V14h6v5"></path></svg>'
+    };
+    return icons[name] || '';
+  }
+
+  function initEdgeNav(){
+    if (!document.body.classList.contains('cptt-expert-dashboard-page') || !isMobile()) return;
+    removeAllMobileNavs();
+    if (qs('.ham-edge-nav')) { updateSaveStateV561(); return; }
+    var nav = document.createElement('nav');
+    nav.className = 'ham-edge-nav';
+    nav.setAttribute('dir', 'rtl');
+    nav.innerHTML = '' +
+      '<div class="ham-edge-nav__bar">' +
+        '<button type="button" class="ham-edge-nav__item is-active" data-nav="projects" aria-label="پروژه‌ها">' + navIcon('projects') + '</button>' +
+        '<button type="button" class="ham-edge-nav__item" data-nav="chat" aria-label="گفتگوها">' + navIcon('chat') + '</button>' +
+        '<span class="ham-edge-nav__spacer" aria-hidden="true"></span>' +
+        '<button type="button" class="ham-edge-nav__item" data-nav="notifications" aria-label="اعلان‌ها">' + navIcon('notifications') + '</button>' +
+        '<button type="button" class="ham-edge-nav__item" data-nav="profile" aria-label="پروفایل">' + navIcon('profile') + '</button>' +
+      '</div>' +
+      '<button type="button" class="ham-edge-nav__save" data-nav="save" aria-label="ذخیره تغییرات">' + navIcon('save') + '</button>';
+    document.body.appendChild(nav);
+
+    function setActive(key){
+      qsa('.ham-edge-nav__item', nav).forEach(function(item){
+        item.classList.toggle('is-active', item.getAttribute('data-nav') === key);
+      });
+    }
+
+    nav.addEventListener('click', function(e){
+      var btn = e.target.closest('[data-nav]');
+      if (!btn) return;
+      var action = btn.getAttribute('data-nav');
+      if (action !== 'save') setActive(action);
+      if (action === 'projects') {
+        var grid = qs('#cptt-expert-grid');
+        if (grid) grid.scrollIntoView({ behavior:'smooth', block:'start' });
+      }
+      if (action === 'chat') {
+        var chatBtn = qs('.cptt-open-experts-modal-btn');
+        if (chatBtn) chatBtn.click();
+      }
+      if (action === 'notifications') {
+        var notifBtn = qs('[data-cptt-open-all-notifs], .cptt-mobile-bell-btn');
+        if (notifBtn && notifBtn.click) notifBtn.click();
+        else {
+          var modal = qs('.cptt-all-notifs-modal');
+          if (modal) modal.removeAttribute('hidden');
+        }
+      }
+      if (action === 'profile') {
+        var profBtn = qs('.cptt-open-edit-profile,[href*="cptt_edit_profile=1"]');
+        if (profBtn && profBtn.click) profBtn.click();
+        else {
+          var profileBox = qs('.cptt-sideBox--profile');
+          if (profileBox) profileBox.scrollIntoView({ behavior:'smooth', block:'start' });
+        }
+      }
+      if (action === 'save') submitVisibleProjectForm();
+    });
+
+    updateSaveStateV561();
+  }
+
+  function observeSaveState(){
+    var main = qs('.cptt-expertMain');
+    var grid = qs('#cptt-expert-grid');
+    var cfg = { attributes:true, subtree:true, attributeFilter:['class','style','hidden'] };
+    if (main && !main.dataset.cpttSaveObs) {
+      main.dataset.cpttSaveObs = '1';
+      new MutationObserver(function(){ window.requestAnimationFrame(updateSaveStateV561); }).observe(main, cfg);
+    }
+    if (grid && !grid.dataset.cpttSaveObs) {
+      grid.dataset.cpttSaveObs = '1';
+      new MutationObserver(function(){ window.requestAnimationFrame(updateSaveStateV561); }).observe(grid, cfg);
+    }
+  }
+
+  ready(function(){
+    initEdgeNav();
+    observeSaveState();
+    updateSaveStateV561();
+  });
+
+  document.addEventListener('click', function(e){
+    if (e.target.closest('.cptt-expert-toggleProject,.cptt-admin-bridge__item,#cptt-admin-bridge-close,.cptt-expert-add-step,.cptt-expert-remove-step,.cptt-expert-save-floating,.cptt-newProjectCta,[data-cptt-open-newproject]')) {
+      setTimeout(updateSaveStateV561, 140);
+    }
+  });
+  document.addEventListener('cptt:adminBridgeLoaded', function(){ setTimeout(updateSaveStateV561, 80); });
+  window.addEventListener('resize', function(){ setTimeout(function(){ initEdgeNav(); updateSaveStateV561(); }, 80); }, { passive:true });
+})();
+
+/* =========================================================
+   HAM v5.6.2 — brand-new curved bottom nav from scratch
+   ========================================================= */
+(function(){
+  'use strict';
+  function ready(fn){ if(document.readyState !== 'loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
+  function qs(sel, ctx){ return (ctx || document).querySelector(sel); }
+  function qsa(sel, ctx){ return Array.prototype.slice.call((ctx || document).querySelectorAll(sel)); }
+  function isMobile(){ return !!(window.matchMedia && window.matchMedia('(max-width: 820px)').matches); }
+  function isVisible(el){ return !!(el && !el.hidden && getComputedStyle(el).display !== 'none' && el.offsetParent !== null); }
+  function inAdminBridge(){ var main = qs('.cptt-expertMain'); return !!(main && main.classList.contains('cptt-admin-bridge-mode')); }
+
+  function visibleExpandedCard(){
+    if (inAdminBridge()) return null;
+    var cards = qsa('.cptt-expertCard.is-expanded');
+    for (var i = 0; i < cards.length; i++) {
+      if (isVisible(cards[i])) return cards[i];
+    }
+    return null;
+  }
+
+  function submitVisibleManageForm(){
+    var card = visibleExpandedCard();
+    if (!card) return;
+    var form = qs('.cptt-expert-project-form', card);
+    if (!form) return;
+    if (!form.id) form.id = 'cptt-mobile-save-form-' + (card.getAttribute('data-project-id') || Date.now());
+    if (typeof form.requestSubmit === 'function') { form.requestSubmit(); return; }
+    var ev = document.createEvent('Event');
+    ev.initEvent('submit', true, true);
+    form.dispatchEvent(ev);
+  }
+
+  function updateSaveVisibilityV562(){
+    var card = visibleExpandedCard();
+    var open = !!card;
+    document.body.classList.toggle('cptt-has-expanded-project', open);
+    qsa('body > .cptt-expert-save-floating, .cptt-expertCard .cptt-expert-save-floating').forEach(function(btn){
+      if (card) {
+        var form = qs('.cptt-expert-project-form', card);
+        if (form) {
+          if (!form.id) form.id = 'cptt-save-form-' + (card.getAttribute('data-project-id') || Date.now());
+          btn.setAttribute('form', form.id);
+        }
+      }
+      if (btn.parentNode !== document.body) document.body.appendChild(btn);
+      btn.style.setProperty('display', (!isMobile() && open) ? 'inline-flex' : 'none', 'important');
+      btn.style.setProperty('z-index', '999995', 'important');
+    });
+    var nav = qs('.ham-curved-nav');
+    if (nav) nav.classList.toggle('has-save', open);
+  }
+  window.cpttUpdateSaveState = updateSaveVisibilityV562;
+
+  function removeOlderBottomNavs(){
+    qsa('.ham-curved-nav,.ham-edge-nav,.ham-notch-nav,.ham-simple-nav,.ham-gooey-nav,.ham-gooey-svg-defs,.cptt-fluid-nav').forEach(function(el){ el.remove(); });
+  }
+
+  function icon(name){
+    var icons = {
+      projects: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4" width="7" height="7" rx="1.8"></rect><rect x="13.5" y="4" width="7" height="7" rx="1.8"></rect><rect x="3.5" y="14" width="7" height="7" rx="1.8"></rect><rect x="13.5" y="14" width="7" height="7" rx="1.8"></rect></svg>',
+      chats: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17.5H4.8A1.8 1.8 0 0 1 3 15.7V7.8A1.8 1.8 0 0 1 4.8 6h10.4A1.8 1.8 0 0 1 17 7.8v7.9A1.8 1.8 0 0 1 15.2 17.5H11l-4 3z"></path><path d="M8 10.5h6"></path><path d="M8 13.5h4"></path><path d="M18 11.5h1.2A1.8 1.8 0 0 1 21 13.3v4.4l-2.7-1.9h-1.8"></path></svg>',
+      showcase: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5a4 4 0 0 1 4-4h2"></path><path d="M14 15.5h2a4 4 0 0 1 4 4"></path><circle cx="9" cy="9" r="3"></circle><circle cx="15" cy="9" r="3"></circle></svg>',
+      create: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>',
+      save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4.5h11.5L19.5 8v11.5H5z"></path><path d="M8.5 4.5v5h6v-5"></path><path d="M8.5 19.5V14h7v5"></path></svg>'
+    };
+    return icons[name] || '';
+  }
+
+  function openChats(){
+    var btn = qs('.cptt-open-experts-modal-btn');
+    if (btn) btn.click();
+  }
+
+  function openShowcase(){
+    if (window.CPTT_EXPERT && CPTT_EXPERT.publicHubUrl) window.location.href = CPTT_EXPERT.publicHubUrl;
+  }
+
+  function openCreateProject(){
+    var btn = qs('[data-cptt-open-newproject], .cptt-newProjectCta');
+    if (btn) btn.click();
+  }
+
+  function goProjects(){
+    var grid = qs('#cptt-expert-grid');
+    if (grid) grid.scrollIntoView({ behavior:'smooth', block:'start' });
+  }
+
+  function initCurvedBottomNav(){
+    if (!document.body.classList.contains('cptt-expert-dashboard-page') || !isMobile()) return;
+    removeOlderBottomNavs();
+    if (qs('.ham-curved-nav')) { updateSaveVisibilityV562(); return; }
+
+    var nav = document.createElement('nav');
+    nav.className = 'ham-curved-nav';
+    nav.setAttribute('dir', 'rtl');
+    nav.innerHTML = '' +
+      '<div class="ham-curved-nav__shell">' +
+        '<svg class="ham-curved-nav__bg" viewBox="0 0 100 74" preserveAspectRatio="none" aria-hidden="true">' +
+          '<path d="M0 22C0 9.8 7.8 0 20 0H36C42.3 0 43.5 26 50 26C56.5 26 57.7 0 64 0H80C92.2 0 100 9.8 100 22V74H0Z"></path>' +
+        '</svg>' +
+        '<div class="ham-curved-nav__items">' +
+          '<button type="button" class="ham-curved-nav__item is-active" data-nav="projects" aria-label="پروژه‌ها">' + icon('projects') + '</button>' +
+          '<button type="button" class="ham-curved-nav__item" data-nav="chats" aria-label="چت‌ها">' + icon('chats') + '</button>' +
+          '<span class="ham-curved-nav__void" aria-hidden="true"></span>' +
+          '<button type="button" class="ham-curved-nav__item" data-nav="showcase" aria-label="ویترین کارشناسان">' + icon('showcase') + '</button>' +
+          '<button type="button" class="ham-curved-nav__item" data-nav="create" aria-label="ایجاد پروژه">' + icon('create') + '</button>' +
+        '</div>' +
+        '<button type="button" class="ham-curved-nav__save" data-nav="save" aria-label="ذخیره">' + icon('save') + '</button>' +
+      '</div>';
+    document.body.appendChild(nav);
+
+    function setActive(key){
+      qsa('.ham-curved-nav__item', nav).forEach(function(item){
+        item.classList.toggle('is-active', item.getAttribute('data-nav') === key);
+      });
+    }
+
+    nav.addEventListener('click', function(e){
+      var btn = e.target.closest('[data-nav]');
+      if (!btn) return;
+      var action = btn.getAttribute('data-nav');
+      if (action === 'projects') { setActive('projects'); goProjects(); }
+      if (action === 'chats') { setActive('chats'); openChats(); }
+      if (action === 'showcase') { setActive('showcase'); openShowcase(); }
+      if (action === 'create') { setActive('create'); openCreateProject(); }
+      if (action === 'save') { submitVisibleManageForm(); }
+    });
+
+    updateSaveVisibilityV562();
+  }
+
+  function observeUiChanges(){
+    var main = qs('.cptt-expertMain');
+    var grid = qs('#cptt-expert-grid');
+    var config = { subtree:true, attributes:true, childList:true, attributeFilter:['class','hidden','style'] };
+    if (main && !main.dataset.cpttNavObserver) {
+      main.dataset.cpttNavObserver = '1';
+      new MutationObserver(function(){ window.requestAnimationFrame(updateSaveVisibilityV562); }).observe(main, config);
+    }
+    if (grid && !grid.dataset.cpttNavObserver) {
+      grid.dataset.cpttNavObserver = '1';
+      new MutationObserver(function(){ window.requestAnimationFrame(updateSaveVisibilityV562); }).observe(grid, config);
+    }
+  }
+
+  ready(function(){
+    initCurvedBottomNav();
+    observeUiChanges();
+    updateSaveVisibilityV562();
+  });
+
+  document.addEventListener('click', function(e){
+    if (e.target.closest('.cptt-expert-toggleProject,.cptt-admin-bridge__item,#cptt-admin-bridge-close,.cptt-expert-add-step,.cptt-expert-remove-step,.cptt-expert-save-floating,.cptt-newProjectCta,[data-cptt-open-newproject],.cptt-expert-delete-project')) {
+      setTimeout(updateSaveVisibilityV562, 120);
+    }
+  });
+  document.addEventListener('cptt:adminBridgeLoaded', function(){ setTimeout(updateSaveVisibilityV562, 80); });
+  window.addEventListener('resize', function(){ setTimeout(function(){ initCurvedBottomNav(); updateSaveVisibilityV562(); }, 80); }, { passive:true });
+})();
+
+/* =========================================================
+   HAM v5.6.3 — nav polish, reliable PWA prompt, finance hydration,
+   inline accounting accordion
+   ========================================================= */
+(function(){
+  'use strict';
+  function ready(fn){ if(document.readyState !== 'loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
+  function qs(sel, ctx){ return (ctx || document).querySelector(sel); }
+  function qsa(sel, ctx){ return Array.prototype.slice.call((ctx || document).querySelectorAll(sel)); }
+  function isMobile(){ return !!(window.matchMedia && window.matchMedia('(max-width: 820px)').matches); }
+  function isVisible(el){ return !!(el && !el.hidden && getComputedStyle(el).display !== 'none' && el.offsetParent !== null); }
+  function isStandalone(){
+    try { return !!((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true || String(document.referrer||'').indexOf('android-app://') === 0); }
+    catch(e){ return false; }
+  }
+  function isIOS(){
+    var ua = navigator.userAgent || '';
+    return /iphone|ipad|ipod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+  function num(v){ return parseFloat(String(v||'').replace(/,/g,'')) || 0; }
+  function fmt(v){ return (Math.round((parseFloat(v)||0) * 100) / 100).toLocaleString('en-US'); }
+
+  function visibleExpandedCardV563(){
+    var main = qs('.cptt-expertMain');
+    if (main && main.classList.contains('cptt-admin-bridge-mode')) return null;
+    var cards = qsa('.cptt-expertCard.is-expanded');
+    for (var i = 0; i < cards.length; i++) if (isVisible(cards[i])) return cards[i];
+    return null;
+  }
+
+  function submitVisibleManageFormV563(){
+    var card = visibleExpandedCardV563();
+    if (!card) return;
+    var form = qs('.cptt-expert-project-form', card);
+    if (!form) return;
+    if (!form.id) form.id = 'cptt-curved-save-form-' + (card.getAttribute('data-project-id') || Date.now());
+    if (typeof form.requestSubmit === 'function') { form.requestSubmit(); return; }
+    var ev = document.createEvent('Event');
+    ev.initEvent('submit', true, true);
+    form.dispatchEvent(ev);
+  }
+
+  function updateSaveStateV563(){
+    var card = visibleExpandedCardV563();
+    var open = !!card;
+    document.body.classList.toggle('cptt-has-expanded-project', open);
+    qsa('body > .cptt-expert-save-floating, .cptt-expertCard .cptt-expert-save-floating').forEach(function(btn){
+      if (card) {
+        var form = qs('.cptt-expert-project-form', card);
+        if (form) {
+          if (!form.id) form.id = 'cptt-save-form-' + (card.getAttribute('data-project-id') || Date.now());
+          btn.setAttribute('form', form.id);
+        }
+      }
+      if (btn.parentNode !== document.body) document.body.appendChild(btn);
+      btn.style.setProperty('display', (!isMobile() && open) ? 'inline-flex' : 'none', 'important');
+      btn.style.setProperty('z-index', '999995', 'important');
+    });
+    var nav = qs('.ham-curved-nav');
+    if (nav) nav.classList.toggle('has-save', open);
+  }
+  window.cpttUpdateSaveState = updateSaveStateV563;
+
+  function removeOlderNavsV563(){ qsa('.ham-curved-nav,.ham-edge-nav,.ham-notch-nav,.ham-simple-nav,.ham-gooey-nav,.ham-gooey-svg-defs,.cptt-fluid-nav').forEach(function(el){ el.remove(); }); }
+
+  function navSvg(name){
+    var map = {
+      projects: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.6" y="4" width="7.2" height="7.2" rx="1.9"></rect><rect x="13.2" y="4" width="7.2" height="7.2" rx="1.9"></rect><rect x="3.6" y="13.6" width="7.2" height="7.2" rx="1.9"></rect><rect x="13.2" y="13.6" width="7.2" height="7.2" rx="1.9"></rect></svg>',
+      chats: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.05" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17.8H4.8A1.8 1.8 0 0 1 3 16V7.8A1.8 1.8 0 0 1 4.8 6h10.6A1.8 1.8 0 0 1 17.2 7.8V16A1.8 1.8 0 0 1 15.4 17.8H11L7 20.7z"></path><path d="M8 10.5h6.2"></path><path d="M8 13.8h4.2"></path><path d="M17.2 10.4h1.3A1.5 1.5 0 0 1 20 11.9v4.2l-2.6-1.8h-.2"></path></svg>',
+      showcase: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.05" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8.5" cy="9" r="2.8"></circle><circle cx="15.5" cy="9" r="2.8"></circle><path d="M3.8 18.5a5.1 5.1 0 0 1 9.4-2"></path><path d="M10.8 16.5a4.8 4.8 0 0 1 9.4 2"></path></svg>',
+      create: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>',
+      save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4.5h11.3L19.5 8v11.5H5z"></path><path d="M8.7 4.5v5h6v-5"></path><path d="M8.7 19.5V14h6.6v5"></path></svg>'
+    };
+    return map[name] || '';
+  }
+
+  function goProjectsV563(){ var grid = qs('#cptt-expert-grid'); if (grid) grid.scrollIntoView({ behavior:'smooth', block:'start' }); }
+  function openChatsV563(){ var btn = qs('.cptt-open-experts-modal-btn'); if (btn) btn.click(); }
+  function openShowcaseV563(){ if (window.CPTT_EXPERT && CPTT_EXPERT.publicHubUrl) window.location.href = CPTT_EXPERT.publicHubUrl; }
+  function openCreateV563(){ var btn = qs('[data-cptt-open-newproject], .cptt-newProjectCta'); if (btn) btn.click(); }
+
+  function initCurvedNavV563(){
+    if (!document.body.classList.contains('cptt-expert-dashboard-page') || !isMobile()) return;
+    removeOlderNavsV563();
+    if (qs('.ham-curved-nav')) { updateSaveStateV563(); return; }
+    var nav = document.createElement('nav');
+    nav.className = 'ham-curved-nav';
+    nav.setAttribute('dir', 'rtl');
+    nav.innerHTML = '' +
+      '<div class="ham-curved-nav__shell">' +
+        '<svg class="ham-curved-nav__bg" viewBox="0 0 100 74" preserveAspectRatio="none" aria-hidden="true">' +
+          '<path d="M0 22C0 9.8 7.8 0 20 0H36C42.3 0 43.6 27 50 27S57.7 0 64 0H80C92.2 0 100 9.8 100 22V74H0Z"></path>' +
+        '</svg>' +
+        '<div class="ham-curved-nav__items">' +
+          '<button type="button" class="ham-curved-nav__item is-active" data-nav="projects" aria-label="پروژه‌ها">' + navSvg('projects') + '</button>' +
+          '<button type="button" class="ham-curved-nav__item" data-nav="chats" aria-label="چت‌ها">' + navSvg('chats') + '</button>' +
+          '<span class="ham-curved-nav__void" aria-hidden="true"></span>' +
+          '<button type="button" class="ham-curved-nav__item" data-nav="showcase" aria-label="ویترین کارشناسان">' + navSvg('showcase') + '</button>' +
+          '<button type="button" class="ham-curved-nav__item" data-nav="create" aria-label="ایجاد پروژه">' + navSvg('create') + '</button>' +
+        '</div>' +
+        '<button type="button" class="ham-curved-nav__save" data-nav="save" aria-label="ذخیره">' + navSvg('save') + '</button>' +
+      '</div>';
+    document.body.appendChild(nav);
+    function setActive(key){ qsa('.ham-curved-nav__item', nav).forEach(function(item){ item.classList.toggle('is-active', item.getAttribute('data-nav') === key); }); }
+    nav.addEventListener('click', function(e){
+      var btn = e.target.closest('[data-nav]');
+      if (!btn) return;
+      var action = btn.getAttribute('data-nav');
+      if (action === 'projects') { setActive('projects'); goProjectsV563(); }
+      if (action === 'chats') { setActive('chats'); openChatsV563(); }
+      if (action === 'showcase') { setActive('showcase'); openShowcaseV563(); }
+      if (action === 'create') { setActive('create'); openCreateV563(); }
+      if (action === 'save') submitVisibleManageFormV563();
+    });
+    updateSaveStateV563();
+  }
+
+  function financeHydrateStep(step){
+    if (!step) return;
+    var qty = qs('.cptt-step-qty', step) || qs('input[name*="[qty]"]', step);
+    var unit = qs('.cptt-step-unit-price', step) || qs('input[name*="[unit_price]"]', step);
+    var cost = qs('.cptt-step-cost', step) || qs('input[name*="[cost]"]', step);
+    if (!cost) return;
+    var q = qty ? parseFloat(qty.value || '1') : 1;
+    if (!isFinite(q) || q <= 0) q = 1;
+    if (qty && (!qty.value || parseFloat(qty.value) <= 0)) qty.value = '1';
+    var costNum = num(cost.value);
+    if (unit) {
+      var unitNum = num(unit.value);
+      if ((unit.value === '' || unitNum === 0) && costNum > 0) {
+        unit.value = fmt(costNum / q);
+      }
+    }
+  }
+
+  function hydrateAllFinanceRows(){ qsa('.cptt-expert-step').forEach(financeHydrateStep); }
+
+  function inlineAccountingAccordion(scope){
+    scope = scope && scope.nodeType === 1 ? scope : document;
+    var acct = scope.querySelector('.cptt-accounting') || document.querySelector('.cptt-accounting');
+    if (!acct) return;
+    qsa('.ham-acct-modal,.cptt-acct-projects-modal,.cptt-acct-projects-open,.cptt-acct-table-placeholder', acct).forEach(function(el){ el.remove(); });
+    var wrap = acct.querySelector('.cptt-acct-table-wrap');
+    if (!wrap) return;
+    wrap.classList.remove('cptt-acct-table-clickable');
+    if (!wrap.dataset.hamInlineClone) {
+      var clean = wrap.cloneNode(true);
+      wrap.parentNode.replaceChild(clean, wrap);
+      wrap = clean;
+      wrap.dataset.hamInlineClone = '1';
+    }
+    if (wrap.dataset.hamInlineAccordionReady === '1') return;
+    wrap.dataset.hamInlineAccordionReady = '1';
+
+    var rowsCount = qsa('tbody tr.cptt-acct-row', wrap).length;
+    var box = document.createElement('section');
+    box.className = 'ham-acct-inline';
+    box.innerHTML = '<button type="button" class="ham-acct-inline__toggle" aria-expanded="false"><span><b>لیست پروژه‌ها</b><small>' + rowsCount + ' پروژه</small></span><i>⌄</i></button><div class="ham-acct-inline__body" hidden></div>';
+    wrap.parentNode.insertBefore(box, wrap);
+    qs('.ham-acct-inline__body', box).appendChild(wrap);
+
+    var toggle = qs('.ham-acct-inline__toggle', box);
+    var body = qs('.ham-acct-inline__body', box);
+    toggle.addEventListener('click', function(){
+      var open = !body.hasAttribute('hidden');
+      if (open) {
+        body.setAttribute('hidden', '');
+        box.classList.remove('is-open');
+        toggle.setAttribute('aria-expanded', 'false');
+      } else {
+        body.removeAttribute('hidden');
+        box.classList.add('is-open');
+        toggle.setAttribute('aria-expanded', 'true');
+      }
+    });
+  }
+
+  function initPwaPromptV563(){
+    if (!document.body.classList.contains('cptt-expert-dashboard-page') || !isMobile() || isStandalone()) return;
+    var storageKey = 'ham_pwa_prompt_v563_dismissed';
+    if (sessionStorage.getItem('ham_pwa_prompt_shown_v563') === '1') return;
+    var deferred = null;
+    var card = null;
+
+    function removeCard(){ if (card) { card.remove(); card = null; } }
+    function dismissForever(){ localStorage.setItem(storageKey, '1'); removeCard(); }
+    function showCard(mode){
+      if (localStorage.getItem(storageKey) === '1') return;
+      if (card) card.remove();
+      card = document.createElement('div');
+      card.className = 'ham-pwa-card-v563 ham-pwa-card-v563--' + mode;
+      var title = 'نصب اپلیکیشن هماهنگ';
+      var text = 'برای تجربه بهتر، داشبورد را مثل یک اپ روی گوشی نصب کن.';
+      var action = '<button type="button" class="ham-pwa-card-v563__install">نصب</button>';
+      if (mode === 'ios') {
+        title = 'نصب اپلیکیشن در آیفون';
+        text = 'در Safari روی Share بزن و بعد Add to Home Screen را انتخاب کن.';
+        action = '<button type="button" class="ham-pwa-card-v563__guide">متوجه شدم</button>';
+      }
+      if (mode === 'manual') {
+        title = 'افزودن به صفحه اصلی';
+        text = 'اگر دکمه نصب مرورگر فعال نیست، از منوی مرورگر گزینه Add to Home screen یا Install app را بزن.';
+        action = '<button type="button" class="ham-pwa-card-v563__guide">باشه</button>';
+      }
+      card.innerHTML = '<div class="ham-pwa-card-v563__inner"><div class="ham-pwa-card-v563__logo">هما</div><div class="ham-pwa-card-v563__text"><strong>' + title + '</strong><p>' + text + '</p></div><div class="ham-pwa-card-v563__actions"><button type="button" class="ham-pwa-card-v563__later">بعداً</button>' + action + '</div></div>';
+      document.body.appendChild(card);
+      sessionStorage.setItem('ham_pwa_prompt_shown_v563', '1');
+      var later = qs('.ham-pwa-card-v563__later', card);
+      if (later) later.onclick = dismissForever;
+      var installBtn = qs('.ham-pwa-card-v563__install', card);
+      if (installBtn) {
+        installBtn.onclick = function(){
+          if (!deferred) {
+            removeCard();
+            showCard(isIOS() ? 'ios' : 'manual');
+            return;
+          }
+          deferred.prompt();
+          Promise.resolve(deferred.userChoice).finally(function(){ removeCard(); deferred = null; });
+        };
+      }
+      var guide = qs('.ham-pwa-card-v563__guide', card);
+      if (guide) guide.onclick = removeCard;
+    }
+
+    window.addEventListener('beforeinstallprompt', function(e){
+      e.preventDefault();
+      deferred = e;
+      showCard('ready');
+    });
+    window.addEventListener('appinstalled', function(){
+      localStorage.removeItem(storageKey);
+      removeCard();
+    });
+
+    setTimeout(function(){
+      if (localStorage.getItem(storageKey) === '1' || isStandalone()) return;
+      if (deferred) showCard('ready');
+      else showCard(isIOS() ? 'ios' : 'manual');
+    }, 1800);
+  }
+
+  ready(function(){
+    hydrateAllFinanceRows();
+    initCurvedNavV563();
+    inlineAccountingAccordion(document);
+    initPwaPromptV563();
+    updateSaveStateV563();
+  });
+
+  document.addEventListener('input', function(e){
+    var step = e.target && e.target.closest ? e.target.closest('.cptt-expert-step') : null;
+    if (step && (e.target.matches('.cptt-step-paid,.cptt-step-cost,.cptt-step-unit-price,.cptt-step-qty') || /\[(cost|paid|unit_price|qty)\]$/.test(e.target.name || ''))) {
+      financeHydrateStep(step);
+    }
+  }, true);
+
+  document.addEventListener('click', function(e){
+    if (e.target.closest('.cptt-expert-toggleProject,.cptt-expert-add-step,.cptt-expert-remove-step,.cptt-newProjectCta,[data-cptt-open-newproject],.cptt-admin-bridge__item,#cptt-admin-bridge-close')) {
+      setTimeout(function(){ hydrateAllFinanceRows(); initCurvedNavV563(); inlineAccountingAccordion(document); updateSaveStateV563(); }, 120);
+    }
+  });
+  document.addEventListener('cptt:adminBridgeLoaded', function(e){
+    setTimeout(function(){ inlineAccountingAccordion(e.detail && e.detail.container ? e.detail.container : document); updateSaveStateV563(); }, 80);
+  });
+  window.addEventListener('resize', function(){ setTimeout(function(){ initCurvedNavV563(); updateSaveStateV563(); }, 80); }, { passive:true });
+})();
+
+/* =========================================================
+   HAM v5.6.4 — captured Android PWA install + site-logo splash
+   ========================================================= */
+(function(){
+  'use strict';
+  function ready(fn){ if(document.readyState !== 'loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
+  function qs(sel, ctx){ return (ctx || document).querySelector(sel); }
+  function qsa(sel, ctx){ return Array.prototype.slice.call((ctx || document).querySelectorAll(sel)); }
+  function isMobile(){ return !!(window.matchMedia && window.matchMedia('(max-width: 820px)').matches); }
+  function isStandalone(){
+    try { return !!((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true || String(document.referrer||'').indexOf('android-app://') === 0); }
+    catch(e){ return false; }
+  }
+  function isIOS(){
+    var ua = navigator.userAgent || '';
+    return /iphone|ipad|ipod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+  function isAndroid(){ return /android/i.test(navigator.userAgent || ''); }
+
+  function removeLegacyPwaUi(){ qsa('.ham-pwa-card,.ham-pwa-card-v563,.ham-pwa-install,.ham-pwa-splash').forEach(function(el){ el.remove(); }); }
+
+  function installMessage(mode){
+    if (mode === 'ios') return 'در Safari روی Share بزن و Add to Home Screen را انتخاب کن.';
+    if (mode === 'manual') return 'اگر دکمه نصب مرورگر دیده نمی‌شود، از منوی مرورگر گزینه Install app یا Add to Home screen را بزن.';
+    return 'برای نصب اپلیکیشن هماهنگ روی گوشی، دکمه نصب را بزن.';
+  }
+
+  function initReliablePwaPrompt(){
+    if (!document.body.classList.contains('cptt-expert-dashboard-page') || !isMobile() || isStandalone()) return;
+    removeLegacyPwaUi();
+    var dismissedKey = 'ham_pwa_session_dismissed_v564';
+    if (sessionStorage.getItem(dismissedKey) === '1') return;
+    var card = null;
+
+    function currentDeferred(){
+      return window.CPTT_PWA_CAPTURE && window.CPTT_PWA_CAPTURE.deferred ? window.CPTT_PWA_CAPTURE.deferred : null;
+    }
+
+    function currentMode(){
+      if (currentDeferred()) return 'ready';
+      if (isIOS()) return 'ios';
+      return 'manual';
+    }
+
+    function removeCard(){ if (card) { card.remove(); card = null; } }
+    function dismiss(){ sessionStorage.setItem(dismissedKey, '1'); removeCard(); }
+
+    function renderCard(){
+      if (sessionStorage.getItem(dismissedKey) === '1' || isStandalone()) return;
+      var mode = currentMode();
+      if (!card) {
+        card = document.createElement('div');
+        card.className = 'ham-pwa-install-v564';
+        document.body.appendChild(card);
+      }
+      var btnText = 'نصب';
+      card.innerHTML = '<div class="ham-pwa-install-v564__card"><div class="ham-pwa-install-v564__logo">هما</div><div class="ham-pwa-install-v564__text"><strong>نصب اپلیکیشن هماهنگ</strong><p>' + installMessage(mode) + '</p></div><div class="ham-pwa-install-v564__actions"><button type="button" class="ham-pwa-install-v564__later">بعداً</button><button type="button" class="ham-pwa-install-v564__install">' + btnText + '</button></div></div>';
+      var later = qs('.ham-pwa-install-v564__later', card);
+      var installBtn = qs('.ham-pwa-install-v564__install', card);
+      if (later) later.onclick = dismiss;
+      if (installBtn) {
+        installBtn.onclick = function(){
+          var deferred = currentDeferred();
+          if (deferred) {
+            deferred.prompt();
+            Promise.resolve(deferred.userChoice).finally(function(){ removeCard(); });
+            return;
+          }
+          var p = qs('.ham-pwa-install-v564__text p', card);
+          if (!p) return;
+          if (isIOS()) p.textContent = installMessage('ios');
+          else if (isAndroid()) p.textContent = 'از منوی مرورگر Chrome گزینه Install app یا Add to Home screen را بزن. اگر همین صفحه را دوباره باز کنی، به‌محض آماده شدن مرورگر دکمه نصب مستقیم فعال می‌شود.';
+          else p.textContent = installMessage('manual');
+        };
+      }
+    }
+
+    window.addEventListener('cptt:pwa-ready', function(){ renderCard(); });
+    window.addEventListener('cptt:pwa-installed', function(){ removeCard(); sessionStorage.removeItem(dismissedKey); });
+
+    setTimeout(renderCard, 3500);
+    setTimeout(renderCard, 7000);
+  }
+
+  function initLogoSplash(){
+    if (!document.body.classList.contains('cptt-expert-dashboard-page') || !isStandalone()) return;
+    qsa('.ham-standalone-splash').forEach(function(el){ el.remove(); });
+    var cfg = window.CPTT_PWA_CONFIG || {};
+    var logo = cfg.logo || '';
+    var splash = document.createElement('div');
+    splash.className = 'ham-standalone-splash';
+    splash.innerHTML = '<div class="ham-standalone-splash__box">' +
+      (logo ? '<div class="ham-standalone-splash__logoWrap"><img src="' + logo + '" alt="logo" class="ham-standalone-splash__logo"></div>' : '') +
+      '<strong>به اپلیکیشن هماهنگ خوش آمدی</strong>' +
+      '<span>در حال آماده‌سازی داشبورد...</span>' +
+      '<div class="ham-standalone-splash__progress"><i></i></div><b>0%</b></div>';
+    document.body.appendChild(splash);
+    var bar = qs('i', splash), pct = qs('b', splash);
+    var start = null, duration = 1250;
+    function tick(ts){
+      if (!start) start = ts;
+      var progress = Math.min(1, (ts - start) / duration);
+      var value = Math.max(0, Math.min(100, Math.round(progress * 100)));
+      if (bar) bar.style.width = value + '%';
+      if (pct) pct.textContent = value + '%';
+      if (progress < 1) requestAnimationFrame(tick);
+      else {
+        splash.classList.add('is-hide');
+        setTimeout(function(){ splash.remove(); }, 360);
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  ready(function(){
+    initReliablePwaPrompt();
+    initLogoSplash();
+  });
+})();
+
+/* =========================================================
+   HAM v5.6.4b — suppress legacy PWA popups
+   ========================================================= */
+(function(){
+  try {
+    localStorage.setItem('ham_pwa_prompt_dismissed', '1');
+    localStorage.setItem('ham_pwa_install_dismissed_v560', '1');
+    sessionStorage.setItem('ham_pwa_prompt_shown_v563', '1');
+  } catch(e) {}
+})();
+
+/* =========================================================
+   HAM v5.6.6 — universal splash, offline banner, faster live chat
+   ========================================================= */
+(function(){
+  'use strict';
+  function ready(fn){ if(document.readyState !== 'loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
+  function qs(sel, ctx){ return (ctx || document).querySelector(sel); }
+  function qsa(sel, ctx){ return Array.prototype.slice.call((ctx || document).querySelectorAll(sel)); }
+  function isDashboard(){ return document.body.classList.contains('cptt-expert-dashboard-page'); }
+
+  function initUniversalSplash(){
+    if (!isDashboard()) return;
+    qsa('.ham-pwa-splash,.ham-standalone-splash,.ham-universal-splash').forEach(function(el){ el.remove(); });
+    var cfg = window.CPTT_PWA_CONFIG || {};
+    var logo = cfg.logo || '';
+    var splash = document.createElement('div');
+    splash.className = 'ham-universal-splash';
+    splash.innerHTML = '<div class="ham-universal-splash__box">' +
+      (logo ? '<div class="ham-universal-splash__logoWrap"><img src="' + logo + '" alt="logo" class="ham-universal-splash__logo"></div>' : '<div class="ham-universal-splash__fallback">هما</div>') +
+      '<strong>به اپلیکیشن هماهنگ خوش آمدی</strong>' +
+      '<span>در حال آماده‌سازی داشبورد...</span>' +
+      '<div class="ham-universal-splash__progress"><i></i></div><b>0%</b></div>';
+    document.body.appendChild(splash);
+    var bar = qs('i', splash), pct = qs('b', splash);
+    var start = null, duration = 1050;
+    function tick(ts){
+      if (!start) start = ts;
+      var progress = Math.min(1, (ts - start) / duration);
+      var value = Math.max(0, Math.min(100, Math.round(progress * 100)));
+      if (bar) bar.style.width = value + '%';
+      if (pct) pct.textContent = value + '%';
+      if (progress < 1) requestAnimationFrame(tick);
+      else {
+        splash.classList.add('is-hide');
+        setTimeout(function(){ splash.remove(); }, 340);
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function initOfflineObserveBanner(){
+    if (!isDashboard()) return;
+    var banner = qs('.ham-offline-observe-banner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.className = 'ham-offline-observe-banner';
+      banner.textContent = 'آفلاین - فقط مشاهده';
+      document.body.appendChild(banner);
+    }
+    function sync(){ banner.classList.toggle('is-show', !navigator.onLine); }
+    window.addEventListener('online', sync);
+    window.addEventListener('offline', sync);
+    sync();
+  }
+
+  function speedUpProjectChatPolling(){
+    document.addEventListener('click', function(e){
+      var openBtn = e.target.closest('.cptt-expert-chat-launch');
+      if (!openBtn) return;
+      setTimeout(function(){
+        var modal = openBtn.closest('.cptt-expertCard').querySelector('.cptt-expert-chatModal');
+        if (!modal) return;
+        if (modal.dataset.hamFastPolling === '1') return;
+        modal.dataset.hamFastPolling = '1';
+        var form = qs('.cptt-expert-message-form', modal);
+        if (!form) return;
+        var iv = null;
+        function refresh(){
+          if (modal.hidden) return;
+          try {
+            var fd = new FormData();
+            fd.append('action', 'cptt_expert_fetch_messages');
+            fd.append('nonce', (window.CPTT_EXPERT && CPTT_EXPERT.nonce) ? CPTT_EXPERT.nonce : '');
+            fd.append('project_id', form.getAttribute('data-project-id') || '');
+            fetch((window.CPTT_EXPERT && CPTT_EXPERT.ajax) ? CPTT_EXPERT.ajax : '', { method:'POST', credentials:'same-origin', body:fd })
+              .then(function(r){ return r.json(); })
+              .then(function(json){
+                if (!(json && json.success)) return;
+                var wrap = form.parentElement.querySelector('.cptt-expert-messagesWrap');
+                var myId = (window.CPTT_EXPERT && CPTT_EXPERT.wpUserId) ? CPTT_EXPERT.wpUserId : 0;
+                if (typeof renderMessages === 'function' && wrap) renderMessages((json.data && json.data.messages) || [], wrap, myId);
+              }).catch(function(){});
+          } catch(err){}
+        }
+        modal.addEventListener('DOMAttrModified', function(){});
+        iv = setInterval(function(){ if (modal.hidden) return; refresh(); }, 2500);
+        modal.addEventListener('click', function(ev){ if (ev.target.closest('.cptt-expert-chatModal__close,.cptt-expert-chatModal__backdrop')) { if (iv) { clearInterval(iv); iv = null; modal.dataset.hamFastPolling = ''; } } });
+      }, 140);
+    });
+  }
+
+  ready(function(){
+    initUniversalSplash();
+    initOfflineObserveBanner();
+    speedUpProjectChatPolling();
+  });
+})();
+
+/* =========================================================
+   HAM v5.6.7 — disable all install popups by request
+   ========================================================= */
+(function(){
+  try {
+    localStorage.setItem('ham_pwa_prompt_dismissed', '1');
+    localStorage.setItem('ham_pwa_install_dismissed_v560', '1');
+    sessionStorage.setItem('ham_pwa_prompt_shown_v563', '1');
+    sessionStorage.setItem('ham_pwa_session_dismissed_v564', '1');
+  } catch(e) {}
+})();
+
+/* =========================================================
+   HAM v5.6.8 — performant chat upgrade (telegram-like phase 1)
+   ========================================================= */
+(function(){
+  'use strict';
+  function ready(fn){ if(document.readyState !== 'loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
+  function qs(sel, ctx){ return (ctx || document).querySelector(sel); }
+  function qsa(sel, ctx){ return Array.prototype.slice.call((ctx || document).querySelectorAll(sel)); }
+  function escapeHtml(str){ return String(str || '').replace(/[&<>"']/g, function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[m]; }); }
+  function currentAjax(){ return (window.CPTT_EXPERT && CPTT_EXPERT.ajax) ? CPTT_EXPERT.ajax : ''; }
+  function currentNonce(){ return (window.CPTT_EXPERT && CPTT_EXPERT.nonce) ? CPTT_EXPERT.nonce : ''; }
+  function currentUserId(){ return (window.CPTT_EXPERT && CPTT_EXPERT.wpUserId) ? parseInt(CPTT_EXPERT.wpUserId, 10) : 0; }
+
+  function pingPresence(){
+    if (!(window.CPTT_EXPERT && CPTT_EXPERT.ajax && CPTT_EXPERT.nonce)) return;
+    var fd = new FormData();
+    fd.append('action', 'cptt_expert_ping_presence');
+    fd.append('nonce', currentNonce());
+    fetch(currentAjax(), { method:'POST', credentials:'same-origin', body:fd }).catch(function(){});
+  }
+
+  function normalizeMessageBody(rawBody){
+    rawBody = rawBody || '';
+    var linkMatch = rawBody.match(/href=(?:&quot;|"|')?([^"'>\s&]+)(?:&quot;|"|')?[^>]*class=(?:&quot;|"|')?cptt-chat-file-link/i);
+    var fileUrl = linkMatch ? linkMatch[1] : '';
+    var cleanText = rawBody.replace(/<a[^>]*cptt-chat-file-link.*?<\/a>/gi, '').replace(/&lt;a[^&]*cptt-chat-file-link.*?&lt;\/a&gt;/gi, '');
+    var body = escapeHtml(cleanText.trim()).replace(/\n/g, '<br>');
+    if (fileUrl) body += '<br><a href="' + escapeHtml(fileUrl) + '" target="_blank" class="cptt-chat-file-btn">👁 مشاهده فایل ضمیمه</a>';
+    return { text: cleanText.trim(), html: body };
+  }
+
+  function renderProjectMessagesEnhanced(items, container){
+    if (!container) return;
+    if (!Array.isArray(items) || !items.length) { container.innerHTML = '<div class="cptt-expert-emptyMini">پیامی ثبت نشده است.</div>'; return; }
+    var myId = currentUserId();
+    container.innerHTML = items.map(function(message){
+      var isMe = parseInt(message.sender_id, 10) === myId;
+      var head = escapeHtml((message.sender_name || 'کاربر') + (message.recipient_name && message.recipient_name !== 'همه' ? ' → ' + message.recipient_name : ''));
+      var time = escapeHtml(message.time_fa || '');
+      var norm = normalizeMessageBody(message.content || '');
+      var cls = isMe ? 'cptt-chat-bubble--me' : 'cptt-chat-bubble--other';
+      return '<div class="cptt-chat-bubble ' + cls + '" data-chat-kind="project" data-id="' + escapeHtml(String(message.id || '')) + '" data-owned="' + (isMe ? '1' : '0') + '" data-text="' + escapeHtml(norm.text) + '"><div class="cptt-chat-bubble__head"><strong>' + head + '</strong><span>' + time + '</span></div><div class="cptt-chat-bubble__body">' + norm.html + '</div></div>';
+    }).join('');
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function renderDirectMessagesEnhanced(items, container){
+    if (!container) return;
+    if (!Array.isArray(items) || !items.length) { container.innerHTML = '<div class="cptt-expert-emptyMini">پیامی وجود ندارد.</div>'; return; }
+    var myId = currentUserId();
+    container.innerHTML = items.map(function(message){
+      var isMe = parseInt(message.sender_id, 10) === myId;
+      var time = escapeHtml(message.time_fa || '');
+      var norm = normalizeMessageBody(message.content || '');
+      var cls = isMe ? 'cptt-chat-bubble--me' : 'cptt-chat-bubble--other';
+      return '<div class="cptt-chat-bubble ' + cls + '" data-chat-kind="direct" data-id="' + escapeHtml(String(message.id || '')) + '" data-owned="' + (isMe ? '1' : '0') + '" data-text="' + escapeHtml(norm.text) + '"><div class="cptt-chat-bubble__head"><strong>' + escapeHtml(message.sender_name || 'کاربر') + '</strong><span>' + time + '</span></div><div class="cptt-chat-bubble__body">' + norm.html + '</div></div>';
+    }).join('');
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function ensureReplyBox(form){
+    if (!form || qs('.cptt-chat-reply-box', form)) return;
+    var ta = qs('textarea', form);
+    if (!ta) return;
+    var box = document.createElement('div');
+    box.className = 'cptt-chat-reply-box';
+    box.hidden = true;
+    box.innerHTML = '<div class="cptt-chat-reply-box__text"></div><button type="button" class="cptt-chat-reply-box__close">×</button>';
+    ta.parentNode.insertBefore(box, ta);
+    qs('.cptt-chat-reply-box__close', box).onclick = function(){ form.dataset.replyText = ''; box.hidden = true; qs('.cptt-chat-reply-box__text', box).textContent = ''; };
+    form.addEventListener('submit', function(){ if (form.dataset.replyText) { ta.value = '↪️ در پاسخ به: ' + form.dataset.replyText + '\n' + ta.value; form.dataset.replyText = ''; box.hidden = true; qs('.cptt-chat-reply-box__text', box).textContent = ''; } }, true);
+  }
+
+  function setReplyText(form, text){
+    if (!form) return;
+    ensureReplyBox(form);
+    var box = qs('.cptt-chat-reply-box', form);
+    if (!box) return;
+    form.dataset.replyText = text || '';
+    qs('.cptt-chat-reply-box__text', box).textContent = text || '';
+    box.hidden = !(text && text.length);
+    var ta = qs('textarea', form);
+    if (ta) ta.focus();
+  }
+
+  function ensureVoiceButton(form){
+    if (!form || form.dataset.voiceReady === '1') return;
+    form.dataset.voiceReady = '1';
+    var actions = qs('.cptt-expert-formActions', form);
+    var fileInput = qs('input[type="file"]', form);
+    if (!actions || !fileInput || !window.MediaRecorder) return;
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'cptt-btn cptt-btn--secondary cptt-chat-voice-btn';
+    btn.textContent = '🎙 ویس';
+    actions.insertBefore(btn, actions.firstChild);
+    var recorder = null, chunks = [], stream = null;
+    btn.addEventListener('click', async function(){
+      try {
+        if (recorder && recorder.state === 'recording') {
+          recorder.stop();
+          btn.textContent = '🎙 ویس';
+          return;
+        }
+        stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+        recorder = new MediaRecorder(stream);
+        chunks = [];
+        recorder.ondataavailable = function(e){ if (e.data && e.data.size) chunks.push(e.data); };
+        recorder.onstop = function(){
+          var blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+          var ext = (blob.type.indexOf('ogg') > -1) ? 'ogg' : 'webm';
+          var file = new File([blob], 'voice-message.' + ext, { type: blob.type || 'audio/webm' });
+          try {
+            var dt = new DataTransfer();
+            dt.items.add(file);
+            fileInput.files = dt.files;
+            fileInput.dispatchEvent(new Event('change', { bubbles:true }));
+          } catch(err) {}
+          if (stream) { stream.getTracks().forEach(function(t){ t.stop(); }); stream = null; }
+        };
+        recorder.start();
+        btn.textContent = '⏹ توقف ضبط';
+      } catch(err) {
+        btn.textContent = '🎙 ویس';
+      }
+    });
+  }
+
+  function ensureChatContextMenu(){
+    var menu = qs('#cptt-chat-context-menu');
+    if (menu) return menu;
+    menu = document.createElement('div');
+    menu.id = 'cptt-chat-context-menu';
+    menu.className = 'cptt-chat-context-menu';
+    menu.hidden = true;
+    menu.innerHTML = '<button type="button" data-act="copy">کپی</button><button type="button" data-act="reply">پاسخ</button><button type="button" data-act="forward">فوروارد</button><button type="button" data-act="select">انتخاب</button><button type="button" data-act="delete">حذف</button>';
+    document.body.appendChild(menu);
+    document.addEventListener('click', function(e){ if (!menu.contains(e.target)) menu.hidden = true; });
+    return menu;
+  }
+
+  function updateBulkToolbar(modal){
+    if (!modal) return;
+    var selected = qsa('.cptt-chat-bubble.is-selected', modal);
+    var toolbar = qs('.cptt-chat-bulkbar', modal);
+    if (!toolbar) {
+      toolbar = document.createElement('div');
+      toolbar.className = 'cptt-chat-bulkbar';
+      toolbar.hidden = true;
+      toolbar.innerHTML = '<span class="cptt-chat-bulkbar__count">0</span><div class="cptt-chat-bulkbar__actions"><button type="button" data-bulk="copy">کپی</button><button type="button" data-bulk="forward">فوروارد</button><button type="button" data-bulk="delete">حذف</button><button type="button" data-bulk="cancel">انصراف</button></div>';
+      var body = qs('.cptt-expert-chatModal__dialog,.cptt-direct-chat-modal__dialog', modal) || modal;
+      body.insertBefore(toolbar, body.firstChild);
+      toolbar.addEventListener('click', function(e){
+        var act = e.target.getAttribute('data-bulk');
+        if (!act) return;
+        var items = qsa('.cptt-chat-bubble.is-selected', modal);
+        if (act === 'cancel') { items.forEach(function(el){ el.classList.remove('is-selected'); }); updateBulkToolbar(modal); return; }
+        var texts = items.map(function(el){ return el.getAttribute('data-text') || ''; }).filter(Boolean).join('\n\n');
+        if (act === 'copy' && texts) navigator.clipboard && navigator.clipboard.writeText(texts).catch(function(){});
+        if (act === 'forward' && texts) {
+          var form = qs('form', modal);
+          var ta = form ? qs('textarea', form) : null;
+          if (ta) { ta.value = '↪️ فوروارد:\n' + texts; ta.focus(); }
+        }
+        if (act === 'delete') {
+          items.forEach(function(el){
+            if (el.getAttribute('data-owned') !== '1') return;
+            var kind = el.getAttribute('data-chat-kind');
+            var id = el.getAttribute('data-id');
+            if (kind === 'project') {
+              var form = qs('.cptt-expert-message-form', modal);
+              if (!form) return;
+              var fd = new FormData();
+              fd.append('action', 'cptt_expert_delete_project_message');
+              fd.append('nonce', currentNonce());
+              fd.append('project_id', form.getAttribute('data-project-id') || '');
+              fd.append('message_id', id || '');
+              fetch(currentAjax(), { method:'POST', credentials:'same-origin', body:fd }).catch(function(){});
+            } else if (kind === 'direct') {
+              var fd2 = new FormData();
+              fd2.append('action', 'cptt_expert_delete_direct_message');
+              fd2.append('nonce', currentNonce());
+              fd2.append('message_id', id || '');
+              fetch(currentAjax(), { method:'POST', credentials:'same-origin', body:fd2 }).catch(function(){});
+            }
+            el.remove();
+          });
+          updateBulkToolbar(modal);
+        }
+      });
+    }
+    qs('.cptt-chat-bulkbar__count', toolbar).textContent = String(selected.length);
+    toolbar.hidden = !selected.length;
+  }
+
+  function bindBubbleContext(modal){
+    if (!modal || modal.dataset.contextReady === '1') return;
+    modal.dataset.contextReady = '1';
+    var menu = ensureChatContextMenu();
+    var pressTimer = null;
+    function showMenu(bubble, x, y){
+      modal._activeBubble = bubble;
+      menu.hidden = false;
+      menu.style.left = Math.max(10, Math.min(window.innerWidth - 170, x)) + 'px';
+      menu.style.top = Math.max(10, Math.min(window.innerHeight - 220, y)) + 'px';
+      var owned = bubble.getAttribute('data-owned') === '1';
+      qsa('button[data-act="delete"]', menu).forEach(function(btn){ btn.style.display = owned ? '' : 'none'; });
+    }
+    modal.addEventListener('contextmenu', function(e){
+      var bubble = e.target.closest('.cptt-chat-bubble');
+      if (!bubble) return;
+      e.preventDefault();
+      showMenu(bubble, e.clientX, e.clientY);
+    });
+    modal.addEventListener('touchstart', function(e){
+      var bubble = e.target.closest('.cptt-chat-bubble');
+      if (!bubble) return;
+      var touch = e.touches[0];
+      pressTimer = setTimeout(function(){ showMenu(bubble, touch.clientX, touch.clientY); }, 480);
+    }, { passive:true });
+    modal.addEventListener('touchend', function(){ clearTimeout(pressTimer); });
+    menu.addEventListener('click', function(e){
+      var act = e.target.getAttribute('data-act');
+      if (!act || !modal._activeBubble) return;
+      var bubble = modal._activeBubble;
+      var text = bubble.getAttribute('data-text') || '';
+      var kind = bubble.getAttribute('data-chat-kind');
+      var id = bubble.getAttribute('data-id') || '';
+      var form = kind === 'project' ? qs('.cptt-expert-message-form', modal) : qs('.cptt-direct-chat-form', modal);
+      if (act === 'copy' && text) navigator.clipboard && navigator.clipboard.writeText(text).catch(function(){});
+      if (act === 'reply') setReplyText(form, text);
+      if (act === 'forward') { var ta = form ? qs('textarea', form) : null; if (ta) { ta.value = '↪️ فوروارد:\n' + text; ta.focus(); } }
+      if (act === 'select') { bubble.classList.toggle('is-selected'); updateBulkToolbar(modal); }
+      if (act === 'delete' && bubble.getAttribute('data-owned') === '1') {
+        if (kind === 'project') {
+          var fd = new FormData();
+          fd.append('action', 'cptt_expert_delete_project_message');
+          fd.append('nonce', currentNonce());
+          fd.append('project_id', form ? (form.getAttribute('data-project-id') || '') : '');
+          fd.append('message_id', id);
+          fetch(currentAjax(), { method:'POST', credentials:'same-origin', body:fd }).catch(function(){});
+        } else if (kind === 'direct') {
+          var fd2 = new FormData();
+          fd2.append('action', 'cptt_expert_delete_direct_message');
+          fd2.append('nonce', currentNonce());
+          fd2.append('message_id', id);
+          fetch(currentAjax(), { method:'POST', credentials:'same-origin', body:fd2 }).catch(function(){});
+        }
+        bubble.remove();
+        updateBulkToolbar(modal);
+      }
+      menu.hidden = true;
+    });
+  }
+
+  function enhanceChatModalUi(modal){
+    if (!modal || modal.dataset.telegramish === '1') return;
+    modal.dataset.telegramish = '1';
+    var form = qs('.cptt-expert-message-form,.cptt-direct-chat-form', modal);
+    ensureReplyBox(form);
+    ensureVoiceButton(form);
+    bindBubbleContext(modal);
+    updateBulkToolbar(modal);
+  }
+
+  function fetchProjectMessagesEnhanced(modal){
+    var form = qs('.cptt-expert-message-form', modal);
+    if (!form) return;
+    var wrap = form.parentElement.querySelector('.cptt-expert-messagesWrap');
+    var fd = new FormData();
+    fd.append('action', 'cptt_expert_fetch_messages');
+    fd.append('nonce', currentNonce());
+    fd.append('project_id', form.getAttribute('data-project-id') || '');
+    fetch(currentAjax(), { method:'POST', credentials:'same-origin', body:fd })
+      .then(function(r){ return r.json(); })
+      .then(function(json){ if (json && json.success) { renderProjectMessagesEnhanced((json.data && json.data.messages) || [], wrap); updateBulkToolbar(modal); } })
+      .catch(function(){});
+  }
+
+  function fetchDirectMessagesEnhanced(modal){
+    var recv = qs('#direct-chat-receiver-id', modal);
+    var wrap = qs('#direct-chat-messages-container', modal);
+    if (!recv || !wrap || !recv.value) return;
+    var fd = new FormData();
+    fd.append('action', 'cptt_expert_fetch_direct_messages');
+    fd.append('nonce', currentNonce());
+    fd.append('receiver_id', recv.value);
+    fetch(currentAjax(), { method:'POST', credentials:'same-origin', body:fd })
+      .then(function(r){ return r.json(); })
+      .then(function(json){ if (json && json.success) { renderDirectMessagesEnhanced(json.data || [], wrap); updateBulkToolbar(modal); } })
+      .catch(function(){});
+    var fd2 = new FormData();
+    fd2.append('action', 'cptt_expert_get_expert_info');
+    fd2.append('nonce', currentNonce());
+    fd2.append('expert_id', recv.value);
+    fetch(currentAjax(), { method:'POST', credentials:'same-origin', body:fd2 })
+      .then(function(r){ return r.json(); })
+      .then(function(json){ if (json && json.success) { var stats = qs('#direct-chat-stats', modal); if (stats) stats.textContent = (json.data.presence_text || '') + ' • ' + (json.data.stats || ''); } })
+      .catch(function(){});
+  }
+
+  function initChatRealtimeLoops(){
+    var projectLoops = new WeakMap();
+    qsa('.cptt-expert-chatModal').forEach(function(modal){
+      if (modal.dataset.loopReady === '1') return;
+      modal.dataset.loopReady = '1';
+      var openBtn = modal.closest('.cptt-expertCard') ? qs('.cptt-expert-chat-launch', modal.closest('.cptt-expertCard')) : null;
+      function start(){ enhanceChatModalUi(modal); fetchProjectMessagesEnhanced(modal); if (projectLoops.get(modal)) clearInterval(projectLoops.get(modal)); projectLoops.set(modal, setInterval(function(){ if (!modal.hidden) fetchProjectMessagesEnhanced(modal); }, 2200)); }
+      function stop(){ if (projectLoops.get(modal)) clearInterval(projectLoops.get(modal)); projectLoops.delete(modal); }
+      if (openBtn) openBtn.addEventListener('click', function(){ setTimeout(start, 180); });
+      qsa('.cptt-expert-chatModal__close,.cptt-expert-chatModal__backdrop', modal).forEach(function(el){ el.addEventListener('click', stop); });
+    });
+
+    var directModal = qs('.cptt-direct-chat-modal');
+    if (directModal && !directModal.dataset.loopReady) {
+      directModal.dataset.loopReady = '1';
+      var directLoop = null;
+      document.addEventListener('click', function(e){ if (e.target.closest('.cptt-expert-list-item')) { setTimeout(function(){ enhanceChatModalUi(directModal); fetchDirectMessagesEnhanced(directModal); if (directLoop) clearInterval(directLoop); directLoop = setInterval(function(){ if (!directModal.hidden) fetchDirectMessagesEnhanced(directModal); }, 2200); }, 250); } });
+      qsa('.cptt-direct-chat-modal__close,.cptt-direct-chat-modal__backdrop', directModal).forEach(function(el){ el.addEventListener('click', function(){ if (directLoop) clearInterval(directLoop); directLoop = null; }); });
+    }
+  }
+
+  ready(function(){
+    pingPresence();
+    setInterval(pingPresence, 60000);
+    initChatRealtimeLoops();
+  });
+})();
+
+/* =========================================================
+   HAM v5.6.9 — complete chat replacement from scratch
+   ========================================================= */
+(function(){
+  'use strict';
+  function ready(fn){ if(document.readyState !== 'loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
+  function qs(sel, ctx){ return (ctx || document).querySelector(sel); }
+  function qsa(sel, ctx){ return Array.prototype.slice.call((ctx || document).querySelectorAll(sel)); }
+  function escapeHtml(str){ return String(str || '').replace(/[&<>"']/g, function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[m]; }); }
+  function ajax(){ return (window.CPTT_EXPERT && CPTT_EXPERT.ajax) ? CPTT_EXPERT.ajax : ''; }
+  function nonce(){ return (window.CPTT_EXPERT && CPTT_EXPERT.nonce) ? CPTT_EXPERT.nonce : ''; }
+  function myId(){ return (window.CPTT_EXPERT && CPTT_EXPERT.wpUserId) ? parseInt(CPTT_EXPERT.wpUserId, 10) : 0; }
+
+  var app = null;
+  var state = {
+    mode: 'project',
+    projectId: 0,
+    directId: 0,
+    recipientId: 0,
+    replyId: '',
+    replyText: '',
+    pollTimer: null,
+    selected: new Set(),
+    recorder: null,
+    recordStream: null,
+    recordChunks: [],
+    recordStartedAt: 0,
+    recordTimer: null
+  };
+
+  function normBody(rawBody){
+    rawBody = rawBody || '';
+    var replyId = '', replyText = '';
+    var replyMatch = rawBody.match(/^\[\[REPLY:([^|\]]+)\|([\s\S]*?)\]\]\s*/);
+    if (replyMatch) {
+      replyId = String(replyMatch[1] || '');
+      replyText = String(replyMatch[2] || '');
+      rawBody = rawBody.replace(replyMatch[0], '');
+    }
+    var linkMatch = rawBody.match(/href=(?:&quot;|"|')?([^"'>\s&]+)(?:&quot;|"|')?[^>]*class=(?:&quot;|"|')?cptt-chat-file-link/i);
+    var fileUrl = linkMatch ? linkMatch[1] : '';
+    var cleanText = rawBody.replace(/<a[^>]*cptt-chat-file-link.*?<\/a>/gi, '').replace(/&lt;a[^&]*cptt-chat-file-link.*?&lt;\/a&gt;/gi, '');
+    var body = escapeHtml(cleanText.trim()).replace(/\n/g, '<br>');
+    var ext = '';
+    if (fileUrl) {
+      var em = String(fileUrl).toLowerCase().match(/\.([a-z0-9]+)(?:\?|$)/);
+      ext = em ? em[1] : '';
+      if (['mp3','wav','ogg','oga','m4a','aac','webm'].indexOf(ext) > -1) {
+        body += '<div class="ham-chat__audioWrap"><audio controls preload="metadata" class="ham-chat__audio" src="' + escapeHtml(fileUrl) + '"></audio></div>';
+      } else {
+        body += '<br><a href="' + escapeHtml(fileUrl) + '" target="_blank" class="ham-chat__fileBtn">مشاهده فایل</a>';
+      }
+    }
+    return { text: cleanText.trim(), html: body, replyId: replyId, replyText: replyText, fileUrl: fileUrl, fileExt: ext };
+  }
+
+  function ensureApp(){
+    if (app) return app;
+    app = document.createElement('div');
+    app.id = 'ham-chat-app';
+    app.className = 'ham-chat';
+    app.hidden = true;
+    app.innerHTML = '' +
+      '<div class="ham-chat__backdrop"></div>' +
+      '<div class="ham-chat__dialog">' +
+        '<div class="ham-chat__header">' +
+          '<button type="button" class="ham-chat__close" aria-label="بستن">×</button>' +
+          '<div class="ham-chat__peer">' +
+            '<div class="ham-chat__avatarWrap"><img class="ham-chat__avatar" alt="avatar"><span class="ham-chat__statusDot"></span></div>' +
+            '<div class="ham-chat__peerMeta"><strong class="ham-chat__title"></strong><small class="ham-chat__subtitle"></small></div>' +
+          '</div>' +
+          '<div class="ham-chat__headActions"><button type="button" class="ham-chat__clearSelect" hidden>لغو انتخاب</button></div>' +
+        '</div>' +
+        '<div class="ham-chat__bulkbar" hidden><span class="ham-chat__bulkCount">0</span><div class="ham-chat__bulkActions"><button type="button" data-bulk="copy">کپی</button><button type="button" data-bulk="forward">فوروارد</button><button type="button" data-bulk="delete">حذف</button></div></div>' +
+        '<div class="ham-chat__recipientRow" hidden><select class="ham-chat__recipient"></select></div>' +
+        '<div class="ham-chat__messages"></div>' +
+        '<form class="ham-chat__composer">' +
+          '<div class="ham-chat__reply" hidden><div class="ham-chat__replyText"></div><button type="button" class="ham-chat__replyClose">×</button></div>' +
+          '<div class="ham-chat__recording" hidden><span class="ham-chat__recordDot"></span><b class="ham-chat__recordTime">00:00</b><small>در حال ضبط ویس...</small></div>' +
+          '<input type="file" class="ham-chat__fileInput" hidden>' +
+          '<div class="ham-chat__composeRow">' +
+            '<button type="button" class="ham-chat__attach" aria-label="پیوست">📎</button>' +
+            '<button type="button" class="ham-chat__voice" aria-label="ویس">🎙</button>' +
+            '<textarea class="ham-chat__input" rows="1" placeholder="پیام بنویسید..."></textarea>' +
+            '<button type="submit" class="ham-chat__send" aria-label="ارسال">➤</button>' +
+          '</div>' +
+          '<div class="ham-chat__filePreview" hidden></div>' +
+          '<div class="ham-chat__msg"></div>' +
+        '</form>' +
+      '</div>' +
+      '<div class="ham-chat__menu" hidden><button type="button" data-act="copy">کپی</button><button type="button" data-act="reply">پاسخ</button><button type="button" data-act="forward">فوروارد</button><button type="button" data-act="select">انتخاب</button><button type="button" data-act="download">دانلود</button><button type="button" data-act="delete">حذف</button></div>' +
+      '<div class="ham-chat__forward" hidden><div class="ham-chat__forwardBox"><div class="ham-chat__forwardHead"><strong>فوروارد پیام</strong><button type="button" class="ham-chat__forwardClose">×</button></div><div class="ham-chat__forwardList"></div></div></div>';
+    document.body.appendChild(app);
+    bindApp();
+    return app;
+  }
+
+  function stopPolling(){ if (state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer = null; } }
+  function closeChat(){
+    stopPolling();
+    if (state.recordStream) { state.recordStream.getTracks().forEach(function(t){ t.stop(); }); state.recordStream = null; }
+    state.recorder = null; state.recordChunks = []; state.replyId=''; state.replyText = ''; state.selected.clear(); if(state.recordTimer){clearInterval(state.recordTimer); state.recordTimer=null;} state.recordStartedAt=0;
+    if (app) app.hidden = true;
+    document.body.classList.remove('ham-chat-open');
+  }
+
+  function bindApp(){
+    qs('.ham-chat__backdrop', app).addEventListener('click', closeChat);
+    qs('.ham-chat__close', app).addEventListener('click', closeChat);
+    qs('.ham-chat__replyClose', app).addEventListener('click', function(){ state.replyId=''; state.replyText=''; syncReply(); });
+    qs('.ham-chat__attach', app).addEventListener('click', function(){ qs('.ham-chat__fileInput', app).click(); });
+    qs('.ham-chat__fileInput', app).addEventListener('change', syncFilePreview);
+    qs('.ham-chat__voice', app).addEventListener('click', toggleVoiceRecord);
+    qs('.ham-chat__composer', app).addEventListener('submit', sendCurrentMessage);
+    qs('.ham-chat__forwardClose', app).addEventListener('click', closeForwardSheet);
+    qs('.ham-chat__clearSelect', app).addEventListener('click', function(){ state.selected.clear(); syncSelection(); });
+    qs('.ham-chat__bulkbar', app).addEventListener('click', function(e){
+      var act = e.target.getAttribute('data-bulk');
+      if (!act) return;
+      var selected = currentSelectedBubbles();
+      var texts = selected.map(function(el){ return el.getAttribute('data-text') || ''; }).filter(Boolean).join('\n\n');
+      if (act === 'copy' && texts && navigator.clipboard) navigator.clipboard.writeText(texts).catch(function(){});
+      if (act === 'forward' && texts) { openForwardSheet(texts); }
+      if (act === 'delete') { batchDeleteSelected(); }
+    });
+    app.addEventListener('contextmenu', function(e){
+      var bubble = e.target.closest('.ham-chat__bubble');
+      if (!bubble) return;
+      e.preventDefault();
+      openMenuForBubble(bubble, e.clientX, e.clientY);
+    });
+    var pressTimer = null;
+    app.addEventListener('touchstart', function(e){
+      var bubble = e.target.closest('.ham-chat__bubble');
+      if (!bubble) return;
+      var t = e.touches[0];
+      pressTimer = setTimeout(function(){ openMenuForBubble(bubble, t.clientX, t.clientY); }, 430);
+    }, { passive:true });
+    app.addEventListener('touchend', function(){ clearTimeout(pressTimer); }, { passive:true });
+    qs('.ham-chat__menu', app).addEventListener('click', function(e){
+      var act = e.target.getAttribute('data-act');
+      var bubble = app._menuBubble;
+      if (!act || !bubble) return;
+      var text = bubble.getAttribute('data-text') || '';
+      if (act === 'copy' && text && navigator.clipboard) navigator.clipboard.writeText(text).catch(function(){});
+      if (act === 'reply') { state.replyId = bubble.getAttribute('data-id') || ''; state.replyText = text; syncReply(); }
+      if (act === 'forward' && text) { openForwardSheet(text); }
+      if (act === 'download' && bubble.getAttribute('data-file-url')) { window.open(bubble.getAttribute('data-file-url'),'_blank'); }
+      if (act === 'select') {
+        var id = bubble.getAttribute('data-id');
+        if (state.selected.has(id)) state.selected.delete(id); else state.selected.add(id);
+        syncSelection();
+      }
+      if (act === 'delete') deleteSingleBubble(bubble);
+      closeMenu();
+    });
+
+    qs('.ham-chat__messages', app).addEventListener('click', function(e){
+      var replyBtn = e.target.closest('.ham-chat__replySnippet');
+      if (replyBtn) {
+        var rid = String(replyBtn.getAttribute('data-reply-id') || '').replace(/(["\\])/g,'\\$1');
+        var target = qs('.ham-chat__bubble[data-id="' + rid + '"]', app);
+        if (target) { target.scrollIntoView({ behavior:'smooth', block:'center' }); target.classList.add('is-jump-highlight'); setTimeout(function(){ target.classList.remove('is-jump-highlight'); }, 1200); }
+        return;
+      }
+      var bubble = e.target.closest('.ham-chat__bubble');
+      if (!bubble || e.target.closest('audio,a')) return;
+      if (app.classList.contains('is-selection-mode')) {
+        var bid = bubble.getAttribute('data-id');
+        if (state.selected.has(bid)) state.selected.delete(bid); else state.selected.add(bid);
+        syncSelection();
+      }
+    });
+    qs('.ham-chat__input', app).addEventListener('input', autoGrow);
+  }
+
+  function autoGrow(){
+    var ta = qs('.ham-chat__input', app);
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(120, ta.scrollHeight) + 'px';
+  }
+
+  function syncReply(){
+    var row = qs('.ham-chat__reply', app);
+    qs('.ham-chat__replyText', app).textContent = state.replyText || '';
+    row.hidden = !state.replyText;
+    row.style.display = state.replyText ? '' : 'none';
+  }
+
+  function syncFilePreview(){
+    var input = qs('.ham-chat__fileInput', app);
+    var preview = qs('.ham-chat__filePreview', app);
+    if (!input.files || !input.files.length) { preview.hidden = true; preview.style.display='none'; preview.textContent = ''; return; }
+    preview.hidden = false;
+    preview.style.display = 'flex';
+    preview.innerHTML = '<span>' + escapeHtml(input.files[0].name) + '</span><button type="button" class="ham-chat__fileRemove">×</button>';
+    qs('.ham-chat__fileRemove', preview).onclick = function(){ input.value = ''; syncFilePreview(); };
+  }
+
+  async function toggleVoiceRecord(){
+    var btn = qs('.ham-chat__voice', app);
+    var fileInput = qs('.ham-chat__fileInput', app);
+    if (!window.MediaRecorder || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    if (state.recorder && state.recorder.state === 'recording') {
+      state.recorder.stop();
+      if(state.recordTimer){ clearInterval(state.recordTimer); state.recordTimer = null; }
+      qs('.ham-chat__recording', app).hidden = true; qs('.ham-chat__recording', app).style.display='none';
+      qs('.ham-chat__composeRow', app).classList.remove('is-hidden');
+      btn.classList.remove('is-recording');
+      btn.textContent = '🎙';
+      return;
+    }
+    try {
+      state.recordStream = await navigator.mediaDevices.getUserMedia({ audio:true });
+      state.recordChunks = [];
+      state.recorder = new MediaRecorder(state.recordStream);
+      state.recorder.ondataavailable = function(e){ if (e.data && e.data.size) state.recordChunks.push(e.data); };
+      state.recorder.onstop = function(){
+        var blob = new Blob(state.recordChunks, { type: state.recorder.mimeType || 'audio/webm' });
+        var ext = blob.type.indexOf('ogg') > -1 ? 'ogg' : 'webm';
+        var file = new File([blob], 'voice-message.' + ext, { type: blob.type || 'audio/webm' });
+        try {
+          var dt = new DataTransfer();
+          dt.items.add(file);
+          fileInput.files = dt.files;
+        } catch(err) {}
+        syncFilePreview();
+        if(state.recordTimer){ clearInterval(state.recordTimer); state.recordTimer = null; }
+        state.recordStartedAt = 0;
+        qs('.ham-chat__recording', app).hidden = true; qs('.ham-chat__recording', app).style.display='none';
+        qs('.ham-chat__composeRow', app).classList.remove('is-hidden');
+        if (state.recordStream) { state.recordStream.getTracks().forEach(function(t){ t.stop(); }); state.recordStream = null; }
+      };
+      state.recorder.start();
+      state.recordStartedAt = Date.now();
+      if(state.recordTimer) clearInterval(state.recordTimer);
+      state.recordTimer = setInterval(function(){ var sec = Math.floor((Date.now()-state.recordStartedAt)/1000); var mm = String(Math.floor(sec/60)).padStart(2,'0'); var ss = String(sec%60).padStart(2,'0'); var rt = qs('.ham-chat__recordTime', app); if(rt) rt.textContent = mm + ':' + ss; }, 250);
+      qs('.ham-chat__recording', app).hidden = false; qs('.ham-chat__recording', app).style.display='flex';
+      qs('.ham-chat__composeRow', app).classList.add('is-hidden');
+      btn.classList.add('is-recording');
+      btn.textContent = '⏹';
+    } catch(err) {}
+  }
+
+  function openMenuForBubble(bubble, x, y){
+    var menu = qs('.ham-chat__menu', app);
+    app._menuBubble = bubble;
+    menu.hidden = false;
+    menu.style.left = Math.max(12, Math.min(window.innerWidth - 180, x)) + 'px';
+    menu.style.top = Math.max(12, Math.min(window.innerHeight - 260, y)) + 'px';
+    qsa('button[data-act="delete"]', menu).forEach(function(btn){ btn.style.display = bubble.getAttribute('data-owned') === '1' ? '' : 'none'; });
+    qsa('button[data-act="download"]', menu).forEach(function(btn){ btn.style.display = bubble.getAttribute('data-file-url') ? '' : 'none'; });
+  }
+  function closeMenu(){ var menu = qs('.ham-chat__menu', app); menu.hidden = true; app._menuBubble = null; }
+  document.addEventListener('click', function(e){ if (app && !qs('.ham-chat__menu', app).contains(e.target)) closeMenu(); });
+
+  function currentSelectedBubbles(){
+    return qsa('.ham-chat__bubble', qs('.ham-chat__messages', app)).filter(function(el){ return state.selected.has(el.getAttribute('data-id')); });
+  }
+
+  function syncSelection(){
+    qsa('.ham-chat__bubble', qs('.ham-chat__messages', app)).forEach(function(el){ el.classList.toggle('is-selected', state.selected.has(el.getAttribute('data-id'))); });
+    var has = state.selected.size > 0;
+    app.classList.toggle('is-selection-mode', has);
+    qs('.ham-chat__bulkbar', app).hidden = !has; qs('.ham-chat__bulkbar', app).style.display = has ? 'flex' : 'none';
+    qs('.ham-chat__clearSelect', app).hidden = !has;
+    qs('.ham-chat__bulkCount', app).textContent = String(state.selected.size);
+  }
+
+  function sortItems(items){
+    return (items || []).slice().sort(function(a,b){
+      var ta = parseInt(a.time || 0, 10), tb = parseInt(b.time || 0, 10);
+      if (ta !== tb) return ta - tb;
+      return String(a.id || '').localeCompare(String(b.id || ''));
+    });
+  }
+
+  function renderItems(items){
+    var wrap = qs('.ham-chat__messages', app);
+    items = sortItems(items);
+    if (!items.length) { wrap.innerHTML = '<div class="ham-chat__empty">هنوز پیامی ثبت نشده است.</div>'; syncSelection(); return; }
+    wrap.innerHTML = items.map(function(message){
+      var isMe = parseInt(message.sender_id, 10) === myId();
+      var head = state.mode === 'project'
+        ? escapeHtml((message.sender_name || 'کاربر') + (message.recipient_name && message.recipient_name !== 'همه' ? ' → ' + message.recipient_name : ''))
+        : escapeHtml(message.sender_name || 'کاربر');
+      var time = escapeHtml(message.time_fa || '');
+      var norm = normBody(message.content || '');
+      var cls = isMe ? 'ham-chat__bubble--me' : 'ham-chat__bubble--other';
+      var reply = (norm.replyId && norm.replyText) ? '<button type="button" class="ham-chat__replySnippet" data-reply-id="' + escapeHtml(norm.replyId) + '">' + escapeHtml(norm.replyText) + '</button>' : '';
+      return '<div class="ham-chat__bubble ' + cls + '" data-id="' + escapeHtml(String(message.id || '')) + '" data-owned="' + (isMe ? '1' : '0') + '" data-text="' + escapeHtml(norm.text) + '" data-file-url="' + escapeHtml(norm.fileUrl || '') + '"><div class="ham-chat__bubbleHead"><strong>' + head + '</strong><span>' + time + '</span></div>' + reply + '<div class="ham-chat__bubbleBody">' + norm.html + '</div></div>';
+    }).join('');
+    wrap.scrollTop = wrap.scrollHeight;
+    syncSelection();
+  }
+
+  async function fetchProjectMessages(){
+    var fd = new FormData();
+    fd.append('action', 'cptt_expert_fetch_messages');
+    fd.append('nonce', nonce());
+    fd.append('project_id', String(state.projectId));
+    var res = await fetch(ajax(), { method:'POST', credentials:'same-origin', body:fd });
+    var json = await res.json();
+    if (json && json.success) renderItems((json.data && json.data.messages) || []);
+  }
+
+  async function fetchDirectMessages(){
+    var fd = new FormData();
+    fd.append('action', 'cptt_expert_fetch_direct_messages');
+    fd.append('nonce', nonce());
+    fd.append('receiver_id', String(state.directId));
+    var res = await fetch(ajax(), { method:'POST', credentials:'same-origin', body:fd });
+    var json = await res.json();
+    if (json && json.success) renderItems(json.data || []);
+  }
+
+  async function refreshHeaderPresence(){
+    if (state.mode !== 'direct' || !state.directId) return;
+    var fd = new FormData();
+    fd.append('action', 'cptt_expert_get_expert_info');
+    fd.append('nonce', nonce());
+    fd.append('expert_id', String(state.directId));
+    var res = await fetch(ajax(), { method:'POST', credentials:'same-origin', body:fd });
+    var json = await res.json();
+    if (!(json && json.success)) return;
+    var data = json.data || {};
+    qs('.ham-chat__subtitle', app).textContent = (data.presence_text || '') + (data.stats ? (' • ' + data.stats) : '');
+    var dot = qs('.ham-chat__statusDot', app);
+    if (dot) dot.classList.toggle('is-online', !!(data.presence && data.presence.online));
+    if (data.avatar) qs('.ham-chat__avatar', app).src = data.avatar;
+    if (data.name) qs('.ham-chat__title', app).textContent = data.name;
+  }
+
+  function startPolling(){
+    stopPolling();
+    state.pollTimer = setInterval(function(){
+      if (app.hidden) return;
+      if (state.mode === 'project') fetchProjectMessages().catch(function(){});
+      if (state.mode === 'direct') { fetchDirectMessages().catch(function(){}); refreshHeaderPresence().catch(function(){}); }
+    }, 2200);
+  }
+
+  function stopPolling(){ if (state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer = null; } }
+
+  async function sendCurrentMessage(e){
+    e.preventDefault();
+    var ta = qs('.ham-chat__input', app);
+    var fileInput = qs('.ham-chat__fileInput', app);
+    var msg = qs('.ham-chat__msg', app);
+    var text = (ta.value || '').trim();
+    if (!text && !(fileInput.files && fileInput.files.length)) return;
+    var fd = new FormData();
+    var submitBtn = qs('.ham-chat__send', app);
+    submitBtn.disabled = true; msg.textContent = 'در حال ارسال...';
+    try {
+      if (state.replyId) text = '[[REPLY:' + state.replyId + '|' + state.replyText + ']] ' + text;
+      if (state.mode === 'project') {
+        fd.append('action', 'cptt_expert_send_message');
+        fd.append('nonce', nonce());
+        fd.append('project_id', String(state.projectId));
+        fd.append('recipient_id', String(qs('.ham-chat__recipient', app).value || '0'));
+        fd.append('content', text);
+        if (fileInput.files && fileInput.files.length) fd.append('chat_file', fileInput.files[0]);
+        var res = await fetch(ajax(), { method:'POST', credentials:'same-origin', body:fd });
+        var json = await res.json();
+        if (!(json && json.success)) throw new Error((json && json.data) ? json.data : 'خطا در ارسال پیام');
+        renderItems((json.data && json.data.messages) || []);
+      } else {
+        fd.append('action', 'cptt_expert_send_direct_message');
+        fd.append('nonce', nonce());
+        fd.append('receiver_id', String(state.directId));
+        fd.append('message', text);
+        if (fileInput.files && fileInput.files.length) fd.append('chat_file', fileInput.files[0]);
+        var res2 = await fetch(ajax(), { method:'POST', credentials:'same-origin', body:fd });
+        var json2 = await res2.json();
+        if (!(json2 && json2.success)) throw new Error((json2 && json2.data) ? json2.data : 'خطا در ارسال پیام');
+        renderItems(json2.data || []);
+      }
+      ta.value = ''; autoGrowChat();
+      fileInput.value = ''; syncFilePreviewChat();
+      state.replyId=''; state.replyText = ''; syncReplyChat();
+      msg.textContent = '';
+    } catch(err) {
+      msg.textContent = err.message || 'خطا در ارسال پیام';
+    } finally {
+      submitBtn.disabled = false;
+    }
+  }
+
+  function autoGrowChat(){
+    var ta = qs('.ham-chat__input', app); if (!ta) return;
+    ta.style.height = 'auto'; ta.style.height = Math.min(120, ta.scrollHeight) + 'px';
+  }
+  function syncReplyChat(){ var row = qs('.ham-chat__reply', app); qs('.ham-chat__replyText', app).textContent = state.replyText || ''; row.hidden = !state.replyText; row.style.display = state.replyText ? 'flex' : 'none'; }
+  function syncFilePreviewChat(){
+    var input = qs('.ham-chat__fileInput', app), preview = qs('.ham-chat__filePreview', app);
+    if (!input.files || !input.files.length) { preview.hidden = true; preview.innerHTML = ''; return; }
+    preview.hidden = false;
+    preview.style.display = 'flex';
+    preview.innerHTML = '<span>' + escapeHtml(input.files[0].name) + '</span><button type="button" class="ham-chat__fileRemove">×</button>';
+    qs('.ham-chat__fileRemove', preview).onclick = function(){ input.value = ''; syncFilePreviewChat(); };
+  }
+
+  function batchDeleteSelected(){ currentSelectedBubbles().forEach(deleteSingleBubble); }
+
+  function deleteSingleBubble(bubble){
+    if (!bubble || bubble.getAttribute('data-owned') !== '1') return;
+    var id = bubble.getAttribute('data-id') || '';
+    if (!id) return;
+    if (state.mode === 'project') {
+      var fd = new FormData();
+      fd.append('action', 'cptt_expert_delete_project_message');
+      fd.append('nonce', nonce());
+      fd.append('project_id', String(state.projectId));
+      fd.append('message_id', id);
+      fetch(ajax(), { method:'POST', credentials:'same-origin', body:fd }).then(function(r){ return r.json(); }).then(function(json){ if (json && json.success) renderItems((json.data && json.data.messages) || []); }).catch(function(){});
+    } else {
+      var fd2 = new FormData();
+      fd2.append('action', 'cptt_expert_delete_direct_message');
+      fd2.append('nonce', nonce());
+      fd2.append('message_id', id);
+      fetch(ajax(), { method:'POST', credentials:'same-origin', body:fd2 }).then(function(r){ return r.json(); }).then(function(json){ if (json && json.success) renderItems(json.data || []); }).catch(function(){});
+    }
+  }
+
+
+  function buildForwardTargets(){
+    var targets = [];
+    qsa('.cptt-expertCard[data-project-id]').forEach(function(card){
+      var titleEl = card.querySelector('h3');
+      if (!titleEl) return;
+      var clone = titleEl.cloneNode(true); qsa('.cptt-project-code', clone).forEach(function(el){ el.remove(); });
+      targets.push({ kind:'project', id:card.getAttribute('data-project-id'), title:clone.textContent.trim() });
+    });
+    var added = {};
+    qsa('.cptt-expert-list-item[data-expert-id]').forEach(function(item){
+      var id = item.getAttribute('data-expert-id'); if (!id || added[id]) return; added[id]=1;
+      var label = item.querySelector('span');
+      targets.push({ kind:'direct', id:id, title:(label ? label.textContent.trim() : ('کارشناس #' + id)) });
+    });
+    return targets;
+  }
+  function closeForwardSheet(){ var sheet = qs('.ham-chat__forward', app); if (sheet) sheet.hidden = true; }
+  function openForwardSheet(texts){
+    var sheet = qs('.ham-chat__forward', app), list = qs('.ham-chat__forwardList', app); if (!sheet || !list) return;
+    app._forwardPayload = texts || '';
+    var targets = buildForwardTargets();
+    list.innerHTML = targets.map(function(t){ return '<button type="button" class="ham-chat__forwardItem" data-kind="' + t.kind + '" data-id="' + escapeHtml(String(t.id)) + '"><span>' + escapeHtml(t.title) + '</span><small>' + (t.kind === 'project' ? 'چت پروژه' : 'چت مستقیم') + '</small></button>'; }).join('');
+    sheet.hidden = false;
+    list.onclick = function(e){ var item = e.target.closest('.ham-chat__forwardItem'); if (!item) return; sendForwardPayload(item.getAttribute('data-kind'), item.getAttribute('data-id'), app._forwardPayload || ''); };
+  }
+  async function sendForwardPayload(kind, id, payload){
+    if (!payload) return;
+    var fd = new FormData();
+    if (kind === 'project') {
+      fd.append('action', 'cptt_expert_send_message');
+      fd.append('nonce', nonce());
+      fd.append('project_id', String(id || '0'));
+      fd.append('recipient_id', '0');
+      fd.append('content', '↪️ فوروارد:\n' + payload);
+      await fetch(ajax(), { method:'POST', credentials:'same-origin', body:fd });
+    } else {
+      fd.append('action', 'cptt_expert_send_direct_message');
+      fd.append('nonce', nonce());
+      fd.append('receiver_id', String(id || '0'));
+      fd.append('message', '↪️ فوروارد:\n' + payload);
+      await fetch(ajax(), { method:'POST', credentials:'same-origin', body:fd });
+    }
+    closeForwardSheet();
+  }
+  function openProjectChat(card){
+    ensureApp();
+    state.mode = 'project';
+    state.projectId = parseInt(card.getAttribute('data-project-id') || '0', 10) || 0;
+    state.directId = 0;
+    state.replyId = '';
+    state.replyText = '';
+    state.selected.clear();
+    qs('.ham-chat__title', app).textContent = (function(){ var h = card.querySelector('h3'); if (!h) return 'گفتگوی پروژه'; var clone = h.cloneNode(true); qsa('.cptt-project-code', clone).forEach(function(el){ el.remove(); }); return clone.textContent.trim(); })();
+    qs('.ham-chat__subtitle', app).textContent = 'گفتگوی پروژه';
+    qs('.ham-chat__avatar', app).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><rect width="64" height="64" rx="22" fill="%234f46e5"/><path d="M18 22h12v12H18zm16 0h12v12H34zM18 38h12v12H18zm16 0h12V26H34z" fill="white"/></svg>';
+    qs('.ham-chat__statusDot', app).classList.remove('is-online');
+    var recipientRow = qs('.ham-chat__recipientRow', app);
+    var recipient = qs('.ham-chat__recipient', app);
+    recipient.innerHTML = '<option value="0">همه کارشناسان پروژه</option>';
+    var oldForm = card.querySelector('.cptt-expert-chatModal .cptt-expert-message-form');
+    if (oldForm) {
+      qsa('select[name="recipient_id"] option', oldForm).forEach(function(opt){ if (String(opt.value || '0') !== '0') recipient.appendChild(opt.cloneNode(true)); });
+    }
+    recipientRow.hidden = false;
+    qs('.ham-chat__messages', app).innerHTML = '<div class="ham-chat__loading">در حال بارگذاری گفتگو...</div>';
+    qs('.ham-chat__msg', app).textContent = '';
+    qs('.ham-chat__input', app).value = ''; autoGrowChat();
+    qs('.ham-chat__fileInput', app).value = ''; syncFilePreviewChat(); syncReplyChat(); syncSelection(); closeMenu();
+    app.hidden = false; document.body.classList.add('ham-chat-open');
+    fetchProjectMessages().catch(function(){});
+    startPolling();
+  }
+
+  async function openDirectChat(expertId){
+    ensureApp();
+    state.mode = 'direct';
+    state.projectId = 0;
+    state.directId = parseInt(expertId || '0', 10) || 0;
+    state.replyId = '';
+    state.replyText = '';
+    state.selected.clear();
+    qs('.ham-chat__recipientRow', app).hidden = true;
+    qs('.ham-chat__messages', app).innerHTML = '<div class="ham-chat__loading">در حال بارگذاری گفتگو...</div>';
+    qs('.ham-chat__msg', app).textContent = '';
+    qs('.ham-chat__input', app).value = ''; autoGrowChat();
+    qs('.ham-chat__fileInput', app).value = ''; syncFilePreviewChat(); syncReplyChat(); syncSelection(); closeMenu();
+    app.hidden = false; document.body.classList.add('ham-chat-open');
+    await refreshHeaderPresence().catch(function(){});
+    await fetchDirectMessages().catch(function(){});
+    startPolling();
+  }
+
+  function interceptOldChatButtons(){
+    document.addEventListener('click', function(e){
+      var projectBtn = e.target.closest('.cptt-expert-chat-launch');
+      if (projectBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+        var card = projectBtn.closest('.cptt-expertCard');
+        if (card) openProjectChat(card);
+        return;
+      }
+      var expertItem = e.target.closest('.cptt-expert-list-item');
+      if (expertItem && expertItem.hasAttribute('data-expert-id')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+        var expertsModal = qs('.cptt-experts-mobile-modal');
+        if (expertsModal) expertsModal.setAttribute('hidden', '');
+        openDirectChat(expertItem.getAttribute('data-expert-id'));
+        return;
+      }
+    }, true);
+  }
+
+  ready(function(){
+    interceptOldChatButtons();
+  });
 })();

@@ -469,6 +469,12 @@ class CPTT_Bale {
 			if ($data === 'admin_broadcast_start')     { $this->wizard_broadcast_start($chat_id, $msg_id, $user); return; }
 			if ($data === 'admin_reminders_trigger')   { $this->trigger_manual_reminders($chat_id, $msg_id); return; }
 			if ($data === 'admin_morning_time')       { $this->set_state($chat_id, 'admin_morning_time', []); $this->edit_or_send($chat_id,$msg_id,'⏰ زمان ارسال پیام صبح را به فرمت 24 ساعته بفرستید. مثال: `08:00`', $this->kb_cancel()); return; }
+			if ($data === 'admin_plugin_tools')       { $this->admin_plugin_tools($chat_id, $msg_id, $user); return; }
+			if ($data === 'admin_plugin_activate')    { $this->admin_plugin_activate($chat_id, $msg_id, $user); return; }
+			if ($data === 'admin_plugin_deactivate')  { $this->admin_plugin_deactivate($chat_id, $msg_id, $user); return; }
+			if ($data === 'admin_plugin_zip')         { $this->admin_plugin_zip_start($chat_id, $msg_id, $user); return; }
+			if ($data === 'admin_plugin_delete_confirm') { $this->admin_plugin_delete_confirm($chat_id, $msg_id, $user); return; }
+			if ($data === 'admin_plugin_delete')      { $this->admin_plugin_delete($chat_id, $msg_id, $user); return; }
 
 			// === v5.4.7: Admin assign expert to order ===
 			if (strpos($data, 'order_assign_') === 0)   { $this->admin_show_assign_experts($chat_id, $msg_id, (int)substr($data, 13), $user); return; }
@@ -529,6 +535,11 @@ class CPTT_Bale {
 			$t = $this->to_english_digits($text);
 			if (!preg_match('/^([01]?\d|2[0-3]):[0-5]\d$/', $t)) { self::send_message($chat_id,'فرمت درست نیست. مثال: `08:00`'); return true; }
 			$opt = self::get_settings(); $opt['morning_digest_time'] = $t; update_option('cptt_bale_settings', $opt, false); $this->clear_state($chat_id); self::send_message($chat_id,'✅ زمان پیام صبح روی '.$t.' تنظیم شد.'); return true;
+		}
+		if ($user && $s === 'admin_plugin_zip') {
+			if ($file_id === '') { self::send_message($chat_id, 'لطفاً فایل ZIP افزونه هماهنگ را به صورت document ارسال کنید.'); return true; }
+			$this->admin_plugin_install_from_bale_zip($chat_id, $file_id, $file_name, $user);
+			return true;
 		}
 
 		// Wizard: create project (admin / expert-from-order)
@@ -713,6 +724,7 @@ class CPTT_Bale {
 				['text' => '⏰ ارسال یادآوری', 'callback_data' => 'admin_reminders_trigger'],
 			];
 			$kb[] = [['text' => '🛒 سفارش‌های دریافت‌شده', 'callback_data' => 'admin_orders']];
+			$kb[] = [['text' => '🧩 مدیریت افزونه هماهنگ', 'callback_data' => 'admin_plugin_tools']];
 			$kb[] = [['text' => '⏰ زمان پیام صبح', 'callback_data' => 'admin_morning_time'], ['text' => '⚙ تنظیمات اعلان‌های من', 'callback_data' => 'expert_notif_settings']];
 		} elseif ($role === 'expert') {
 			$kb[] = [['text' => '📁 پروژه‌های فعال من', 'callback_data' => 'expert_projects']];
@@ -2669,5 +2681,144 @@ class CPTT_Bale {
 		$this->edit_or_send($chat_id, $msg_id, $msg, $this->kb_cancel());
 	}
 
+	/* ====================================================================
+	 * v5.6.4 — ADMIN: plugin management for هماهنگ via Bale
+	 * ==================================================================== */
+	private function ham_plugin_file() {
+		return plugin_basename(CPTT_PATH . 'client-project-tracker.php');
+	}
+
+	private function ham_plugin_abs() {
+		return WP_PLUGIN_DIR . '/' . $this->ham_plugin_file();
+	}
+
+	private function ham_plugin_info() {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		$plugin_file = $this->ham_plugin_file();
+		$installed = file_exists($this->ham_plugin_abs());
+		$active = $installed ? is_plugin_active($plugin_file) : false;
+		$version = '';
+		if ($installed) {
+			$data = get_plugin_data($this->ham_plugin_abs(), false, false);
+			$version = (string)($data['Version'] ?? '');
+		}
+		return [
+			'file' => $plugin_file,
+			'installed' => $installed,
+			'active' => $active,
+			'version' => $version,
+		];
+	}
+
+	private function admin_plugin_tools($chat_id, $msg_id, $user) {
+		if ($this->get_user_role($user) !== 'admin') { $this->edit_or_send($chat_id, $msg_id, '⚠️ دسترسی ندارید.', $this->kb_back()); return; }
+		$info = $this->ham_plugin_info();
+		$status = !$info['installed'] ? 'نصب نشده' : ($info['active'] ? 'فعال' : 'غیرفعال');
+		$version = $info['version'] !== '' ? $info['version'] : '—';
+		$msg  = "🧩 *مدیریت افزونه هماهنگ*\n\n";
+		$msg .= "• وضعیت فعلی: *{$status}*\n";
+		$msg .= "• نسخه فعلی: *{$version}*\n\n";
+		$msg .= "از اینجا می‌توانید افزونه را فعال/غیرفعال کنید یا فایل ZIP نسخه جدید را برای نصب/بروزرسانی بفرستید.";
+		$kb = [
+			[['text' => '🟢 فعال‌سازی', 'callback_data' => 'admin_plugin_activate'], ['text' => '🟠 غیرفعال‌سازی', 'callback_data' => 'admin_plugin_deactivate']],
+			[['text' => '📦 نصب / بروزرسانی با ZIP', 'callback_data' => 'admin_plugin_zip']],
+			[['text' => '🗑 حذف افزونه', 'callback_data' => 'admin_plugin_delete_confirm']],
+			[['text' => '🔄 بروزرسانی وضعیت', 'callback_data' => 'admin_plugin_tools'], ['text' => '🏠 منوی اصلی', 'callback_data' => 'back_to_menu']],
+		];
+		$this->edit_or_send($chat_id, $msg_id, $msg, ['inline_keyboard' => $kb]);
+	}
+
+	private function admin_plugin_activate($chat_id, $msg_id, $user) {
+		if ($this->get_user_role($user) !== 'admin') { $this->edit_or_send($chat_id, $msg_id, '⚠️ دسترسی ندارید.', $this->kb_back()); return; }
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		$info = $this->ham_plugin_info();
+		if (!$info['installed']) { $this->edit_or_send($chat_id, $msg_id, '⚠️ افزونه هماهنگ نصب نشده است. ابتدا ZIP را بفرستید.', $this->kb_back()); return; }
+		if ($info['active']) { $this->admin_plugin_tools($chat_id, $msg_id, $user); return; }
+		$res = activate_plugin($info['file']);
+		if (is_wp_error($res)) { $this->edit_or_send($chat_id, $msg_id, '❌ خطا در فعال‌سازی: ' . $res->get_error_message(), $this->kb_back()); return; }
+		$this->admin_plugin_tools($chat_id, $msg_id, $user);
+	}
+
+	private function admin_plugin_deactivate($chat_id, $msg_id, $user) {
+		if ($this->get_user_role($user) !== 'admin') { $this->edit_or_send($chat_id, $msg_id, '⚠️ دسترسی ندارید.', $this->kb_back()); return; }
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		$info = $this->ham_plugin_info();
+		if (!$info['installed']) { $this->edit_or_send($chat_id, $msg_id, '⚠️ افزونه نصب نشده است.', $this->kb_back()); return; }
+		if ($info['active']) deactivate_plugins($info['file'], true);
+		$this->admin_plugin_tools($chat_id, $msg_id, $user);
+	}
+
+	private function admin_plugin_zip_start($chat_id, $msg_id, $user) {
+		if ($this->get_user_role($user) !== 'admin') { $this->edit_or_send($chat_id, $msg_id, '⚠️ دسترسی ندارید.', $this->kb_back()); return; }
+		$this->set_state($chat_id, 'admin_plugin_zip', []);
+		$msg = "📦 *نصب / بروزرسانی افزونه هماهنگ با ZIP*\n\nلطفاً فایل *ZIP* افزونه را به صورت document در همین چت ارسال کنید.\n\nپس از دریافت، افزونه به‌صورت خودکار نصب/بروزرسانی و فعال می‌شود.\n\n_برای لغو_: `/cancel`";
+		$this->edit_or_send($chat_id, $msg_id, $msg, $this->kb_cancel());
+	}
+
+	private function admin_plugin_install_from_bale_zip($chat_id, $file_id, $file_name, $user) {
+		if ($this->get_user_role($user) !== 'admin') { self::send_message($chat_id, '⚠️ دسترسی ندارید.'); return; }
+		$res = self::download_to_media($file_id, $file_name);
+		if (is_wp_error($res)) { self::send_message($chat_id, '❌ خطا در دریافت فایل ZIP: ' . $res->get_error_message()); return; }
+		$package = get_attached_file((int)$res['id']);
+		if (!$package || !file_exists($package)) { self::send_message($chat_id, '❌ فایل ZIP در سرور پیدا نشد.'); return; }
+		$ext = strtolower(pathinfo($package, PATHINFO_EXTENSION));
+		if ($ext !== 'zip') { self::send_message($chat_id, '⚠️ فایل ارسالی ZIP نیست. لطفاً نسخه ZIP افزونه را ارسال کنید.'); return; }
+
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		require_once ABSPATH . 'wp-admin/includes/misc.php';
+		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+		if (!class_exists('Automatic_Upgrader_Skin')) require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader-skins.php';
+
+		$info = $this->ham_plugin_info();
+		if ($info['active']) deactivate_plugins($info['file'], true);
+
+		$skin = new Automatic_Upgrader_Skin();
+		$upgrader = new Plugin_Upgrader($skin);
+		$installed = $upgrader->install($package, ['overwrite_package' => true]);
+		if (is_wp_error($installed) || !$installed) {
+			$msg = is_wp_error($installed) ? $installed->get_error_message() : 'نصب/بروزرسانی انجام نشد.';
+			self::send_message($chat_id, '❌ خطا در نصب یا بروزرسانی افزونه: ' . $msg);
+			return;
+		}
+
+		$plugin_file = $this->ham_plugin_file();
+		$act = activate_plugin($plugin_file);
+		if (is_wp_error($act)) {
+			self::send_message($chat_id, '⚠️ افزونه نصب شد ولی در فعال‌سازی خطا رخ داد: ' . $act->get_error_message());
+			return;
+		}
+
+		$new_info = $this->ham_plugin_info();
+		$this->clear_state($chat_id);
+		self::send_message($chat_id, '✅ افزونه هماهنگ با موفقیت نصب/بروزرسانی و فعال شد.\nنسخه فعلی: *' . ($new_info['version'] ?: 'نامشخص') . '*', ['inline_keyboard' => [[['text' => '🧩 بازگشت به مدیریت افزونه', 'callback_data' => 'admin_plugin_tools']]]]);
+	}
+
+	private function admin_plugin_delete_confirm($chat_id, $msg_id, $user) {
+		if ($this->get_user_role($user) !== 'admin') { $this->edit_or_send($chat_id, $msg_id, '⚠️ دسترسی ندارید.', $this->kb_back()); return; }
+		$msg = "🗑 *حذف افزونه هماهنگ*\n\nاگر حذف را تأیید کنید، ابتدا افزونه غیرفعال و سپس فایل‌های آن پاک می‌شود.\nبعد از حذف، مدیریت از طریق ربات تا زمان نصب مجدد از کار می‌افتد.\n\nآیا مطمئن هستید؟";
+		$kb = [
+			[['text' => '✅ بله، حذف کن', 'callback_data' => 'admin_plugin_delete']],
+			[['text' => '↩ بازگشت', 'callback_data' => 'admin_plugin_tools']],
+		];
+		$this->edit_or_send($chat_id, $msg_id, $msg, ['inline_keyboard' => $kb]);
+	}
+
+	private function admin_plugin_delete($chat_id, $msg_id, $user) {
+		if ($this->get_user_role($user) !== 'admin') { $this->edit_or_send($chat_id, $msg_id, '⚠️ دسترسی ندارید.', $this->kb_back()); return; }
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		require_once ABSPATH . 'wp-admin/includes/misc.php';
+		$info = $this->ham_plugin_info();
+		if (!$info['installed']) { $this->edit_or_send($chat_id, $msg_id, '⚠️ افزونه از قبل حذف شده یا نصب نیست.', $this->kb_back()); return; }
+		if ($info['active']) deactivate_plugins($info['file'], true);
+		$deleted = delete_plugins([$info['file']]);
+		if (is_wp_error($deleted) || $deleted === false) {
+			$msg = is_wp_error($deleted) ? $deleted->get_error_message() : 'حذف افزونه انجام نشد.';
+			$this->edit_or_send($chat_id, $msg_id, '❌ خطا در حذف افزونه: ' . $msg, $this->kb_back());
+			return;
+		}
+		$this->edit_or_send($chat_id, $msg_id, '✅ افزونه هماهنگ حذف شد. برای استفاده دوباره، نسخه ZIP را نصب کنید.', ['inline_keyboard' => [[['text' => '🏠 منوی اصلی', 'callback_data' => 'back_to_menu']]]]);
+	}
 
 }
