@@ -26,6 +26,57 @@ class CPTT_Core {
 			$this->create_custom_tables();
 			update_option('cptt_db_version', '1.8.0');
 		}
+		if (version_compare($db_version, '1.9.0', '<')) {
+			$this->create_v190_tables();
+			update_option('cptt_db_version', '1.9.0');
+		}
+	}
+
+	public function create_v190_tables() {
+		global $wpdb;
+		$charset_collate = $wpdb->get_charset_collate();
+		require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+
+		// جدول فایل‌های پروژه
+		$sql_files = "CREATE TABLE {$wpdb->prefix}cptt_project_files (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			project_id bigint(20) unsigned NOT NULL,
+			attachment_id bigint(20) unsigned DEFAULT 0,
+			file_url varchar(500) NOT NULL,
+			file_name varchar(255) NOT NULL,
+			file_size bigint(20) unsigned DEFAULT 0,
+			file_type varchar(100) DEFAULT '',
+			category varchar(100) DEFAULT 'general',
+			uploaded_by bigint(20) unsigned NOT NULL,
+			uploaded_at datetime DEFAULT CURRENT_TIMESTAMP,
+			note text NULL,
+			PRIMARY KEY (id),
+			KEY project_id (project_id),
+			KEY uploaded_by (uploaded_by)
+		) $charset_collate;";
+		dbDelta($sql_files);
+
+		// جدول درخواست‌های مشتری
+		$sql_requests = "CREATE TABLE {$wpdb->prefix}cptt_requests (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			project_id bigint(20) unsigned NOT NULL,
+			client_id bigint(20) unsigned NOT NULL,
+			title varchar(255) NOT NULL,
+			description text NULL,
+			type varchar(50) DEFAULT 'change',
+			status varchar(30) DEFAULT 'pending',
+			priority varchar(20) DEFAULT 'normal',
+			attachment_url varchar(500) DEFAULT '',
+			response text NULL,
+			responded_by bigint(20) unsigned DEFAULT 0,
+			responded_at datetime NULL,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (id),
+			KEY project_id (project_id),
+			KEY client_id (client_id),
+			KEY status (status)
+		) $charset_collate;";
+		dbDelta($sql_requests);
 	}
 
 	public function create_custom_tables() {

@@ -2,14 +2,14 @@
 /**
  * Plugin Name: هماهنگ - افزونه ی مدیریت پروژه و تیم
  * Description: هماهنگ، اولین افزونه ی اختصاصی ایرانی مدیریت پروژه است که امکاناتی فراتر از مدیریت پروژه دارد و مطابق با نیاز کسب و کار های ایرانی ساخته شده است. 
- * Version: 5.7.1
+ * Version: 6.0.2
  * Author: امیرحسین سعادتی
  * Text Domain: cptt
  */
 
 if ( ! defined('ABSPATH') ) exit;
 
-define('CPTT_VERSION', '5.7.1');
+define('CPTT_VERSION', '6.0.2');
 define('CPTT_PATH', plugin_dir_path(__FILE__));
 define('CPTT_URL', plugin_dir_url(__FILE__));
 
@@ -31,10 +31,14 @@ require_once CPTT_PATH . 'includes/class-cptt-bale.php';
 require_once CPTT_PATH . 'includes/class-cptt-auth.php';
 require_once CPTT_PATH . 'includes/class-cptt-payment.php';
 require_once CPTT_PATH . 'includes/class-cptt-form-builder.php';
+require_once CPTT_PATH . 'includes/class-cptt-file-manager.php';
+require_once CPTT_PATH . 'includes/class-cptt-requests.php';
 
 register_activation_hook(__FILE__, ['CPTT_Core', 'activate']);
 register_activation_hook(__FILE__, function(){
 	if (class_exists('CPTT_Auth')) { CPTT_Auth::instance()->add_rewrites(); }
+	// پرداخت عمومی
+	add_rewrite_rule('^cptt-pay/([a-zA-Z0-9\\-]+)/?$', 'index.php?cptt_pay_token=$matches[1]', 'top');
 	if (class_exists('CPTT_Form_Builder')) { CPTT_Form_Builder::install_defaults(); }
 	flush_rewrite_rules(false);
 });
@@ -116,4 +120,6 @@ add_action('plugins_loaded', function () {
 	CPTT_Auth::instance();
 	CPTT_Payment::instance();
 	CPTT_Form_Builder::instance();
+	CPTT_File_Manager::instance();
+	CPTT_Requests::instance();
 });

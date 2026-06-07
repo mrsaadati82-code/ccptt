@@ -86,29 +86,167 @@ class CPTT_Payment {
 	}
 
 	private function __construct() {
-		// CPT برای رسیدها (در class-cptt-core ممکن است نباشد، اینجا register می‌کنیم)
 		add_action('init', [$this, 'register_cpt']);
+		add_action('init', [$this, 'register_public_endpoint']);
 
 		add_action('admin_menu', [$this, 'menu']);
 
-		// صفحه‌ی پرداخت برای مشتری (هم برای لاگین‌شده هم بدون لاگین)
+		// صفحه‌ی پرداخت - admin-post (برای پروژه‌های داخلی)
 		add_action('admin_post_cptt_pay_project',          [$this, 'render_pay_page']);
 		add_action('admin_post_nopriv_cptt_pay_project',   [$this, 'render_pay_page']);
-
-		// ارسال رسید کارت‌به‌کارت
 		add_action('admin_post_cptt_submit_card_receipt',        [$this, 'submit_card_receipt']);
 		add_action('admin_post_nopriv_cptt_submit_card_receipt', [$this, 'submit_card_receipt']);
-
-		// شروع پرداخت آنلاین + callback
 		add_action('admin_post_cptt_start_online_pay',         [$this, 'start_online_pay']);
 		add_action('admin_post_nopriv_cptt_start_online_pay',  [$this, 'start_online_pay']);
 		add_action('admin_post_cptt_online_callback',          [$this, 'online_callback']);
 		add_action('admin_post_nopriv_cptt_online_callback',   [$this, 'online_callback']);
 
+		// endpoint عمومی برای پرداخت بله (بدون نیاز به login)
+		add_action('template_redirect', [$this, 'handle_public_pay_endpoint'], 1);
+		add_action('parse_request',     [$this, 'handle_public_pay_endpoint_early'], 1);
+
 		// AJAX
 		add_action('wp_ajax_cptt_approve_receipt', [$this, 'ajax_approve_receipt']);
 		add_action('wp_ajax_cptt_reject_receipt',  [$this, 'ajax_reject_receipt']);
 		add_action('wp_ajax_cptt_pay_save',        [$this, 'ajax_save_settings']);
+	}
+
+	/** ثبت query var عمومی برای پرداخت از بله */
+	public function register_public_endpoint() {
+		add_rewrite_rule('^cptt-pay/([a-zA-Z0-9\-]+)/?$', 'index.php?cptt_pay_token=$matches[1]', 'top');
+		add_filter('query_vars', function($vars){ $vars[] = 'cptt_pay_token'; return $vars; });
+	}
+
+	/** ریدایرکت مستقیم به درگاه آنلاین بدون نمایش صفحه انتخاب */
+	private function redirect_to_online_gateway($bale_order_id, $form_title, $amount, $gw_id) {
+		$gw = self::find_gateway($gw_id);
+		if (!$gw || ($gw['type'] ?? '') === 'card') { wp_die('درگاه نامعتبر است.'); }
+		$settings = self::get_settings();
+		$factor   = max(1, (int)$settings['currency_factor']);
+		$rial     = (int)round($amount * $factor);
+		// ساخت callback token
+		$cb_token = wp_generate_password(32, false, false);
+		set_transient('cptt_cb_tok_' . $cb_token, [
+			'order_id'   => $bale_order_id,
+			'is_bale'    => true,
+			'amount'     => $amount,
+			'gw'         => $gw_id,
+			'form_title' => $form_title,
+			'pid'        => 0,
+		], 2 * HOUR_IN_SECONDS);
+		// callback URL با query string
+		$callback = add_query_arg('cptt_pay_token', rawurlencode('cb-' . $cb_token), home_url('/'));
+		// درگاه
+		$type    = $gw['type'];
+		$gw_url  = '';
+		switch ($type) {
+			case 'zibal':
+				$merchant = $gw['merchant_id'] ?? '';
+				if (!$merchant) wp_die('مرچنت زیبال تنظیم نشده.');
+				$resp = wp_remote_post('https://gateway.zibal.ir/v1/request', [
+					'timeout'=>15,'headers'=>['Content-Type'=>'application/json'],
+					'body'=>wp_json_encode(['merchant'=>$merchant,'amount'=>$rial,'callbackUrl'=>$callback,'description'=>'سفارش #'.$bale_order_id]),
+				]);
+				if (is_wp_error($resp)) wp_die('ارتباط با زیبال برقرار نشد.');
+				$body = json_decode(wp_remote_retrieve_body($resp), true);
+				$track = $body['trackId'] ?? 0;
+				if (!$track) wp_die('خطا از زیبال: ' . ($body['message'] ?? 'نامشخص'));
+				update_post_meta($bale_order_id, '_cptt_pay_authority_' . $gw_id, (string)$track);
+				$gw_url = 'https://gateway.zibal.ir/start/' . $track;
+				break;
+			case 'zarinpal':
+				$merchant = $gw['merchant_id'] ?? '';
+				$sandbox  = !empty($gw['sandbox']);
+				if (!$merchant) wp_die('مرچنت زرین‌پال تنظیم نشده.');
+				$api_url = $sandbox ? 'https://sandbox.zarinpal.com/pgw/v4/payment/request.json' : 'https://payment.zarinpal.com/pg/v4/payment/request.json';
+				$resp = wp_remote_post($api_url, [
+					'timeout'=>15,'headers'=>['Content-Type'=>'application/json'],
+					'body'=>wp_json_encode(['merchant_id'=>$merchant,'amount'=>$rial,'callback_url'=>$callback,'description'=>'سفارش #'.$bale_order_id]),
+				]);
+				if (is_wp_error($resp)) wp_die('ارتباط با زرین‌پال برقرار نشد.');
+				$body = json_decode(wp_remote_retrieve_body($resp), true);
+				$auth = $body['data']['authority'] ?? '';
+				if (!$auth) wp_die('خطا از زرین‌پال: ' . ($body['errors']['message'] ?? 'نامشخص'));
+				update_post_meta($bale_order_id, '_cptt_pay_authority_' . $gw_id, $auth);
+				$gw_url = ($sandbox ? 'https://sandbox.zarinpal.com/pg/StartPay/' : 'https://payment.zarinpal.com/pg/StartPay/') . $auth;
+				break;
+			case 'idpay':
+				$api_key = $gw['api_key'] ?? '';
+				$sandbox = !empty($gw['sandbox']);
+				$resp = wp_remote_post('https://api.idpay.ir/v1.1/payment', [
+					'timeout'=>15,'headers'=>['Content-Type'=>'application/json','X-API-KEY'=>$api_key,'X-SANDBOX'=>$sandbox?'1':'0'],
+					'body'=>wp_json_encode(['order_id'=>'order-'.$bale_order_id,'amount'=>$rial,'callback'=>$callback,'desc'=>'سفارش #'.$bale_order_id]),
+				]);
+				if (!is_wp_error($resp)) {
+					$body = json_decode(wp_remote_retrieve_body($resp), true);
+					$gw_url = $body['link'] ?? '';
+				}
+				if (!$gw_url) wp_die('خطا از آیدی‌پی');
+				break;
+			case 'nextpay':
+				$api_key = $gw['api_key'] ?? '';
+				$resp = wp_remote_post('https://nextpay.org/nx/gateway/token', [
+					'timeout'=>15,'body'=>['api_key'=>$api_key,'amount'=>$rial,'order_id'=>'ord-'.$bale_order_id,'callback_uri'=>$callback,'currency'=>'IRR'],
+				]);
+				if (!is_wp_error($resp)) {
+					$body = json_decode(wp_remote_retrieve_body($resp), true);
+					$trans = $body['trans_id'] ?? '';
+					if ($trans) $gw_url = 'https://nextpay.org/nx/gateway/payment/' . $trans;
+				}
+				if (!$gw_url) wp_die('خطا از نکست‌پی');
+				break;
+			case 'payping':
+				$token_pp = $gw['token'] ?? '';
+				$resp = wp_remote_post('https://api.payping.ir/v2/pay', [
+					'timeout'=>15,'headers'=>['Authorization'=>'Bearer '.$token_pp,'Content-Type'=>'application/json'],
+					'body'=>wp_json_encode(['amount'=>$rial,'returnUrl'=>$callback,'description'=>'سفارش #'.$bale_order_id,'clientRefId'=>'ord-'.$bale_order_id]),
+				]);
+				if (!is_wp_error($resp)) {
+					$body = json_decode(wp_remote_retrieve_body($resp), true);
+					$code = $body['code'] ?? '';
+					if ($code) $gw_url = 'https://api.payping.ir/v2/pay/gotoipg/' . $code;
+				}
+				if (!$gw_url) wp_die('خطا از پی‌پینگ');
+				break;
+			default:
+				wp_die('این نوع درگاه پشتیبانی نمی‌شود.');
+		}
+		wp_redirect($gw_url); exit;
+	}
+
+	/** هندلر endpoint عمومی پرداخت */
+	/** هندلر اولیه - قبل از template_redirect (برای درگاه‌هایی که POST callback می‌فرستن) */
+	public function handle_public_pay_endpoint_early() {
+		$token = isset($_GET['cptt_pay_token']) ? sanitize_text_field(rawurldecode($_GET['cptt_pay_token'])) : '';
+		if ($token === '') return;
+		// فقط cb- ها رو اینجا handle کن (callback از درگاه)
+		if (strpos($token, 'cb-') === 0) {
+			$_GET['cptt_cb_token'] = substr($token, 3);
+			$this->online_callback();
+			exit;
+		}
+	}
+
+	public function handle_public_pay_endpoint() {
+		// پشتیبانی از هر دو روش: query string و rewrite rule
+		$token = isset($_GET['cptt_pay_token']) ? sanitize_text_field(rawurldecode($_GET['cptt_pay_token'])) : '';
+		if ($token === '') $token = sanitize_text_field(get_query_var('cptt_pay_token', ''));
+		if ($token === '') return;
+
+		if (strpos($token, 'cb-') === 0) {
+			$_GET['cptt_cb_token'] = substr($token, 3);
+			$this->online_callback();
+		} else {
+			$_GET['cptt_pay_token'] = $token;
+			$this->render_pay_page();
+		}
+		exit;
+	}
+
+	/** URL عمومی پرداخت (برای بله - بدون admin-post) */
+	public static function public_pay_url($token) {
+		// query string - بدون نیاز به rewrite rule flush
+		return add_query_arg('cptt_pay_token', rawurlencode($token), home_url('/'));
 	}
 
 	public function register_cpt() {
@@ -188,11 +326,28 @@ class CPTT_Payment {
 	/**
 	 * URL پرداخت پروژه (لینک یکپارچه‌ی صفحه پرداخت برای ربات بله / فاکتور / فرانت)
 	 */
-	public static function payment_url($project_id, $amount = 0) {
-		return wp_nonce_url(
-			admin_url('admin-post.php?action=cptt_pay_project&project_id=' . (int)$project_id . '&amount=' . (float)$amount),
-			self::NONCE_PAY . '_' . (int)$project_id
-		);
+	public static function payment_url($project_id, $amount = 0, $extra = []) {
+		$base = admin_url('admin-post.php?action=cptt_pay_project&project_id=' . (int)$project_id . '&amount=' . (float)$amount);
+		if (!empty($extra)) {
+			foreach ($extra as $k => $v) $base = add_query_arg(sanitize_key($k), rawurlencode((string)$v), $base);
+		}
+		return wp_nonce_url($base, self::NONCE_PAY . '_' . (int)$project_id);
+	}
+
+	/** لینک پرداخت برای سفارش بله - URL تمیز بدون nonce (برای inline keyboard بله) */
+	public static function payment_url_for_bale_order($order_id, $amount, $form_title = '') {
+		// ساخت token یکبارمصرف با transient (TTL: 2 ساعت)
+		$token = wp_generate_password(32, false, false);
+		$transient_key = 'cptt_pay_tok_' . $token;
+		set_transient($transient_key, [
+			'order_id'   => (int)$order_id,
+			'amount'     => (float)$amount,
+			'form_title' => (string)$form_title,
+			'created_at' => time(),
+		], 2 * HOUR_IN_SECONDS);
+
+		// URL عمومی - بدون admin - بدون login نیاز
+		return self::public_pay_url($token);
 	}
 
 	public static function project_remaining($project_id) {
@@ -638,18 +793,83 @@ class CPTT_Payment {
 	 * ===================================================================== */
 
 	public function render_pay_page() {
-		$pid = absint($_GET['project_id'] ?? 0);
-		if (!$pid || get_post_type($pid) !== 'cptt_project') wp_die('پروژه نامعتبر است.');
-		// nonce فقط برای صفحه‌ی نمایشی اختیاری است (مشتری از بله یا لینک عمومی می‌آید)
-		// عملیات حساس (پرداخت/رسید) در صفحات دیگر nonce جدا دارند.
+		// ═══ Token-based auth برای سفارش بله ═══
+		$pay_token = sanitize_text_field($_GET['cptt_pay_token'] ?? '');
+		$is_bale_order = false;
+		$bale_order_id = 0;
+		$form_title    = '';
+		$pid           = absint($_GET['project_id'] ?? 0);
 
-		$amount  = (float) ($_GET['amount'] ?? 0);
-		if (!$amount) $amount = self::project_remaining($pid);
-		$amount  = max(0, $amount);
+		if ($pay_token !== '') {
+			$transient_key = 'cptt_pay_tok_' . $pay_token;
+			$tok_data = get_transient($transient_key);
+			if (!$tok_data || !is_array($tok_data)) {
+				wp_die('لینک پرداخت منقضی شده یا نامعتبر است. لطفاً دوباره از ربات اقدام کنید.');
+			}
+			$bale_order_id = (int)($tok_data['order_id'] ?? 0);
+			$form_title    = (string)($tok_data['form_title'] ?? '');
+			$is_bale_order = $bale_order_id > 0;
+			// اگه token مستقیم به درگاه اشاره داشت → forward به start_online_pay
+			$tok_gw = sanitize_key($tok_data['gw'] ?? '');
+			$tok_action = sanitize_key($tok_data['action'] ?? '');
+			if ($tok_gw !== '' && $tok_action !== '') {
+				if ($tok_action === 'card') {
+					$_GET['gw'] = $tok_gw; // کارت: نمایش عادی
+				}
+				// online: صفحه تأیید - $_GET['gw'] رو set نکن تا صفحه درست نشون بده
+			}
+		} else {
+			// پرداخت معمولی پروژه
+			$source = sanitize_key($_GET['source'] ?? '');
+			$bale_order_id = absint($_GET['bale_order_id'] ?? 0);
+			$is_bale_order = ($source === 'bale' && $bale_order_id > 0);
+			$form_title    = sanitize_text_field(rawurldecode($_GET['form_title'] ?? ''));
+			if ($is_bale_order) {
+				check_admin_referer('cptt_pay_bale_order_' . $bale_order_id);
+			}
+		}
+
+		if (!$is_bale_order) {
+			if (!$pid || get_post_type($pid) !== 'cptt_project') {
+				wp_die('پروژه نامعتبر است.');
+			}
+		}
+
+		// خواندن مبلغ: اول از tok_data، بعد از GET، بعد از پروژه
+		$amount = 0.0;
+		if ($pay_token !== '' && isset($tok_data['amount'])) {
+			$amount = (float)$tok_data['amount'];
+		}
+		if ($amount <= 0) $amount = (float)($_GET['amount'] ?? 0);
+		if ($amount <= 0 && $pid) $amount = self::project_remaining($pid);
+		$amount = max(0, $amount);
 
 		$s         = self::get_settings();
 		$gateways  = self::enabled_gateways();
 		$sel_gw    = isset($_GET['gw']) ? sanitize_key($_GET['gw']) : '';
+
+		// اطلاعات فرم بله برای نمایش در صفحه تأیید
+		$form_data_rows = [];
+		if ($is_bale_order && $bale_order_id) {
+			$_fd = get_post_meta($bale_order_id, '_cptt_order_form_data', true);
+			if (is_array($_fd)) {
+				foreach ($_fd as $_ans) {
+					if (!is_array($_ans)) continue;
+					$_t = (string)($_ans['type'] ?? '');
+					if (in_array($_t, ['intro','confirm','payment'], true)) continue;
+					$_v = (string)($_ans['value'] ?? '');
+					if ($_v === '' || $_v === '—') continue;
+					$form_data_rows[] = ['label' => (string)($_ans['label'] ?? ''), 'value' => $_v];
+				}
+			}
+		}
+
+		// اگه cptt_pay_confirm=1 → redirect مستقیم به درگاه
+		if ($is_bale_order && !empty($_GET['cptt_pay_confirm']) && isset($tok_data['gw']) && isset($tok_data['action']) && $tok_data['action'] === 'online') {
+			delete_transient('cptt_pay_tok_' . $pay_token);
+			$this->redirect_to_online_gateway($bale_order_id, $form_title, $amount, sanitize_key($tok_data['gw']));
+			return;
+		}
 		$status    = isset($_GET['status']) ? sanitize_key($_GET['status']) : '';
 		$msg       = isset($_GET['msg']) ? wp_unslash($_GET['msg']) : '';
 
@@ -675,8 +895,34 @@ class CPTT_Payment {
 				</div>
 
 				<div class="pay-page__project">
-					<div class="pay-page__project-name"><?php echo esc_html(get_the_title($pid)); ?></div>
-					<div class="pay-page__project-meta">کد پیگیری: #<?php echo esc_html(class_exists('CPTT_Core') ? CPTT_Core::get_project_code($pid) : $pid); ?></div>
+					<?php if ($is_bale_order && $bale_order_id): ?>
+						<?php
+							$_order = get_post($bale_order_id);
+							$_order_title = $_order ? $_order->post_title : ('#' . $bale_order_id);
+							$_form_title  = $form_title ?: 'سفارش';
+						?>
+						<div class="pay-page__project-name"><?php echo esc_html($_form_title); ?></div>
+						<div class="pay-page__project-meta">شماره سفارش: #<?php echo esc_html($bale_order_id); ?></div>
+						<?php
+							// اطلاعات پاسخ‌های فرم
+							$_form_data = get_post_meta($bale_order_id, '_cptt_order_form_data', true);
+							if (is_array($_form_data) && !empty($_form_data)):
+								echo '<div class="pay-page__order-info">';
+								foreach (array_slice($_form_data, 0, 5) as $_ans) {
+									$_t = (string)($_ans['type'] ?? '');
+									if (in_array($_t, ['intro','confirm','payment'], true)) continue;
+									$_lbl = sanitize_text_field($_ans['label'] ?? '');
+									$_val = sanitize_text_field((string)($_ans['value'] ?? ''));
+									if ($_val === '' || $_val === '—') continue;
+									echo '<div class="pay-page__order-row"><span>' . esc_html($_lbl) . '</span><strong>' . esc_html($_val) . '</strong></div>';
+								}
+								echo '</div>';
+							endif;
+						?>
+					<?php else: ?>
+						<div class="pay-page__project-name"><?php echo esc_html(get_the_title($pid)); ?></div>
+						<div class="pay-page__project-meta">کد پیگیری: #<?php echo esc_html(class_exists('CPTT_Core') ? CPTT_Core::get_project_code($pid) : $pid); ?></div>
+					<?php endif; ?>
 				</div>
 
 				<div class="pay-page__amount">
@@ -690,13 +936,68 @@ class CPTT_Payment {
 				<?php if ($status === 'pending'): ?>
 					<div class="pay-page__notice pay-page__notice--info">⏳ <?php echo esc_html($s['pending_message']); ?></div>
 				<?php elseif ($status === 'success'): ?>
-					<div class="pay-page__notice pay-page__notice--ok">✅ <?php echo esc_html($s['success_message']); ?></div>
+					<div class="pay-page__result pay-page__result--ok">
+						<div class="pay-page__result-icon">✅</div>
+						<div class="pay-page__result-title"><?php echo esc_html($s['success_message']); ?></div>
+						<div class="pay-page__result-sub">پرداخت شما با موفقیت ثبت شد.</div>
+						<?php if ($is_bale_order): ?>
+							<div class="pay-page__result-actions">
+								<a class="pay-page__back-btn pay-page__back-btn--bale"
+									href="<?php echo esc_url(get_option('cptt_bale_bot_url', 'https://ble.ir/')); ?>">
+									🤖 بازگشت به ربات بله
+								</a>
+							</div>
+						<?php elseif ($pid): ?>
+							<div class="pay-page__result-actions">
+								<a class="pay-page__back-btn" href="<?php echo esc_url(wc_get_account_endpoint_url('cptt-projects')); ?>">
+									📁 بازگشت به پروژه‌هایم
+								</a>
+							</div>
+						<?php endif; ?>
+					</div>
 				<?php elseif ($status === 'failed'): ?>
-					<div class="pay-page__notice pay-page__notice--err">❌ <?php echo esc_html($msg ?: 'پرداخت ناموفق بود. لطفاً دوباره تلاش کنید.'); ?></div>
+					<div class="pay-page__result pay-page__result--err">
+						<div class="pay-page__result-icon">❌</div>
+						<div class="pay-page__result-title">پرداخت ناموفق</div>
+						<div class="pay-page__result-sub"><?php echo esc_html($msg ?: 'لطفاً دوباره تلاش کنید.'); ?></div>
+					</div>
 				<?php endif; ?>
 
 				<?php if (empty($gateways)): ?>
 					<div class="pay-page__notice pay-page__notice--err">⚠️ هیچ روش پرداختی فعال نیست. لطفاً با پشتیبانی تماس بگیرید.</div>
+				<?php elseif ($is_bale_order && isset($tok_data['action']) && $tok_data['action'] === 'online' && $tok_data['gw'] ?? ''): ?>
+					<!-- صفحه تأیید قبل از پرداخت آنلاین -->
+					<?php
+						$_confirm_gw = self::find_gateway((string)($tok_data['gw'] ?? ''));
+						$_confirm_types = self::gateway_types();
+						$_confirm_t = $_confirm_gw ? ($_confirm_types[$_confirm_gw['type']] ?? $_confirm_types['card']) : null;
+					?>
+					<div class="pay-confirm">
+						<div class="pay-confirm__gateway">
+							<?php if ($_confirm_t): ?>
+							<span class="pay-confirm__gw-icon"><?php echo esc_html($_confirm_t['icon']); ?></span>
+							<span class="pay-confirm__gw-name"><?php echo esc_html($_confirm_gw['name'] ?: $_confirm_t['label']); ?></span>
+							<?php endif; ?>
+						</div>
+						<div class="pay-confirm__amount">
+							<span class="pay-confirm__amount-label">مبلغ قابل پرداخت</span>
+							<span class="pay-confirm__amount-value"><?php echo number_format($amount); ?> <small>تومان</small></span>
+						</div>
+						<?php if (!empty($form_data_rows)): ?>
+						<div class="pay-confirm__summary">
+							<div class="pay-confirm__summary-title">📋 خلاصه سفارش</div>
+							<?php foreach ($form_data_rows as $_r): ?>
+							<div class="pay-confirm__row"><span><?php echo esc_html($_r['label']); ?></span><strong><?php echo esc_html($_r['value']); ?></strong></div>
+							<?php endforeach; ?>
+						</div>
+						<?php endif; ?>
+						<form method="get" action="<?php echo esc_url(home_url('/')); ?>">
+							<input type="hidden" name="cptt_pay_token" value="<?php echo esc_attr($pay_token); ?>">
+							<input type="hidden" name="cptt_pay_confirm" value="1">
+							<button type="submit" class="pay-confirm__btn">✅ تأیید و پرداخت</button>
+						</form>
+						<p class="pay-confirm__note">با کلیک، به درگاه پرداخت امن منتقل می‌شوید.</p>
+					</div>
 				<?php elseif (!$sel_gw): ?>
 					<div class="pay-page__section-title">یک روش پرداخت را انتخاب کنید</div>
 					<div class="pay-page__gws">
@@ -704,13 +1005,31 @@ class CPTT_Payment {
 						$types = self::gateway_types();
 						foreach ($gateways as $g):
 							$t = $types[$g['type']] ?? $types['card'];
-							$url = add_query_arg([
-								'action'     => 'cptt_pay_project',
-								'project_id' => $pid,
-								'amount'     => $amount,
-								'gw'         => $g['id'],
-								'_wpnonce'   => wp_create_nonce(self::NONCE_PAY . '_' . $pid),
-							], admin_url('admin-post.php'));
+							$_is_card_gw = ($g['type'] === 'card');
+
+							if ($is_bale_order) {
+								// سفارش بله: URL تمیز با token جدید برای هر درگاه
+								$_tok2 = wp_generate_password(32, false, false);
+								set_transient('cptt_pay_tok_' . $_tok2, [
+									'order_id'   => $bale_order_id,
+									'amount'     => $amount,
+									'form_title' => $form_title,
+									'gw'         => $g['id'],
+									'action'     => $_is_card_gw ? 'card' : 'online',
+									'created_at' => time(),
+								], 2 * HOUR_IN_SECONDS);
+								// URL عمومی برای لاگین‌نشده‌ها (بله)
+								$url = self::public_pay_url($_tok2);
+							} else {
+								// پروژه معمولی: nonce استاندارد
+								$_gw_action = $_is_card_gw ? 'cptt_pay_project' : 'cptt_start_online_pay';
+								$url = wp_nonce_url(add_query_arg([
+									'action'     => $_gw_action,
+									'project_id' => $pid,
+									'amount'     => $amount,
+									'gw'         => $g['id'],
+								], admin_url('admin-post.php')), self::NONCE_PAY . '_' . $pid);
+							}
 						?>
 							<a href="<?php echo esc_url($url); ?>" class="pay-gw" style="--c:<?php echo esc_attr($t['color']); ?>;">
 								<div class="pay-gw__icon"><?php echo esc_html($t['icon']); ?></div>
@@ -991,9 +1310,33 @@ class CPTT_Payment {
 	 * ===================================================================== */
 
 	public function start_online_pay() {
-		$pid = absint($_GET['project_id'] ?? 0);
-		if (!$pid) wp_die('پروژه نامعتبر است.');
-		check_admin_referer(self::NONCE_PAY . '_' . $pid);
+		// ═══ Token-based auth ═══
+		$pay_token = sanitize_text_field($_GET['cptt_pay_token'] ?? '');
+		$is_bale_order = false;
+		$bale_order_id = 0;
+		$form_title    = '';
+		$pid           = absint($_GET['project_id'] ?? 0);
+
+		if ($pay_token !== '') {
+			$tok_data = get_transient('cptt_pay_tok_' . $pay_token);
+			if (!$tok_data || !is_array($tok_data)) wp_die('لینک پرداخت منقضی شده. لطفاً دوباره از ربات اقدام کنید.');
+			$bale_order_id = (int)($tok_data['order_id'] ?? 0);
+			$form_title    = (string)($tok_data['form_title'] ?? '');
+			$is_bale_order = $bale_order_id > 0;
+			// token رو حذف کن (یکبارمصرف)
+			delete_transient('cptt_pay_tok_' . $pay_token);
+		} else {
+			$source        = sanitize_key($_GET['source'] ?? '');
+			$bale_order_id = absint($_GET['bale_order_id'] ?? 0);
+			$is_bale_order = ($source === 'bale' && $bale_order_id > 0);
+			$form_title    = sanitize_text_field(rawurldecode($_GET['form_title'] ?? ''));
+			if ($is_bale_order) {
+				check_admin_referer('cptt_pay_bale_order_' . $bale_order_id);
+			} else {
+				if (!$pid) wp_die('پروژه نامعتبر است.');
+				check_admin_referer(self::NONCE_PAY . '_' . $pid);
+			}
+		}
 
 		$amount = (float)($_GET['amount'] ?? 0);
 		$gw_id  = sanitize_key($_GET['gw'] ?? '');
@@ -1005,12 +1348,20 @@ class CPTT_Payment {
 		$factor   = max(1, (int)$settings['currency_factor']);
 		$rial     = (int) round($amount * $factor);
 
-		$callback = add_query_arg([
-			'action'     => 'cptt_online_callback',
-			'project_id' => $pid,
-			'amount'     => $amount,
+		// callback URL - برای بله از token جدید استفاده کن
+		$cb_token = wp_generate_password(32, false, false);
+		$cb_tok_data = [
+			'order_id'   => $is_bale_order ? $bale_order_id : $pid,
+			'is_bale'    => $is_bale_order,
+			'amount'     => (float)$amount,
 			'gw'         => $gw_id,
-		], admin_url('admin-post.php'));
+			'form_title' => $form_title,
+			'pid'        => $pid,
+		];
+		set_transient('cptt_cb_tok_' . $cb_token, $cb_tok_data, 2 * HOUR_IN_SECONDS);
+		// callback URL عمومی (درگاه‌های ایرانی redirect می‌کنن، نباید admin باشه)
+		// callback URL با query string
+		$callback = add_query_arg('cptt_pay_token', rawurlencode('cb-' . $cb_token), home_url('/'));
 
 		switch ($type) {
 			case 'zarinpal':
@@ -1035,7 +1386,7 @@ class CPTT_Payment {
 					$err = $body['errors']['message'] ?? 'پاسخ نامعتبر از زرین‌پال';
 					$this->fail_redirect($pid, $amount, $err);
 				}
-				update_post_meta($pid, '_cptt_pay_authority_' . $gw_id, $auth);
+				update_post_meta($is_bale_order ? $bale_order_id : $pid, '_cptt_pay_authority_' . $gw_id, $auth);
 				$gw_url = ($sandbox ? 'https://sandbox.zarinpal.com/pg/StartPay/' : 'https://payment.zarinpal.com/pg/StartPay/') . $auth;
 				wp_redirect($gw_url); exit;
 
@@ -1056,7 +1407,7 @@ class CPTT_Payment {
 				$body = json_decode(wp_remote_retrieve_body($resp), true);
 				$track = $body['trackId'] ?? 0;
 				if (!$track) $this->fail_redirect($pid, $amount, $body['message'] ?? 'پاسخ نامعتبر');
-				update_post_meta($pid, '_cptt_pay_authority_' . $gw_id, (string)$track);
+				update_post_meta($is_bale_order ? $bale_order_id : $pid, '_cptt_pay_authority_' . $gw_id, (string)$track);
 				wp_redirect('https://gateway.zibal.ir/start/' . $track); exit;
 
 			case 'idpay':
@@ -1081,7 +1432,7 @@ class CPTT_Payment {
 				$body = json_decode(wp_remote_retrieve_body($resp), true);
 				$link = $body['link'] ?? '';
 				if (!$link) $this->fail_redirect($pid, $amount, $body['error_message'] ?? 'پاسخ نامعتبر');
-				update_post_meta($pid, '_cptt_pay_authority_' . $gw_id, (string)($body['id'] ?? ''));
+				update_post_meta($is_bale_order ? $bale_order_id : $pid, '_cptt_pay_authority_' . $gw_id, (string)($body['id'] ?? ''));
 				wp_redirect($link); exit;
 
 			case 'nextpay':
@@ -1101,7 +1452,7 @@ class CPTT_Payment {
 				$body  = json_decode(wp_remote_retrieve_body($resp), true);
 				$token = $body['trans_id'] ?? '';
 				if (!$token) $this->fail_redirect($pid, $amount, 'پاسخ نامعتبر');
-				update_post_meta($pid, '_cptt_pay_authority_' . $gw_id, (string)$token);
+				update_post_meta($is_bale_order ? $bale_order_id : $pid, '_cptt_pay_authority_' . $gw_id, (string)$token);
 				wp_redirect('https://nextpay.org/nx/gateway/payment/' . $token); exit;
 
 			case 'payping':
@@ -1124,7 +1475,7 @@ class CPTT_Payment {
 				$body = json_decode(wp_remote_retrieve_body($resp), true);
 				$code = $body['code'] ?? '';
 				if (!$code) $this->fail_redirect($pid, $amount, 'پاسخ نامعتبر');
-				update_post_meta($pid, '_cptt_pay_authority_' . $gw_id, (string)$code);
+				update_post_meta($is_bale_order ? $bale_order_id : $pid, '_cptt_pay_authority_' . $gw_id, (string)$code);
 				wp_redirect('https://api.payping.ir/v2/pay/gotoipg/' . $code); exit;
 
 			case 'bank':
@@ -1151,17 +1502,44 @@ class CPTT_Payment {
 	}
 
 	public function online_callback() {
-		$pid    = absint($_GET['project_id'] ?? $_POST['project_id'] ?? 0);
-		$amount = (float)($_GET['amount'] ?? $_POST['amount'] ?? 0);
-		$gw_id  = sanitize_key($_GET['gw'] ?? $_POST['gw'] ?? '');
-		$gw     = self::find_gateway($gw_id);
-		if (!$pid || !$gw) wp_die('پارامترهای نامعتبر.');
+		// ═══ خواندن اطلاعات از cb_token ═══
+		$cb_token = sanitize_text_field($_GET['cptt_cb_token'] ?? $_POST['cptt_cb_token'] ?? '');
+		$is_bale_order = false;
+		$bale_order_id = 0;
+		$form_title    = '';
+		$pid           = 0;
+
+		if ($cb_token !== '') {
+			$tok = get_transient('cptt_cb_tok_' . $cb_token);
+			if (!$tok || !is_array($tok)) wp_die('نشست پرداخت منقضی شده است.');
+			delete_transient('cptt_cb_tok_' . $cb_token);
+			$is_bale_order = !empty($tok['is_bale']);
+			$bale_order_id = (int)($tok['order_id'] ?? 0);
+			$pid           = (int)($tok['pid'] ?? 0);
+			$amount        = (float)($tok['amount'] ?? 0);
+			$gw_id         = sanitize_key($tok['gw'] ?? '');
+			$form_title    = (string)($tok['form_title'] ?? '');
+		} else {
+			// fallback: پارامترهای GET/POST
+			$pid           = absint($_GET['project_id'] ?? $_POST['project_id'] ?? 0);
+			$bale_order_id = absint($_GET['bale_order_id'] ?? $_POST['bale_order_id'] ?? 0);
+			$source        = sanitize_key($_GET['source'] ?? $_POST['source'] ?? '');
+			$is_bale_order = ($source === 'bale' && $bale_order_id > 0);
+			$amount        = (float)($_GET['amount'] ?? $_POST['amount'] ?? 0);
+			$gw_id         = sanitize_key($_GET['gw'] ?? $_POST['gw'] ?? '');
+			$form_title    = sanitize_text_field(rawurldecode($_GET['form_title'] ?? ''));
+		}
+
+		$gw = self::find_gateway($gw_id);
+		if (!$is_bale_order && !$pid) wp_die('پارامترهای نامعتبر.');
+		if (!$gw) wp_die('روش پرداخت نامعتبر.');
+		$meta_post_id = $is_bale_order ? $bale_order_id : $pid;
 
 		$type     = $gw['type'];
 		$settings = self::get_settings();
 		$factor   = max(1, (int)$settings['currency_factor']);
 		$rial     = (int) round($amount * $factor);
-		$auth     = (string) get_post_meta($pid, '_cptt_pay_authority_' . $gw_id, true);
+		$auth     = (string) get_post_meta($meta_post_id, '_cptt_pay_authority_' . $gw_id, true);
 		$verified = false;
 		$ref_id   = '';
 
@@ -1244,19 +1622,38 @@ class CPTT_Payment {
 		}
 
 		if ($verified) {
-			$this->apply_payment_to_project($pid, $amount);
-			if (class_exists('CPTT_Core')) {
-				if (method_exists('CPTT_Core', 'ledger_add')) {
-					CPTT_Core::ledger_add(['project_id'=>$pid,'type'=>'online_payment','amount'=>$amount,'note'=>'پرداخت آنلاین ('.$type.') ref:'.$ref_id]);
-				}
-				if (method_exists('CPTT_Core', 'activity_log')) {
-					CPTT_Core::activity_log('payment_online', $pid, 'online_paid', 'پرداخت آنلاین موفق ('.$type.') ref:'.$ref_id);
-				}
+			if (!$is_bale_order && $pid) $this->apply_payment_to_project($pid, $amount);
+			if ($is_bale_order && $bale_order_id) {
+				update_post_meta($bale_order_id, '_cptt_order_status', 'paid');
+				update_post_meta($bale_order_id, '_cptt_order_payment_ref', sanitize_text_field($ref_id));
+				update_post_meta($bale_order_id, '_cptt_order_payment_amount', $amount);
 			}
-			$url = add_query_arg([
-				'action'=>'cptt_pay_project','project_id'=>$pid,'amount'=>$amount,'status'=>'success',
-				'_wpnonce'=>wp_create_nonce(self::NONCE_PAY . '_' . $pid),
-			], admin_url('admin-post.php'));
+			if (class_exists('CPTT_Core')) {
+				$log_pid = $is_bale_order ? $bale_order_id : $pid;
+				if (method_exists('CPTT_Core', 'ledger_add'))  CPTT_Core::ledger_add(['project_id'=>$log_pid,'type'=>'online_payment','amount'=>$amount,'note'=>'پرداخت آنلاین ('.$type.') ref:'.$ref_id]);
+				if (method_exists('CPTT_Core', 'activity_log')) CPTT_Core::activity_log('payment_online', $log_pid, 'online_paid', 'پرداخت آنلاین موفق ('.$type.') ref:'.$ref_id);
+			}
+			if ($is_bale_order) {
+				// token جدید برای صفحه موفق (URL تمیز)
+				$res_token = wp_generate_password(24, false, false);
+				set_transient('cptt_pay_tok_' . $res_token, [
+					'order_id'   => $bale_order_id, 'amount' => $amount,
+					'form_title' => $form_title, 'status' => 'success',
+				], 30 * MINUTE_IN_SECONDS);
+				$url = self::public_pay_url($res_token);
+			} else {
+				$url = add_query_arg(['action'=>'cptt_pay_project','project_id'=>$pid,'amount'=>$amount,'status'=>'success','_wpnonce'=>wp_create_nonce(self::NONCE_PAY . '_' . $pid)], admin_url('admin-post.php'));
+			}
+			wp_safe_redirect($url); exit;
+		}
+		if ($is_bale_order) {
+			// صفحه ناموفق برای بله - token جدید
+			$err_token = wp_generate_password(24, false, false);
+			set_transient('cptt_pay_tok_' . $err_token, [
+				'order_id'   => $bale_order_id, 'amount' => $amount,
+				'form_title' => $form_title, 'status' => 'failed',
+			], 30 * MINUTE_IN_SECONDS);
+			$url = self::public_pay_url($err_token);
 			wp_safe_redirect($url); exit;
 		}
 		$this->fail_redirect($pid, $amount, 'تایید پرداخت ناموفق.');
@@ -1684,6 +2081,39 @@ class CPTT_Payment {
 		.pay-page__back{text-align:center;margin-top:20px;}
 		.pay-page__back a{color:#4f46e5;text-decoration:none;font-size:13px;font-weight:800;transition:all 0.2s;}
 		.pay-page__back a:hover{color:#4338ca;}
+		.pay-page__result{text-align:center;padding:28px 20px;border-radius:20px;margin:16px 0;}
+		.pay-page__result--ok{background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1.5px solid #86efac;}
+		.pay-page__result--err{background:linear-gradient(135deg,#fef2f2,#fecaca);border:1.5px solid #fca5a5;}
+		.pay-page__result-icon{font-size:44px;margin-bottom:12px;}
+		.pay-page__result-title{font-size:18px;font-weight:900;color:#0f172a;margin-bottom:6px;}
+		.pay-page__result-sub{font-size:13px;color:#64748b;margin-bottom:18px;}
+		.pay-page__result-actions{margin-top:16px;}
+		.pay-page__back-btn{display:inline-flex;align-items:center;gap:8px;padding:12px 24px;border-radius:14px;background:#6366f1;color:#fff;font-weight:800;font-size:14px;text-decoration:none;transition:background .15s;}
+		.pay-page__back-btn:hover{background:#4f46e5;}
+		.pay-page__back-btn--bale{background:#0a9396;}
+		.pay-page__back-btn--bale:hover{background:#0d7a7d;}
+		.pay-page__order-info{background:rgba(99,102,241,.06);border:1px solid rgba(99,102,241,.15);border-radius:14px;padding:12px 14px;margin-top:10px;}
+		.pay-page__order-row{display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px dashed rgba(99,102,241,.1);font-size:13px;}
+		.pay-page__order-row:last-child{border:none;}
+		.pay-page__order-row span{color:#64748b;font-weight:700;}
+		.pay-page__order-row strong{color:#0f172a;font-weight:800;}
 		.pay-page__footer{text-align:center;color:#94a3b8;font-size:11px;margin-top:24px;padding-top:16px;border-top:1px dashed #e2e8f0;}
+.pay-confirm{display:flex;flex-direction:column;gap:18px;}
+		.pay-confirm__gateway{display:flex;align-items:center;gap:10px;padding:14px 18px;background:linear-gradient(135deg,#f0f4ff,#e8edff);border-radius:16px;}
+		.pay-confirm__gw-icon{font-size:28px;}
+		.pay-confirm__gw-name{font-size:16px;font-weight:900;color:#3730a3;}
+		.pay-confirm__amount{text-align:center;padding:18px;background:linear-gradient(135deg,#fff7ed,#ffedd5);border-radius:16px;border:1.5px solid #fed7aa;}
+		.pay-confirm__amount-label{display:block;font-size:13px;color:#92400e;font-weight:700;margin-bottom:6px;}
+		.pay-confirm__amount-value{font-size:32px;font-weight:950;color:#c2410c;}
+		.pay-confirm__amount-value small{font-size:16px;}
+		.pay-confirm__summary{background:#f8faff;border-radius:14px;padding:14px;border:1.5px solid #e0e7ff;margin-top:4px;}
+		.pay-confirm__summary-title{font-size:13px;font-weight:900;color:#3730a3;margin-bottom:10px;}
+		.pay-confirm__row{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px dashed #e0e7ff;font-size:13px;}
+		.pay-confirm__row:last-child{border:none;}
+		.pay-confirm__row span{color:#64748b;font-weight:700;}
+		.pay-confirm__row strong{color:#0f172a;font-weight:900;}
+		.pay-confirm__btn{width:100%;padding:18px;border-radius:16px;background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;font-size:18px;font-weight:900;border:none;cursor:pointer;box-shadow:0 8px 24px rgba(99,102,241,.35);transition:all .2s;font-family:inherit;}
+		.pay-confirm__btn:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(99,102,241,.5);}
+		.pay-confirm__note{text-align:center;font-size:12px;color:#94a3b8;margin-top:4px;}
 	<?php }
 }

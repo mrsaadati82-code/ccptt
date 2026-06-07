@@ -24,6 +24,8 @@ class CPTT_Frontend {
 	public function register_assets() {
 		wp_register_style('cptt-frontend', CPTT_URL . 'assets/css/frontend.css', [], CPTT_VERSION);
 		wp_register_script('cptt-frontend', CPTT_URL . 'assets/js/frontend.js', [], CPTT_VERSION, true);
+		wp_register_script('cptt-expert-panels', CPTT_URL . 'assets/js/expert-panels.js', ['jquery'], CPTT_VERSION, true);
+		wp_register_style('cptt-expert-panels', CPTT_URL . 'assets/css/expert-panels.css', [], CPTT_VERSION);
 		wp_localize_script('cptt-frontend', 'CPTT_FRONTEND', [
 			'ajax' => admin_url('admin-ajax.php'),
 			'nonce' => wp_create_nonce('cptt_frontend_nonce'),
@@ -118,6 +120,17 @@ class CPTT_Frontend {
 
 		wp_enqueue_style('cptt-frontend');
 		wp_enqueue_script('cptt-frontend');
+		wp_enqueue_script('cptt-expert-panels');
+		wp_enqueue_style('cptt-expert-panels');
+		wp_localize_script('cptt-expert-panels', 'CPTT_PANELS', [
+			'ajax'   => admin_url('admin-ajax.php'),
+			'nonce'  => wp_create_nonce('cptt_expert_nonce'),
+			'fnonce' => wp_create_nonce('cptt_frontend_nonce'),
+			'fm_settings' => class_exists('CPTT_File_Manager') ? CPTT_File_Manager::get_settings() : [],
+			'fm_categories' => class_exists('CPTT_File_Manager') ? CPTT_File_Manager::get_categories() : [],
+			'req_types' => class_exists('CPTT_Requests') ? CPTT_Requests::types() : [],
+			'req_statuses' => class_exists('CPTT_Requests') ? CPTT_Requests::statuses() : [],
+		]);
 
 		$user_id  = get_current_user_id();
 		$projects = $this->get_user_projects($user_id);
@@ -355,6 +368,11 @@ class CPTT_Frontend {
 							<?php endif; ?>
 
 						<?php endif; ?>
+						<div class="cptt-project__actions">
+							<button type="button" class="cptt-client-requests-btn" data-project-id="<?php echo esc_attr($p->ID); ?>">
+								📋 درخواست تغییر
+							</button>
+						</div>
 					</section>
 				<?php endforeach; ?>
 			<?php endif; ?>

@@ -94,6 +94,7 @@ class CPTT_Settings {
 		register_setting('cptt_settings_group', 'cptt_fields');
 		register_setting('cptt_settings_group', 'cptt_branding_toggles');
 		register_setting('cptt_settings_group', 'cptt_bale_settings');
+		register_setting('cptt_settings_group', 'cptt_file_manager_settings');
 	}
 
 	public function assets($hook) {
@@ -1176,6 +1177,11 @@ class CPTT_Settings {
 							$bale = get_option('cptt_bale_settings', []);
 							$webhook_url = admin_url('admin-ajax.php?action=cptt_bale_webhook');
 						?>
+							<div class="cptt-set-field">
+								<label>نام برند ربات</label>
+								<input type="text" name="cptt_bale_settings[brand_name]" value="<?php echo esc_attr($bale['brand_name'] ?? ''); ?>" placeholder="مثلاً: سلام وردپرس" style="width:100%;" />
+								<p class="description">این نام در پیام خوش‌آمدید ربات نمایش داده می‌شود.</p>
+							</div>
 							<!-- Settings fields for token and admin ID -->
 							<div class="cptt-set-grid">
 								<div class="cptt-set-field">

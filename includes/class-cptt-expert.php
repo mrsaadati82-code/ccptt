@@ -132,6 +132,12 @@ class CPTT_Expert {
 
 	public function register_assets() {
 		wp_register_script('cptt-expert', CPTT_URL . 'assets/js/expert.js', [], CPTT_VERSION, true);
+		wp_register_script('cptt-expert-views', CPTT_URL . 'assets/js/expert-views.js', [], CPTT_VERSION, true);
+		wp_register_script('cptt-expert-panels', CPTT_URL . 'assets/js/expert-panels.js', ['jquery'], CPTT_VERSION, true);
+		wp_register_style('cptt-expert-views', CPTT_URL . 'assets/css/expert-views.css', [], CPTT_VERSION);
+		wp_register_style('cptt-expert-panels', CPTT_URL . 'assets/css/expert-panels.css', [], CPTT_VERSION);
+		wp_register_style('cptt-expert-additions', CPTT_URL . 'assets/css/expert-additions.css', [], CPTT_VERSION);
+		// هیچ localize اینجا نیست - در enqueue_assets انجام می‌شه
 		wp_localize_script('cptt-expert', 'CPTT_CURRENCY', class_exists('CPTT_Currency') ? ['unit'=>CPTT_Currency::current_unit(), 'label'=>CPTT_Currency::label(), 'factor'=>CPTT_Currency::from_base(1), 'decimals'=>(int)CPTT_Currency::get_settings()['decimals']] : ['unit'=>'toman','label'=>'تومان','factor'=>1,'decimals'=>0]);
 		wp_localize_script('cptt-expert', 'CPTT_EXPERT', [
 			'ajax' => admin_url('admin-ajax.php'),
@@ -198,6 +204,22 @@ class CPTT_Expert {
 		}
 		wp_enqueue_script('cptt-frontend');
 		wp_enqueue_script('cptt-expert');
+		wp_enqueue_script('cptt-expert-views');
+		wp_enqueue_style('cptt-expert-views');
+		wp_enqueue_script('cptt-expert-panels');
+		wp_enqueue_style('cptt-expert-panels');
+		// inline script برای CPTT_PANELS - مستقل از wp_localize_script
+		$_panels_data = [
+			'ajax'        => admin_url('admin-ajax.php'),
+			'nonce'       => wp_create_nonce('cptt_expert_nonce'),
+			'fnonce'      => wp_create_nonce('cptt_frontend_nonce'),
+			'fm_settings' => class_exists('CPTT_File_Manager') ? CPTT_File_Manager::get_settings() : [],
+			'fm_cats'     => class_exists('CPTT_File_Manager') ? CPTT_File_Manager::get_categories() : [],
+			'req_types'   => class_exists('CPTT_Requests') ? CPTT_Requests::types() : [],
+			'req_statuses'=> class_exists('CPTT_Requests') ? CPTT_Requests::statuses() : [],
+		];
+		wp_add_inline_script('cptt-expert-panels', 'var CPTT_PANELS = ' . wp_json_encode($_panels_data) . ';', 'before');
+		wp_enqueue_style('cptt-expert-additions', CPTT_URL . 'assets/css/expert-additions.css', [], CPTT_VERSION);
 	}
 
 	public function maybe_render_virtual_dashboard() {
@@ -740,13 +762,40 @@ class CPTT_Expert {
 					if (empty($assigned_expert_ids) && !empty($old_step['assigned_expert_id'])) $assigned_expert_ids = [(int)$old_step['assigned_expert_id']];
 				}
 
+				// ══ حفاظت مالی کامل ══
+				$old_cost         = $old_step ? (float)($old_step['cost'] ?? 0) : 0;
+				$old_paid         = $old_step ? (float)($old_step['paid'] ?? 0) : 0;
+				$old_expert_paid  = $old_step ? (float)($old_step['expert_paid'] ?? 0) : 0;
+				$old_expert_share = $old_step ? (float)($old_step['expert_share'] ?? 0) : 0;
+				$old_is_settled   = $old_step ? !empty($old_step['step_settled']) : false;
+
+				// حفاظت cost: اگه cost در POST صفر بود ولی قبلاً مقدار داشت → حفظ کن
+				// (جلوگیری از پاک شدن هزینه توسط unit_price*qty=0)
+				if ($cost === 0.0 && $old_cost > 0) {
+					$cost = $old_cost;
+				}
+				// حفاظت paid: اگه paid صفر آمد و تسویه شده → حفظ کن
+				if ($paid === 0.0 && $old_paid > 0 && ($old_is_settled || $old_paid > 0)) {
+					// فقط اگه صفر واقعی نیست (یعنی ارسال نشده)
+					if (!isset($row['paid']) || trim((string)$row['paid']) === '' || trim((string)$row['paid']) === '0') {
+						$paid = $old_paid;
+					}
+				}
+				// حفاظت expert_paid
+				if ($expert_paid === 0.0 && $old_expert_paid > 0) {
+					if (!isset($row['expert_paid']) || trim((string)$row['expert_paid']) === '' || trim((string)$row['expert_paid']) === '0') {
+						$expert_paid = $old_expert_paid;
+					}
+				}
+				if ($old_expert_share > 0 && $expert_share === 0.0) {
+					$expert_share = $old_expert_share;
+				}
+
 				$step_data = [
 					'id' => $new_id,
 					'status' => $status,
 					'title' => $title,
 					'desc' => $desc,
-					'unit_price' => $fee,
-					'qty' => $qty,
 					'unit_price' => $unit_price,
 					'qty' => $qty,
 					'cost' => $cost,
@@ -758,10 +807,16 @@ class CPTT_Expert {
 					'assigned_expert_ids' => $assigned_expert_ids,
 				];
 				$step_data['assigned_expert_id'] = !empty($step_data['assigned_expert_ids']) ? (int)$step_data['assigned_expert_ids'][0] : 0;
-				// v5.4.3: حفظ متاهای تسویه‌ی مرحله‌ای (که از صفحه‌ی حساب و کتاب توسط مدیر مدیریت می‌شوند)
+				// v5.4.3+: حفظ همه‌ی متاهای مالی/تسویه (مدیریت از صفحه حساب و کتاب)
 				if ($old_step) {
-					foreach (['admin_received','step_settled','settle_at','settle_at_fa','settled_by'] as $_pk) {
-						if (isset($old_step[$_pk])) $step_data[$_pk] = $old_step[$_pk];
+					$_financial_keys = ['admin_received','step_settled','settle_at','settle_at_fa','settled_by','expert_settlements','expert_share','expert_paid'];
+					foreach ($_financial_keys as $_pk) {
+						// expert_paid و expert_share فقط اگر در POST صفر بودند و قدیمی مقدار دارد
+						if (in_array($_pk, ['expert_paid','expert_share'], true)) {
+							// قبلاً بالاتر handle شد
+							continue;
+						}
+						if (array_key_exists($_pk, $old_step)) $step_data[$_pk] = $old_step[$_pk];
 					}
 				}
 
@@ -3678,9 +3733,12 @@ class CPTT_Expert {
 								<?php if ($unread_count > 0): ?><span class="cptt-bell-badge"><?php echo esc_html($unread_count); ?></span><?php endif; ?>
 							</button>
 							<div class="cptt-notifications-dropdown" hidden>
-								<div class="cptt-notifications-header">
-									<strong>اعلان‌ها</strong>
-									<button type="button" id="cptt-mark-all-read" style="background:none;border:none;color:#2271b1;cursor:pointer;font-size:12px;">خواندن همه</button>
+								<div class="cptt-notifications-header" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid rgba(100,116,139,.12);">
+									<strong style="font-size:14px;">اعلان‌ها</strong>
+									<div style="display:flex;align-items:center;gap:6px;">
+										<button type="button" id="cptt-mark-all-read" style="background:none;border:none;color:#6366f1;cursor:pointer;font-size:11.5px;font-weight:700;font-family:inherit;">✓ خواندن همه</button>
+										<button type="button" id="cptt-notif-settings-btn" title="تنظیمات اعلان‌ها" style="background:none;border:1.5px solid rgba(100,116,139,.2);border-radius:8px;width:28px;height:28px;cursor:pointer;color:#64748b;display:inline-flex;align-items:center;justify-content:center;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
+									</div>
 								</div>
 								<div class="cptt-notifications-list">
 									<?php if (empty($notifications)): ?>
@@ -3916,16 +3974,57 @@ class CPTT_Expert {
 			    <button type="button" class="cptt-btn cptt-btn--secondary" id="cptt-mobile-filter-btn">جستجو و فیلتر پروژه‌ها 🔍</button>
 			</div>
 
-			<div class="cptt-expertFilters" id="cptt-expert-filters-wrap">
-				<label>جستجو<input type="search" id="cptt-expert-search" placeholder="عنوان پروژه، مشتری، محصول..."></label>
-				<label>وضعیت<select id="cptt-expert-status"><option value="">همه</option><option value="completed">تکمیل شده</option><option value="in_progress">در حال انجام</option></select></label>
-				<label>تسویه<select id="cptt-expert-settled"><option value="">همه</option><option value="1">تسویه شده</option><option value="0">تسویه نشده</option></select></label>
-				<label>مشتری<select id="cptt-expert-client"><option value="">همه</option><?php foreach ($clients_map as $id => $name): ?><option value="<?php echo esc_attr($id); ?>"><?php echo esc_html($name); ?></option><?php endforeach; ?></select></label>
-				<label>محصول<select id="cptt-expert-product"><option value="">همه</option><?php foreach ($products_map as $id => $name): if (!$id) continue; ?><option value="<?php echo esc_attr($id); ?>"><?php echo esc_html($name); ?></option><?php endforeach; ?></select></label>
-				<label>دسته‌بندی<select id="cptt-expert-cat"><option value="">همه</option><?php foreach ($cats_map as $id => $name): ?><option value="<?php echo esc_attr($id); ?>"><?php echo esc_html($name); ?></option><?php endforeach; ?></select></label>
-				<label>لیبل<select id="cptt-expert-label"><option value="">همه</option><?php foreach ((class_exists('CPTT_Core') ? CPTT_Core::get_project_labels() : []) as $l): ?><option value="<?php echo esc_attr($l['id']); ?>"><?php echo esc_html($l['name']); ?></option><?php endforeach; ?></select></label>
-				<button type="button" class="cptt-btn" id="cptt-expert-reset">پاک کردن فیلترها</button>
-				<button type="button" class="cptt-btn" id="cptt-kanban-toggle">📌 نمایش Kanban</button>
+			<!-- ── Filter Bar Accordion ── -->
+			<div class="cptt-filter-bar" id="cptt-filter-bar">
+				<!-- Header: همیشه نمایش داده می‌شه -->
+				<div class="cptt-filter-bar__head" id="cptt-filter-bar-toggle" role="button" tabindex="0" aria-expanded="false" aria-controls="cptt-filter-bar-body">
+					<span class="cptt-filter-bar__icon">
+						<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10" cy="10" r="7"/><line x1="10" y1="7" x2="10" y2="10"/><line x1="10" y1="13" x2="10.01" y2="13"/></svg>
+						جستجو و فیلتر
+					</span>
+					<!-- نمایش فیلترهای فعال -->
+					<span class="cptt-filter-bar__active" id="cptt-filter-active-badge" hidden>فیلتر فعال</span>
+					<span class="cptt-filter-bar__chevron">
+						<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="5 8 10 13 15 8"/></svg>
+					</span>
+				</div>
+				<!-- Body: آکاردئون -->
+				<div class="cptt-filter-bar__body" id="cptt-filter-bar-body" hidden>
+					<div class="cptt-expertFilters" id="cptt-expert-filters-wrap">
+						<label class="cptt-fl cptt-fl--search">
+							<span>جستجو</span>
+							<input type="search" id="cptt-expert-search" placeholder="عنوان پروژه، مشتری...">
+						</label>
+						<label class="cptt-fl">
+							<span>وضعیت</span>
+							<select id="cptt-expert-status"><option value="">همه</option><option value="completed">تکمیل شده</option><option value="in_progress">در جریان</option></select>
+						</label>
+						<label class="cptt-fl">
+							<span>تسویه</span>
+							<select id="cptt-expert-settled"><option value="">همه</option><option value="1">تسویه شده</option><option value="0">تسویه نشده</option></select>
+						</label>
+						<label class="cptt-fl">
+							<span>مشتری</span>
+							<select id="cptt-expert-client"><option value="">همه</option><?php foreach ($clients_map as $id => $name): ?><option value="<?php echo esc_attr($id); ?>"><?php echo esc_html($name); ?></option><?php endforeach; ?></select>
+						</label>
+						<label class="cptt-fl">
+							<span>محصول</span>
+							<select id="cptt-expert-product"><option value="">همه</option><?php foreach ($products_map as $id => $name): if (!$id) continue; ?><option value="<?php echo esc_attr($id); ?>"><?php echo esc_html($name); ?></option><?php endforeach; ?></select>
+						</label>
+						<label class="cptt-fl">
+							<span>دسته‌بندی</span>
+							<select id="cptt-expert-cat"><option value="">همه</option><?php foreach ($cats_map as $id => $name): ?><option value="<?php echo esc_attr($id); ?>"><?php echo esc_html($name); ?></option><?php endforeach; ?></select>
+						</label>
+						<label class="cptt-fl">
+							<span>لیبل</span>
+							<select id="cptt-expert-label"><option value="">همه</option><?php foreach ((class_exists('CPTT_Core') ? CPTT_Core::get_project_labels() : []) as $l): ?><option value="<?php echo esc_attr($l['id']); ?>"><?php echo esc_html($l['name']); ?></option><?php endforeach; ?></select>
+						</label>
+						<div class="cptt-fl cptt-fl--actions">
+							<button type="button" class="cptt-btn cptt-btn--sm" id="cptt-expert-reset">🗑 پاک کردن</button>
+							<button type="button" class="cptt-btn cptt-btn--sm" id="cptt-kanban-toggle">📌 کانبان</button>
+						</div>
+					</div>
+				</div>
 			</div>
 
 			<?php
@@ -3947,6 +4046,44 @@ class CPTT_Expert {
 			?>
 			<div id="cptt-kanban-data" data-kanban="<?php echo esc_attr(base64_encode(wp_json_encode($kanban_steps, JSON_UNESCAPED_UNICODE))); ?>" hidden></div>
 			<div id="cptt-kanban-board" hidden></div>
+			<div class="cev-toolbar" id="cptt-views-toolbar">
+				<div class="cev-toolbar__views">
+					<button class="cev-view-btn" data-view="card">
+						<svg viewBox="0 0 20 20" width="15" height="15" fill="currentColor"><rect x="2" y="2" width="7" height="7" rx="1.5"/><rect x="11" y="2" width="7" height="7" rx="1.5"/><rect x="2" y="11" width="7" height="7" rx="1.5"/><rect x="11" y="11" width="7" height="7" rx="1.5"/></svg>
+						<span>کارتی</span>
+					</button>
+					<button class="cev-view-btn" data-view="list">
+						<svg viewBox="0 0 20 20" width="15" height="15" fill="currentColor"><rect x="2" y="3" width="16" height="2.5" rx="1"/><rect x="2" y="8.5" width="16" height="2.5" rx="1"/><rect x="2" y="14" width="16" height="2.5" rx="1"/></svg>
+						<span>لیستی</span>
+					</button>
+					<button class="cev-view-btn" data-view="calendar">
+						<svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="14" height="13" rx="2"/><line x1="3" y1="8" x2="17" y2="8"/><line x1="7" y1="2" x2="7" y2="6" stroke-linecap="round"/><line x1="13" y1="2" x2="13" y2="6" stroke-linecap="round"/></svg>
+						<span>تقویم</span>
+					</button>
+					<button class="cev-view-btn" data-view="gantt">
+						<svg viewBox="0 0 20 20" width="15" height="15" fill="currentColor"><rect x="2" y="4" width="8" height="3" rx="1"/><rect x="6" y="8.5" width="10" height="3" rx="1"/><rect x="3" y="13" width="6" height="3" rx="1"/></svg>
+						<span>گانت</span>
+					</button>
+					<button class="cev-view-btn" data-view="timeline">
+						<svg viewBox="0 0 20 20" width="15" height="15" fill="currentColor"><circle cx="4" cy="10" r="2"/><circle cx="10" cy="10" r="2"/><circle cx="16" cy="10" r="2"/><line x1="6" y1="10" x2="8" y2="10" stroke="currentColor" stroke-width="1.5"/><line x1="12" y1="10" x2="14" y2="10" stroke="currentColor" stroke-width="1.5"/></svg>
+						<span>تایم‌لاین</span>
+					</button>
+				</div>
+				<div class="cev-toolbar__sort">
+					<select id="cptt-sort-select" class="cev-sort-sel">
+						<option value="date_desc">↓ جدیدترین</option>
+						<option value="date_asc">↑ قدیمی‌ترین</option>
+						<option value="dl_asc">⏰ مهلت: نزدیک‌ترین</option>
+						<option value="dl_desc">⏰ مهلت: دورترین</option>
+						<option value="prog_desc">📊 پیشرفت: بیشترین</option>
+						<option value="prog_asc">📊 پیشرفت: کمترین</option>
+						<option value="title_asc">🔤 عنوان: الف - ی</option>
+						<option value="update_desc">🕐 آخرین بروزرسانی</option>
+						<option value="cost_desc">💰 هزینه: بیشترین</option>
+					</select>
+				</div>
+			</div>
+			<div id="cptt-view-container">
 			<div class="cptt-expertGrid" id="cptt-expert-grid">
 				<?php if (empty($projects)): ?>
 					<div class="cptt-empty">در حال حاضر پروژه‌ای به شما اختصاص داده نشده است.</div>
@@ -3975,7 +4112,36 @@ class CPTT_Expert {
 			$_tl_count = count($_tl_steps); $_tl_progress = 0;
 			if ($_tl_count > 1) { $_last = 0; foreach ($_tl_steps as $_i => $_st) { if (in_array((string)($_st['status'] ?? 'todo'), ['done','current'], true)) $_last = $_i; } $_tl_progress = ($_last / max(1, $_tl_count - 1)) * 100; } elseif ($_tl_count === 1) { $_tl_progress = 100; }
 			?>
-			<article class="cptt-expertCard" data-project-id="<?php echo esc_attr($p->ID); ?>" data-search="<?php echo esc_attr($search); ?>" data-status="<?php echo esc_attr($data['progress']['status']); ?>" data-settled="<?php echo esc_attr((string)$data['settled']); ?>" data-client="<?php echo esc_attr((string)$data['customer_id']); ?>" data-product="<?php echo esc_attr((string)$data['product_id']); ?>" data-cats=",<?php echo esc_attr(implode(',', array_map('intval', (array)$data['term_ids']))); ?>," data-label="<?php echo esc_attr($label_id); ?>" data-project-experts="<?php echo esc_attr($_step_experts_b64); ?>">
+			<?php
+			$_deadline_ts = (int)get_post_meta($p->ID, '_cptt_deadline_at', true);
+			$_created_ts  = strtotime($p->post_date_gmt) ?: (int)get_post_meta($p->ID,'_cptt_created_at',true);
+			$_progress_pct = (int)($data['progress']['percent'] ?? 0);
+			$_steps_for_data = get_post_meta($p->ID,'_cptt_steps',true);
+			if (!is_array($_steps_for_data)) $_steps_for_data = [];
+			$_steps_json_b64 = base64_encode(wp_json_encode(array_map(function($st){
+				return ['id'=>$st['id']??'','title'=>$st['title']??'','status'=>$st['status']??'todo','due_at'=>$st['due_at']??0,'due_at_fa'=>$st['due_at_fa']??'','cost'=>(float)($st['cost']??0),'paid'=>(float)($st['paid']??0)];
+			}, $_steps_for_data), JSON_UNESCAPED_UNICODE));
+			?>
+			<article class="cptt-expertCard"
+				data-project-id="<?php echo esc_attr($p->ID); ?>"
+				data-search="<?php echo esc_attr($search); ?>"
+				data-status="<?php echo esc_attr($data['progress']['status']); ?>"
+				data-settled="<?php echo esc_attr((string)$data['settled']); ?>"
+				data-client="<?php echo esc_attr((string)$data['customer_id']); ?>"
+				data-product="<?php echo esc_attr((string)$data['product_id']); ?>"
+				data-cats=",<?php echo esc_attr(implode(',', array_map('intval', (array)$data['term_ids']))); ?>,"
+				data-label="<?php echo esc_attr($label_id); ?>"
+				data-project-experts="<?php echo esc_attr($_step_experts_b64); ?>"
+				data-deadline-ts="<?php echo esc_attr((string)$_deadline_ts); ?>"
+				data-created-ts="<?php echo esc_attr((string)$_created_ts); ?>"
+				data-last-update-ts="<?php echo esc_attr((string)get_post_meta($p->ID,'_cptt_last_update',true)); ?>"
+				data-progress="<?php echo esc_attr((string)$_progress_pct); ?>"
+				data-cost="<?php echo esc_attr((string)(int)($data['financial']['cost']??0)); ?>"
+				data-title="<?php echo esc_attr(get_the_title($p->ID)); ?>"
+				data-steps="<?php echo esc_attr($_steps_json_b64); ?>"
+				data-customer-name="<?php echo esc_attr($data['customer']); ?>"
+				data-deadline-fa="<?php echo esc_attr($data['deadline']); ?>"
+				data-last-update-fa="<?php echo esc_attr($data['last_update']); ?>">
 					<div class="cptt-expertCard__top">
 						<div>
 							<h3><?php echo esc_html(get_the_title($p->ID)); ?> <span class="cptt-project-code">کد پیگیری: #<?php echo esc_html($data['code'] ?? (class_exists('CPTT_Core') ? CPTT_Core::get_project_code($p->ID) : '')); ?></span></h3>
@@ -4041,7 +4207,20 @@ class CPTT_Expert {
 								</div>
 								<div class="cptt-sideBox">
 									<div class="cptt-sideBox__title">پیام بین کارشناسان</div>
-									<button type="button" class="cptt-btn cptt-expert-chat-launch">باز کردن چت پروژه</button>
+									<div class="cptt-sideBox__actions">
+										<button type="button" class="cptt-btn cptt-expert-chat-launch">
+											<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0zM8 9v1m0 4h.01M12 9v1"/></svg>
+											چت پروژه
+										</button>
+										<button type="button" class="cptt-btn cptt-btn--file-manager" data-project-id="<?php echo esc_attr($p->ID); ?>">
+											<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7z"/><polyline points="13 2 13 7 18 7"/></svg>
+											مدیریت فایل
+										</button>
+										<button type="button" class="cptt-btn cptt-btn--requests" data-project-id="<?php echo esc_attr($p->ID); ?>">
+											<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="8"/><line x1="10" y1="6" x2="10" y2="10"/><line x1="10" y1="14" x2="10.01" y2="14"/></svg>
+											درخواست‌ها
+										</button>
+									</div>
 									<div class="cptt-expert-chatModal" hidden>
 										<div class="cptt-expert-chatModal__backdrop"></div>
 										<div class="cptt-expert-chatModal__dialog">
@@ -4084,8 +4263,17 @@ class CPTT_Expert {
 				</article>
 				<?php endforeach; endif; ?>
 			</div>
+			<!-- list view -->
+			<div id="cptt-list-view" class="cptt-list-view" hidden></div>
+			<!-- calendar view -->
+			<div id="cptt-calendar-view" class="cptt-calendar-view" hidden></div>
+			<!-- gantt view -->
+			<div id="cptt-gantt-view" class="cptt-gantt-view" hidden></div>
+			<!-- timeline view -->
+			<div id="cptt-timeline-view" class="cptt-timeline-view" hidden></div>
+
 			<div class="cptt-dashboard__empty" id="cptt-expert-empty" hidden>هیچ پروژه‌ای با این فیلترها پیدا نشد.</div>
-				</div>
+			</div><!-- /cptt-view-container -->
 			</div>
 
 			<!-- ========== EDIT PROFILE MODAL ========== -->

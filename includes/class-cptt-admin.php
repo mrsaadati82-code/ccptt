@@ -1809,7 +1809,9 @@ class CPTT_Admin {
 			// v5.4.3: حفظ فیلدهای مالی/تسویه (که از UI حذف شده ولی از hidden ارسال می‌شوند)
 			$expert_share = isset($s['expert_share']) ? (float)str_replace([',', ' '], '', (string)$s['expert_share']) : 0;
 			$expert_paid  = isset($s['expert_paid']) ? (float)str_replace([',', ' '], '', (string)$s['expert_paid']) : 0;
-			$row=['id'=>$id,'title'=>$title,'desc'=>$desc,'status'=>$status,'checklist'=>$checklist,'user_tasks'=>$user_tasks,'cost'=>$cost,'paid'=>$paid,'expert_share'=>$expert_share,'expert_paid'=>$expert_paid,'assigned_expert_id'=>$assigned_expert_id,'assigned_expert_ids'=>$assigned_expert_ids];
+			// حفاظت: اگه cost یا paid با کاما فرمت شده بودن، درست پارس کن
+			$cost_final = $cost; $paid_final = $paid;
+			$row=['id'=>$id,'title'=>$title,'desc'=>$desc,'status'=>$status,'checklist'=>$checklist,'user_tasks'=>$user_tasks,'cost'=>$cost_final,'paid'=>$paid_final,'expert_share'=>$expert_share,'expert_paid'=>$expert_paid,'assigned_expert_id'=>$assigned_expert_id,'assigned_expert_ids'=>$assigned_expert_ids];
 			if ($due_at) { $row['due_at']=$due_at; $row['due_at_fa']=class_exists('CPTT_Core')?CPTT_Core::jalali_datetime($due_at):date('Y/m/d H:i',$due_at); }
 			$out[]=$row;
 		}
@@ -1932,8 +1934,27 @@ class CPTT_Admin {
 			foreach ($steps as &$_ns) {
 				$_sid = (string)($_ns['id'] ?? '');
 				if ($_sid !== '' && isset($old_by_id_settle[$_sid])) {
+					$_old_s = $old_by_id_settle[$_sid];
+					// همه فیلدهای مالی/تسویه از قدیمی حفظ شوند
 					foreach (['admin_received','step_settled','settle_at','settle_at_fa','settled_by','expert_settlements'] as $_pk) {
-						if (isset($old_by_id_settle[$_sid][$_pk])) $_ns[$_pk] = $old_by_id_settle[$_sid][$_pk];
+						if (isset($_old_s[$_pk])) $_ns[$_pk] = $_old_s[$_pk];
+					}
+					// expert_paid: اگه تسویه شده و POST صفر داد → قدیمی را حفظ کن
+					if (!empty($_old_s['step_settled'])) {
+						if ((float)($_ns['expert_paid'] ?? 0) === 0.0 && (float)($_old_s['expert_paid'] ?? 0) > 0) {
+							$_ns['expert_paid'] = (float)$_old_s['expert_paid'];
+						}
+						if ((float)($_ns['expert_share'] ?? 0) === 0.0 && (float)($_old_s['expert_share'] ?? 0) > 0) {
+							$_ns['expert_share'] = (float)$_old_s['expert_share'];
+						}
+						// paid: اگه تسویه شده و POST صفر داد → قدیمی را حفظ کن
+						if ((float)($_ns['paid'] ?? 0) === 0.0 && (float)($_old_s['paid'] ?? 0) > 0) {
+							$_ns['paid'] = (float)$_old_s['paid'];
+						}
+						// cost: اگه تسویه شده و POST صفر داد → قدیمی را حفظ کن
+						if ((float)($_ns['cost'] ?? 0) === 0.0 && (float)($_old_s['cost'] ?? 0) > 0) {
+							$_ns['cost'] = (float)$_old_s['cost'];
+						}
 					}
 				}
 			}

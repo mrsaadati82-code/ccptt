@@ -1,0 +1,461 @@
+/**
+ * CPTT Expert Panels v1.0
+ * File Manager + Client Requests
+ * Theme-aware, RTL, Responsive
+ */
+
+/* ═══════════════════════════════════════════
+   MODAL
+═══════════════════════════════════════════ */
+.cptt-panel-modal {
+  position: fixed !important;
+  top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+  z-index: 9999999 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.cptt-panel-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,.5);
+  backdrop-filter: blur(4px);
+}
+.cptt-panel-modal__dialog {
+  position: relative;
+  z-index: 1;
+  width: min(92vw, 860px);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: 20px;
+  background: var(--th-card-bg, #fff);
+  box-shadow: 0 24px 60px rgba(0,0,0,.28);
+  overflow: hidden;
+  animation: cptt-panel-in .22s cubic-bezier(.22,1,.36,1);
+}
+@keyframes cptt-panel-in {
+  from { opacity:0; transform:scale(.94) translateY(18px); }
+  to   { opacity:1; transform:none; }
+}
+.cptt-panel-modal__head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, var(--th-accent, #6366f1), #818cf8);
+  color: #fff; flex-shrink: 0;
+}
+.cptt-panel-modal__title { font-size: 16px; font-weight: 900; }
+.cptt-panel-modal__close {
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,.4);
+  background: rgba(255,255,255,.12);
+  color: #fff; font-size: 18px; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: background .15s;
+}
+.cptt-panel-modal__close:hover { background: rgba(255,255,255,.28); }
+.cptt-panel-modal__body {
+  flex: 1; overflow-y: auto; padding: 18px 20px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+
+/* ═══════════════════════════════════════════
+   SHARED BUTTONS
+═══════════════════════════════════════════ */
+.cptt-fm-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 13px; border-radius: 10px; font-size: 12.5px; font-weight: 800;
+  border: 1.5px solid var(--th-border, rgba(100,116,139,.2));
+  background: var(--th-input-bg, rgba(100,116,139,.06));
+  color: var(--th-text, #0f172a); cursor: pointer; font-family: inherit;
+  transition: all .15s; white-space: nowrap;
+}
+.cptt-fm-btn:hover { background: var(--th-accent, #6366f1); color: #fff; border-color: transparent; }
+
+.cptt-fm-loading { text-align: center; padding: 40px; color: var(--th-muted, #94a3b8); font-size: 14px; }
+.cptt-fm-empty   { text-align: center; padding: 40px; color: var(--th-muted, #94a3b8); font-size: 14px; }
+
+.cptt-fm-msg { padding: 8px 14px; border-radius: 10px; font-size: 13px; font-weight: 700; min-height: 10px; }
+.cptt-fm-msg.ok  { background: rgba(34,197,94,.1); color: #15803d; }
+.cptt-fm-msg.err { background: rgba(239,68,68,.1); color: #b91c1c; }
+.cptt-req-msg { padding: 8px 14px; border-radius: 10px; font-size: 13px; font-weight: 700; min-height: 10px; }
+.cptt-req-msg.ok  { background: rgba(34,197,94,.1); color: #15803d; }
+.cptt-req-msg.err { background: rgba(239,68,68,.1); color: #b91c1c; }
+
+/* ═══════════════════════════════════════════
+   ACTION BUTTONS (sidebar pane)
+═══════════════════════════════════════════ */
+.cptt-sideBox__actions {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px;
+}
+.cptt-sideBox__actions .cptt-btn { font-size: 12.5px; padding: 8px 13px; flex: 1; justify-content: center; }
+.cptt-btn--file-manager {
+  background: linear-gradient(135deg, rgba(34,197,94,.1), rgba(16,185,129,.08));
+  border-color: rgba(34,197,94,.3); color: #065f46;
+}
+.cptt-btn--file-manager:hover { background: #22c55e; color: #fff; border-color: transparent; }
+.cptt-btn--requests {
+  background: linear-gradient(135deg, rgba(245,158,11,.1), rgba(234,179,8,.08));
+  border-color: rgba(245,158,11,.3); color: #92400e;
+}
+.cptt-btn--requests:hover { background: #f59e0b; color: #fff; border-color: transparent; }
+
+/* ═══════════════════════════════════════════
+   FILE MANAGER
+═══════════════════════════════════════════ */
+.cptt-fm-toolbar {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  padding: 10px; border-radius: 14px;
+  background: var(--th-input-bg, rgba(100,116,139,.04));
+  border: 1px solid var(--th-border, rgba(100,116,139,.12));
+  flex-shrink: 0;
+}
+.cptt-fm-filter-wrap { display: flex; gap: 6px; flex: 1; min-width: 0; }
+.cptt-fm-search {
+  flex: 1; padding: 7px 12px; border-radius: 10px;
+  border: 1.5px solid var(--th-border, rgba(100,116,139,.2));
+  background: var(--th-card-bg, #fff); color: var(--th-text, #0f172a);
+  font: inherit; font-size: 12.5px; outline: none; min-width: 0;
+}
+.cptt-fm-search:focus { border-color: var(--th-accent, #6366f1); }
+.cptt-fm-cat-filter {
+  padding: 7px 10px; border-radius: 10px;
+  border: 1.5px solid var(--th-border, rgba(100,116,139,.2));
+  background: var(--th-card-bg, #fff); color: var(--th-text, #0f172a);
+  font: inherit; font-size: 12px; outline: none;
+}
+.cptt-fm-upload-lbl {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 13px; border-radius: 10px; cursor: pointer;
+  background: linear-gradient(135deg, var(--th-accent, #6366f1), #818cf8);
+  color: #fff; font-size: 12.5px; font-weight: 800;
+  transition: opacity .15s;
+}
+.cptt-fm-upload-lbl:hover { opacity: .88; }
+.cptt-fm-upload-cat {
+  padding: 7px 10px; border-radius: 10px;
+  border: 1.5px solid var(--th-border, rgba(100,116,139,.2));
+  background: var(--th-card-bg, #fff); color: var(--th-text, #0f172a);
+  font: inherit; font-size: 12px; outline: none;
+}
+
+.cptt-fm-progress {
+  height: 6px; border-radius: 99px;
+  background: var(--th-border, rgba(100,116,139,.15));
+  overflow: hidden; flex-shrink: 0;
+}
+.cptt-fm-progress__bar {
+  height: 100%; border-radius: 99px;
+  background: linear-gradient(90deg, var(--th-accent, #6366f1), #818cf8);
+  transition: width .2s ease;
+}
+
+.cptt-fm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.cptt-fm-card {
+  border-radius: 16px;
+  background: var(--th-card-bg, rgba(255,255,255,.9));
+  border: 1.5px solid var(--th-card-border, rgba(100,116,139,.12));
+  box-shadow: 0 2px 10px rgba(0,0,0,.06);
+  overflow: hidden;
+  transition: box-shadow .18s, transform .18s;
+  display: flex; flex-direction: column;
+}
+.cptt-fm-card:hover { box-shadow: 0 6px 20px rgba(0,0,0,.12); transform: translateY(-2px); }
+
+.cptt-fm-card__top {
+  display: flex; gap: 10px; padding: 12px;
+  align-items: flex-start; flex: 1;
+}
+.cptt-fm-thumb { width: 56px; height: 56px; border-radius: 10px; overflow: hidden; flex-shrink: 0; }
+.cptt-fm-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.cptt-fm-icon {
+  width: 56px; height: 56px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px;
+  background: var(--th-input-bg, rgba(100,116,139,.06));
+}
+.cptt-fm-card__info { flex: 1; min-width: 0; }
+.cptt-fm-card__name {
+  font-size: 13px; font-weight: 800; color: var(--th-text, #0f172a);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-bottom: 6px;
+}
+.cptt-fm-card__meta {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  font-size: 11.5px; color: var(--th-muted, #64748b);
+}
+.cptt-fm-badge {
+  padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 800;
+  background: color-mix(in srgb, var(--th-accent, #6366f1) 10%, transparent);
+  color: var(--th-accent, #6366f1);
+}
+.cptt-fm-card__note {
+  font-size: 11.5px; color: var(--th-muted, #64748b);
+  margin-top: 4px; font-style: italic;
+}
+.cptt-fm-card__actions {
+  display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 12px;
+  border-top: 1px solid var(--th-border, rgba(100,116,139,.1));
+  background: var(--th-input-bg, rgba(100,116,139,.02));
+  align-items: center;
+}
+.cptt-fm-card__actions select {
+  padding: 4px 8px; border-radius: 8px; font-size: 11.5px;
+  border: 1px solid var(--th-border, rgba(100,116,139,.2));
+  background: var(--th-card-bg, #fff); color: var(--th-text, #0f172a);
+  font-family: inherit; outline: none;
+}
+.cptt-fm-del-btn { background: rgba(239,68,68,.08) !important; border-color: rgba(239,68,68,.2) !important; color: #b91c1c !important; }
+.cptt-fm-del-btn:hover { background: #ef4444 !important; color: #fff !important; }
+
+/* preview overlay */
+.cptt-fm-preview-overlay {
+  position: fixed; inset: 0; z-index: 9999999;
+  background: rgba(0,0,0,.8); backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+}
+.cptt-fm-preview-inner {
+  position: relative; max-width: 90vw; max-height: 90vh;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+}
+.cptt-fm-preview-inner img { max-width: 80vw; max-height: 80vh; border-radius: 12px; object-fit: contain; }
+.cptt-fm-preview-close {
+  position: absolute; top: -16px; right: -16px;
+  width: 36px; height: 36px; border-radius: 50%;
+  background: rgba(255,255,255,.15); border: 2px solid rgba(255,255,255,.3);
+  color: #fff; font-size: 20px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.cptt-fm-preview-dl {
+  color: #fff; text-decoration: none; font-size: 13px; font-weight: 800;
+  padding: 8px 16px; border-radius: 10px; background: rgba(255,255,255,.15);
+  border: 1px solid rgba(255,255,255,.25); transition: background .15s;
+}
+.cptt-fm-preview-dl:hover { background: rgba(255,255,255,.28); }
+
+/* ═══════════════════════════════════════════
+   CLIENT REQUESTS
+═══════════════════════════════════════════ */
+.cptt-req-toolbar {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  padding: 10px; border-radius: 14px;
+  background: var(--th-input-bg, rgba(100,116,139,.04));
+  border: 1px solid var(--th-border, rgba(100,116,139,.12));
+  flex-shrink: 0;
+}
+.cptt-req-search {
+  flex: 1; min-width: 120px; padding: 7px 12px; border-radius: 10px;
+  border: 1.5px solid var(--th-border, rgba(100,116,139,.2));
+  background: var(--th-card-bg, #fff); color: var(--th-text, #0f172a);
+  font: inherit; font-size: 12.5px; outline: none;
+}
+.cptt-req-status-filter, .cptt-req-status-sel {
+  padding: 7px 10px; border-radius: 10px;
+  border: 1.5px solid var(--th-border, rgba(100,116,139,.2));
+  background: var(--th-card-bg, #fff); color: var(--th-text, #0f172a);
+  font: inherit; font-size: 12px; outline: none;
+}
+.cptt-req-new-btn { margin-right: auto; }
+
+.cptt-req-new-form {
+  border-radius: 16px; padding: 16px;
+  background: color-mix(in srgb, var(--th-accent, #6366f1) 4%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--th-accent, #6366f1) 20%, transparent);
+}
+.cptt-req-form-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;
+}
+.cptt-req-form-grid .full { grid-column: 1/-1; }
+.cptt-req-form-grid label {
+  display: flex; flex-direction: column; gap: 5px;
+  font-size: 12.5px; font-weight: 800; color: var(--th-text, #0f172a);
+}
+.cptt-req-form-grid input,
+.cptt-req-form-grid select,
+.cptt-req-form-grid textarea {
+  padding: 8px 12px; border-radius: 10px;
+  border: 1.5px solid var(--th-border, rgba(100,116,139,.2));
+  background: var(--th-card-bg, #fff); color: var(--th-text, #0f172a);
+  font: inherit; font-size: 12.5px; outline: none; resize: vertical;
+}
+.cptt-req-form-grid input:focus,
+.cptt-req-form-grid select:focus,
+.cptt-req-form-grid textarea:focus { border-color: var(--th-accent, #6366f1); }
+
+.cptt-req-submit-btn {
+  background: linear-gradient(135deg, var(--th-accent, #6366f1), #818cf8) !important;
+  color: #fff !important; border-color: transparent !important;
+}
+
+.cptt-req-list { display: flex; flex-direction: column; gap: 10px; }
+
+.cptt-req-card {
+  border-radius: 16px; padding: 14px 16px;
+  background: var(--th-card-bg, #fff);
+  border: 1.5px solid var(--th-card-border, rgba(100,116,139,.12));
+  box-shadow: 0 2px 8px rgba(0,0,0,.05);
+  display: flex; flex-direction: column; gap: 8px;
+  transition: box-shadow .18s;
+}
+.cptt-req-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.1); }
+
+.cptt-req-card__head {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.cptt-req-type-badge, .cptt-req-status-badge, .cptt-req-prio {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 99px; font-size: 11.5px; font-weight: 800;
+}
+.cptt-req-del-btn {
+  background: rgba(239,68,68,.08) !important; border-color: rgba(239,68,68,.2) !important;
+  color: #b91c1c !important; padding: 4px 9px !important; font-size: 13px !important;
+}
+.cptt-req-del-btn:hover { background: #ef4444 !important; color: #fff !important; }
+.cptt-req-card__title { font-size: 14px; font-weight: 900; color: var(--th-text, #0f172a); }
+.cptt-req-card__meta  { font-size: 12px; color: var(--th-muted, #64748b); }
+.cptt-req-card__desc  { font-size: 13px; color: var(--th-text, #0f172a); line-height: 1.7; }
+.cptt-req-card__att   { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 700; color: var(--th-accent, #6366f1); text-decoration: none; }
+.cptt-req-card__att:hover { text-decoration: underline; }
+.cptt-req-card__response {
+  padding: 8px 12px; border-radius: 10px; font-size: 12.5px;
+  background: color-mix(in srgb, #22c55e 8%, transparent);
+  border: 1px solid color-mix(in srgb, #22c55e 22%, transparent);
+  color: var(--th-text, #0f172a);
+}
+.cptt-req-respond-form {
+  display: flex; flex-direction: column; gap: 8px; padding-top: 10px;
+  border-top: 1px dashed var(--th-border, rgba(100,116,139,.2));
+}
+.cptt-req-resp-txt {
+  padding: 8px 12px; border-radius: 10px; resize: vertical; min-height: 56px;
+  border: 1.5px solid var(--th-border, rgba(100,116,139,.2));
+  background: var(--th-card-bg, #fff); color: var(--th-text, #0f172a);
+  font: inherit; font-size: 12.5px; outline: none;
+}
+.cptt-req-resp-txt:focus { border-color: var(--th-accent, #6366f1); }
+
+/* ═══════════════════════════════════════════
+   FRONTEND CLIENT BUTTON
+═══════════════════════════════════════════ */
+.cptt-client-requests-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: 12px; cursor: pointer;
+  border: 1.5px solid rgba(245,158,11,.35); font-size: 13px; font-weight: 800;
+  background: rgba(245,158,11,.08); color: #92400e; font-family: inherit;
+  transition: all .15s;
+}
+.cptt-client-requests-btn:hover { background: #f59e0b; color: #fff; border-color: transparent; }
+
+/* ═══════════════════════════════════════════
+   THEME OVERRIDES
+═══════════════════════════════════════════ */
+body[class*="cptt-theme-"] .cptt-panel-modal__dialog,
+body[class*="cptt-theme-"] .cptt-fm-card,
+body[class*="cptt-theme-"] .cptt-req-card,
+body[class*="cptt-theme-"] .cptt-req-new-form {
+  background: var(--th-card-bg) !important;
+  border-color: var(--th-card-border, rgba(255,255,255,.1)) !important;
+  color: var(--th-text) !important;
+}
+body[class*="cptt-theme-"] .cptt-fm-search,
+body[class*="cptt-theme-"] .cptt-fm-cat-filter,
+body[class*="cptt-theme-"] .cptt-fm-upload-cat,
+body[class*="cptt-theme-"] .cptt-req-search,
+body[class*="cptt-theme-"] .cptt-req-status-filter,
+body[class*="cptt-theme-"] .cptt-req-status-sel,
+body[class*="cptt-theme-"] .cptt-req-form-grid input,
+body[class*="cptt-theme-"] .cptt-req-form-grid select,
+body[class*="cptt-theme-"] .cptt-req-form-grid textarea,
+body[class*="cptt-theme-"] .cptt-req-resp-txt {
+  background: var(--th-input-bg) !important;
+  color: var(--th-text) !important;
+  border-color: var(--th-border) !important;
+}
+
+/* ═══════════════════════════════════════════
+   RESPONSIVE
+═══════════════════════════════════════════ */
+@media (max-width: 700px) {
+  .cptt-panel-modal__dialog { width: 96vw; max-height: 95vh; }
+  .cptt-fm-grid { grid-template-columns: 1fr; }
+  .cptt-req-form-grid { grid-template-columns: 1fr; }
+  .cptt-fm-toolbar { flex-direction: column; align-items: stretch; }
+  .cptt-fm-filter-wrap { flex-direction: column; }
+  .cptt-sideBox__actions { flex-direction: column; }
+  .cptt-sideBox__actions .cptt-btn { width: 100%; }
+}
+
+/* ═══════════════════════════════════════════════
+   DARK THEME FIXES — Modal panels
+═══════════════════════════════════════════════ */
+body.cptt-dark .cptt-modal-dialog,
+body[class*="cptt-theme-"] .cptt-modal-dialog {
+  background: var(--th-card-bg, #1e293b) !important;
+  color: var(--th-text, #f1f5f9) !important;
+  border: 1px solid var(--th-card-border, rgba(255,255,255,.1)) !important;
+}
+body.cptt-dark .cptt-modal-body,
+body[class*="cptt-theme-"] .cptt-modal-body {
+  background: var(--th-card-bg, #1e293b) !important;
+  color: var(--th-text, #f1f5f9) !important;
+}
+body.cptt-dark .cptt-fm-card,
+body[class*="cptt-theme-"] .cptt-fm-card {
+  background: var(--th-card-bg, rgba(30,41,59,.9)) !important;
+  border-color: var(--th-card-border, rgba(255,255,255,.1)) !important;
+  color: var(--th-text, #f1f5f9) !important;
+}
+body.cptt-dark .req-card,
+body[class*="cptt-theme-"] .req-card {
+  background: var(--th-card-bg, rgba(30,41,59,.9)) !important;
+  border-color: var(--th-card-border, rgba(255,255,255,.1)) !important;
+  color: var(--th-text, #f1f5f9) !important;
+}
+/* inputs در dark mode */
+body.cptt-dark .cptt-modal-dialog input,
+body.cptt-dark .cptt-modal-dialog select,
+body.cptt-dark .cptt-modal-dialog textarea,
+body[class*="cptt-theme-"] .cptt-modal-dialog input,
+body[class*="cptt-theme-"] .cptt-modal-dialog select,
+body[class*="cptt-theme-"] .cptt-modal-dialog textarea {
+  background: var(--th-input-bg, rgba(255,255,255,.08)) !important;
+  color: var(--th-text, #f1f5f9) !important;
+  border-color: var(--th-border, rgba(255,255,255,.15)) !important;
+}
+body.cptt-dark .cptt-modal-dialog input:focus,
+body.cptt-dark .cptt-modal-dialog select:focus,
+body.cptt-dark .cptt-modal-dialog textarea:focus,
+body[class*="cptt-theme-"] .cptt-modal-dialog input:focus,
+body[class*="cptt-theme-"] .cptt-modal-dialog select:focus,
+body[class*="cptt-theme-"] .cptt-modal-dialog textarea:focus {
+  border-color: var(--th-accent, #6366f1) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--th-accent, #6366f1) 20%, transparent) !important;
+}
+
+/* ─── Download button dark theme fix ─── */
+body.cptt-dark .cptt-modal-dialog a[download],
+body[class*="cptt-theme-"] .cptt-modal-dialog a[download] {
+  background: var(--th-input-bg, rgba(255,255,255,.1)) !important;
+  color: var(--th-text, #f1f5f9) !important;
+  border-color: var(--th-border, rgba(255,255,255,.15)) !important;
+}
+body.cptt-dark .cptt-modal-dialog a[download]:hover,
+body[class*="cptt-theme-"] .cptt-modal-dialog a[download]:hover {
+  background: var(--th-accent, #6366f1) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+}
+/* همه button ها در dark */
+body.cptt-dark .cptt-modal-dialog button:not(.cptt-modal-close):not([style*="background:linear"]):not([style*="background: linear"]),
+body[class*="cptt-theme-"] .cptt-modal-dialog button:not(.cptt-modal-close):not([style*="background:linear"]):not([style*="background: linear"]) {
+  background: var(--th-input-bg, rgba(255,255,255,.08)) !important;
+  color: var(--th-text, #f1f5f9) !important;
+  border-color: var(--th-border, rgba(255,255,255,.12)) !important;
+}

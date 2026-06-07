@@ -447,11 +447,12 @@
           });
       }
       
+      // mobile filter btn: redirect به آکاردئون جدید
       var filterBtn = qs('#cptt-mobile-filter-btn');
-      var filterWrap = qs('#cptt-expert-filters-wrap');
-      if (filterBtn && filterWrap) {
+      if (filterBtn) {
           filterBtn.addEventListener('click', function() {
-              filterWrap.classList.toggle('is-open');
+            var toggle = document.getElementById('cptt-filter-bar-toggle');
+            if (toggle) toggle.click();
           });
       }
   }
@@ -3230,7 +3231,13 @@
   }
   function updateRemain(step){
     var unit=step.querySelector('.cptt-step-unit-price'), qty=step.querySelector('.cptt-step-qty'), cost=step.querySelector('.cptt-step-cost'), paid=step.querySelector('.cptt-step-paid'), rem=step.querySelector('.cptt-step-remain');
-    if(unit&&qty&&cost){ var total=num(unit.value)*(parseFloat(qty.value)||1); if(document.activeElement!==cost) cost.value=fmt(total); }
+    if(unit&&qty&&cost){
+      // فقط وقتی unit_price تغییر می‌کنه cost رو update کن، نه لود اولیه
+      var u=num(unit.value), q=parseFloat(qty.value)||1;
+      if(document.activeElement===unit || document.activeElement===qty){
+        cost.value=fmt(u*q);
+      }
+    }
     if(cost&&paid&&rem){ var remain=num(cost.value)-num(paid.value); rem.value=fmt(Math.max(0,remain)); rem.closest('label').style.display = remain>0 ? '' : 'none'; }
   }
   function layoutAllFinance(){ qsa('.cptt-expert-step').forEach(ensureFinanceGrid); }
@@ -6156,5 +6163,169 @@
 
   ready(function(){
     interceptOldChatButtons();
+  });
+})();
+
+/* ═══════════════════════════════════════════════
+   NOTIFICATION SETTINGS MODAL
+═══════════════════════════════════════════════ */
+(function(){
+  var NOTIF_TYPES = {"project_assigned": "واگذاری پروژه", "project_removed": "حذف از پروژه", "step_completed": "تکمیل مرحله", "direct_chat": "پیام مستقیم", "expert_payout": "تسویه\u200cحساب", "new_order": "سفارش جدید", "order_assigned": "تخصیص سفارش", "client_request": "درخواست مشتری", "request_update": "به\u200cروزرسانی درخواست", "file_upload": "آپلود فایل"};
+  var PREF_KEY = 'cptt_notif_prefs';
+
+  function getPrefs(){
+    try{ return JSON.parse(localStorage.getItem(PREF_KEY)||'{}'); }catch(e){ return {}; }
+  }
+  function savePrefs(p){ try{ localStorage.setItem(PREF_KEY,JSON.stringify(p)); }catch(e){} }
+  function isEnabled(type){
+    var p = getPrefs();
+    return p[type] !== false; // پیش‌فرض: همه فعال
+  }
+
+  // فیلتر اعلان‌ها بر اساس تنظیمات
+  function shouldShowNotif(type){
+    return isEnabled(type);
+  }
+  window.cpttNotifShouldShow = shouldShowNotif;
+
+  function openNotifSettings(){
+    var existing = document.getElementById('cptt-notif-settings-modal');
+    if(existing){ existing.remove(); return; }
+
+    var prefs = getPrefs();
+    var rows = Object.keys(NOTIF_TYPES).map(function(type){
+      var label = NOTIF_TYPES[type];
+      var on = prefs[type] !== false;
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(100,116,139,.08);">' +
+        '<span style="font-size:13px;font-weight:700;">' + label + '</span>' +
+        '<label class="cptt-notif-sw-label" style="position:relative;display:inline-block;width:42px;height:24px;cursor:pointer;">' +
+          '<input type="checkbox" class="cptt-notif-sw" data-type="' + type + '" ' + (on?'checked':'') + ' style="opacity:0;width:0;height:0;">' +
+          '<span style="position:absolute;inset:0;border-radius:99px;background:' + (on?'#6366f1':'rgba(100,116,139,.3)') + ';transition:.2s;"></span>' +
+          '<span style="position:absolute;top:2px;' + (on?'right':'left') + ':2px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.2);transition:.2s;"></span>' +
+        '</label>' +
+      '</div>';
+    }).join('');
+
+    // ── تشخیص تم برای رنگ‌بندی درست
+    var bodyClasses = document.body.className;
+    var isDark = bodyClasses.indexOf('cptt-dark') > -1 ||
+                 bodyClasses.indexOf('cptt-theme-dark') > -1 ||
+                 bodyClasses.indexOf('cptt-theme-three-d') > -1;
+    var isGlass = bodyClasses.indexOf('cptt-theme-glass') > -1;
+
+    var BG   = isDark ? 'var(--th-card-bg,#1e293b)' : (isGlass ? 'rgba(15,20,40,.85)' : '#fff');
+    var TEXT = isDark || isGlass ? 'var(--th-text,#f1f5f9)' : '#0f172a';
+    var MUTED= isDark || isGlass ? 'rgba(148,163,184,.85)' : '#64748b';
+    var BORD = isDark || isGlass ? 'rgba(255,255,255,.08)' : 'rgba(100,116,139,.1)';
+    var IBRD = isDark || isGlass ? 'rgba(255,255,255,.12)' : 'rgba(100,116,139,.2)';
+    var IBG  = isDark || isGlass ? 'rgba(255,255,255,.06)' : 'rgba(100,116,139,.06)';
+
+    // rebuild rows with correct colors
+    rows = Object.keys(NOTIF_TYPES).map(function(type){
+      var label = NOTIF_TYPES[type];
+      var on = prefs[type] !== false;
+      var trackBg = on ? '#6366f1' : (isDark || isGlass ? 'rgba(255,255,255,.18)' : 'rgba(100,116,139,.3)');
+      var thumbPos = on ? 'right:2px;left:auto;' : 'left:2px;right:auto;';
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid ' + BORD + ';">' +
+        '<span style="font-size:13px;font-weight:700;color:' + TEXT + ';">' + label + '</span>' +
+        '<label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;flex-shrink:0;">' +
+          '<input type="checkbox" class="cptt-notif-sw" data-type="' + type + '" ' + (on?'checked':'') + ' style="opacity:0;width:0;height:0;position:absolute;">' +
+          '<span class="cptt-sw-track" style="position:absolute;inset:0;border-radius:99px;background:' + trackBg + ';transition:.22s ease;"></span>' +
+          '<span class="cptt-sw-thumb" style="position:absolute;top:2px;' + thumbPos + 'width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.25);transition:.22s ease;"></span>' +
+        '</label>' +
+      '</div>';
+    }).join('');
+
+    var modal = document.createElement('div');
+    modal.id = 'cptt-notif-settings-modal';
+    modal.setAttribute('style', [
+      'position:fixed','top:0','left:0','right:0','bottom:0',
+      'z-index:2147483647','display:flex','align-items:center','justify-content:center',
+      'background:rgba(0,0,0,' + (isDark||isGlass?'.6':'.45') + ')','padding:16px','box-sizing:border-box'
+    ].join(';'));
+    var blur = isGlass ? 'backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);' : '';
+    modal.innerHTML =
+      '<div style="' + blur + 'background:' + BG + ';border-radius:20px;width:min(92vw,440px);max-height:88vh;display:flex;flex-direction:column;' +
+        'box-shadow:0 24px 60px rgba(0,0,0,' + (isDark?'.5':'.22') + ');overflow:hidden;' +
+        (isDark||isGlass ? 'border:1px solid rgba(255,255,255,.1);' : '') + '">' +
+        '<div style="padding:14px 18px;background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">' +
+          '<div style="display:flex;align-items:center;gap:8px;">' +
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>' +
+            '<span style="font-size:15px;font-weight:900;">تنظیمات اعلان‌ها</span>' +
+          '</div>' +
+          '<button id="cptt-ns-close" style="background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.3);border-radius:50%;width:28px;height:28px;color:#fff;font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;">×</button>' +
+        '</div>' +
+        '<div style="padding:14px 18px;overflow-y:auto;flex:1;">' +
+          '<p style="font-size:12.5px;color:' + MUTED + ';margin:0 0 12px;line-height:1.7;padding-bottom:10px;border-bottom:1px solid ' + BORD + ';">انتخاب کنید کدام اعلان‌ها نمایش داده شوند. در مرورگر ذخیره می‌شود.</p>' +
+          rows +
+        '</div>' +
+        '<div style="padding:12px 18px;border-top:1px solid ' + BORD + ';display:flex;gap:8px;flex-shrink:0;background:' + IBG + ';">' +
+          '<button id="cptt-ns-save" style="flex:1;padding:10px;border-radius:12px;background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;border:none;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 4px 12px rgba(99,102,241,.3);">✓ ذخیره</button>' +
+          '<button id="cptt-ns-reset" style="padding:10px 16px;border-radius:12px;background:' + IBG + ';color:' + MUTED + ';border:1.5px solid ' + IBRD + ';font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;">↺ بازنشانی</button>' +
+        '</div>' +
+      '</div>';
+
+    document.body.appendChild(modal);
+
+    modal.querySelector('#cptt-ns-close').onclick = function(){ modal.remove(); };
+    modal.onclick = function(e){ if(e.target===modal) modal.remove(); };
+
+    // switch interaction
+    modal.querySelectorAll('.cptt-notif-sw').forEach(function(sw){
+      sw.addEventListener('change', function(){
+        var track = sw.parentNode.querySelector('.cptt-sw-track');
+        var thumb = sw.parentNode.querySelector('.cptt-sw-thumb');
+        if(track) track.style.background = sw.checked ? '#6366f1' : (isDark||isGlass ? 'rgba(255,255,255,.18)' : 'rgba(100,116,139,.3)');
+        if(thumb){ thumb.style.right = sw.checked ? '2px' : 'auto'; thumb.style.left = sw.checked ? 'auto' : '2px'; }
+      });
+    });
+
+    modal.querySelector('#cptt-ns-save').onclick = function(){
+      var p = getPrefs();
+      modal.querySelectorAll('.cptt-notif-sw').forEach(function(sw){
+        p[sw.dataset.type] = sw.checked;
+      });
+      savePrefs(p);
+      modal.remove();
+      // refresh notification list
+      var listEl = document.querySelector('.cptt-notifications-list');
+      if(listEl) applyNotifFilter(listEl);
+    };
+
+    modal.querySelector('#cptt-ns-reset').onclick = function(){
+      savePrefs({});
+      modal.querySelectorAll('.cptt-notif-sw').forEach(function(sw){
+        sw.checked = true;
+        var track = sw.parentNode.querySelector('.cptt-sw-track');
+        var thumb = sw.parentNode.querySelector('.cptt-sw-thumb');
+        if(track) track.style.background = '#6366f1';
+        if(thumb){ thumb.style.right = '2px'; thumb.style.left = 'auto'; }
+      });
+    };
+  }
+
+  function applyNotifFilter(listEl){
+    if(!listEl) return;
+    listEl.querySelectorAll('.cptt-notification-item').forEach(function(item){
+      var type = item.dataset.type || '';
+      var wrap = item.closest('.cptt-notification-item-wrap') || item;
+      wrap.style.display = (!type || shouldShowNotif(type)) ? '' : 'none';
+    });
+  }
+
+  document.addEventListener('click', function(e){
+    if(e.target.closest('#cptt-notif-settings-btn')){
+      openNotifSettings();
+    }
+  });
+
+  // اعمال فیلتر هنگام باز شدن dropdown
+  document.addEventListener('click', function(e){
+    if(e.target.closest('.cptt-bell-btn')){
+      setTimeout(function(){
+        var listEl = document.querySelector('.cptt-notifications-list');
+        if(listEl) applyNotifFilter(listEl);
+      }, 50);
+    }
   });
 })();
