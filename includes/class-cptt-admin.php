@@ -696,12 +696,23 @@ class CPTT_Admin {
 				if (!is_array($stps)) continue;
 				foreach ($stps as $sk => $st) {
 					$paid = (float)($st['paid'] ?? 0);
-					if ($paid <= 0) continue;
+					$cost_step = (float)($st['cost'] ?? 0);
+					// v6.1.4 — اضافه‌کردن مالی‌های اضافی به paid و cost
+					if (!empty($st['extra_finance']) && is_array($st['extra_finance'])) {
+						foreach ($st['extra_finance'] as $ef) {
+							$paid      += (float)($ef['paid'] ?? 0);
+							$cost_step += (float)($ef['cost'] ?? 0);
+						}
+					}
+					// v6.1.4: مرحله هم اگر دریافتی داشت و هم اگر هزینه‌ای داشت
+					// که هنوز پرداخت نشده، باید در لیست تسویه‌ها بیاید (حتی اگر مرحله انجام‌شده باشد).
+					if ($paid <= 0 && $cost_step <= 0) continue;
 					$assigned_ids = isset($st['assigned_expert_ids']) && is_array($st['assigned_expert_ids']) ? array_values(array_filter(array_unique(array_map('intval', $st['assigned_expert_ids'])))) : [];
 					if (empty($assigned_ids) && !empty($st['assigned_expert_id'])) $assigned_ids = [(int)$st['assigned_expert_id']];
 					if (empty($assigned_ids)) {
+						// v6.1.4: همه کارشناسان پروژه (نه فقط اولی) را لیست کن
 						$_eids = class_exists('CPTT_Core') ? CPTT_Core::get_project_expert_ids($proj->ID) : [];
-						if (!empty($_eids)) $assigned_ids = [(int)$_eids[0]];
+						if (!empty($_eids)) $assigned_ids = array_map('intval', $_eids);
 					}
 					if (empty($assigned_ids)) $assigned_ids = [0];
 					$per_expert = (isset($st['expert_settlements']) && is_array($st['expert_settlements'])) ? $st['expert_settlements'] : [];

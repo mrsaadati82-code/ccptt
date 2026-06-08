@@ -1,0 +1,1254 @@
+/* =====================================================================
+ * CPTT v6.1.3 — Expert Dashboard UX (round 4)
+ *
+ * Highlights of this round:
+ *   1) Sticky behaviour split by viewport:
+ *        - Desktop (>820px): only the FILTER BAR is sticky (under admin bar).
+ *        - Mobile  (<=820px): only the VIEWS TOOLBAR is sticky (under admin bar).
+ *      The other one stays in normal flow at all times.
+ *   2) Mobile manage/invoice/archive row sizing fixed for both buttons.
+ *   3) Customer messenger dropdown styles + step title overflow fix.
+ *   4) Customer field row layout (select + message button on same row).
+ * ===================================================================== */
+
+/* ────────────────────────────────────────────────────────────
+ * 0) Kill ALL legacy "cptt-filter-fixed" hard-positioning.
+ *    Sticky is done with native `position: sticky` below.
+ * ──────────────────────────────────────────────────────────── */
+.cptt-filter-fixed,
+.cptt-expertFilters.cptt-filter-fixed,
+.cptt-hubFilters.cptt-filter-fixed,
+.cptt-filter-bar.cptt-filter-fixed{
+	position: static !important;
+	top: auto !important;
+	left: auto !important;
+	right: auto !important;
+	bottom: auto !important;
+	width: auto !important;
+	max-width: 100% !important;
+	transform: none !important;
+	margin-top: 0 !important;
+	z-index: auto !important;
+}
+.cptt-filter-sticky-placeholder{
+	display: none !important;
+	height: 0 !important;
+	width: 0 !important;
+	pointer-events: none !important;
+}
+.cptt-filter-bar{
+	max-width: 100% !important;
+	box-sizing: border-box !important;
+	overflow: visible !important;
+}
+.cptt-filter-bar__body{
+	max-width: 100% !important;
+	box-sizing: border-box !important;
+	overflow: hidden !important;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 1) STICKY — desktop = filter, mobile = toolbar.
+ *    Important: any ancestor with `overflow: hidden` would break
+ *    sticky, so we also ensure overflow:visible on parents.
+ * ──────────────────────────────────────────────────────────── */
+.cptt-expertWrap,
+.cptt-expertMain,
+.cptt-v2-scope{
+	overflow: visible !important;
+}
+
+/* DESKTOP: stick the INNER filters row (cptt-expertFilters) under admin bar */
+@media (min-width: 821px){
+	/* the wrapper bar itself is normal flow */
+	#cptt-filter-bar.cptt-filter-bar{
+		position: static !important;
+		top: auto !important;
+		z-index: auto !important;
+		box-shadow: 0 2px 12px rgba(0,0,0,.05) !important;
+		overflow: visible !important;
+	}
+	#cptt-filter-bar .cptt-filter-bar__body{
+		overflow: visible !important;
+	}
+	/* inner filters strip sticks */
+	#cptt-expert-filters-wrap.cptt-expertFilters{
+		position: -webkit-sticky !important;
+		position: sticky !important;
+		top: 0 !important;
+		z-index: 9994 !important;
+		background: var(--th-card-bg, #ffffff) !important;
+		padding: 8px !important;
+		border-radius: 12px !important;
+		box-shadow: 0 6px 16px rgba(15,23,42,.10) !important;
+	}
+	body.admin-bar #cptt-expert-filters-wrap.cptt-expertFilters{
+		top: 32px !important; /* WP admin bar height */
+	}
+	/* toolbar = normal flow on desktop */
+	#cptt-views-toolbar.cev-toolbar{
+		position: static !important;
+		top: auto !important;
+		z-index: auto !important;
+		box-shadow: none !important;
+	}
+}
+
+/* MOBILE: only views toolbar sticks; filter bar is normal flow.
+ *
+ * NOTE: We use JS to flip the toolbar to `position: fixed` when its
+ * top edge reaches the top of the viewport (or just below the admin
+ * bar). A placeholder maintains the layout space below it. This
+ * guarantees the bar is glued exactly to the top edge regardless
+ * of any ancestor with `overflow`/`transform`/`contain` that would
+ * normally break `position: sticky`.
+ *
+ * CSS just provides the visual style for the stuck state. */
+@media (max-width: 820px){
+	#cptt-filter-bar.cptt-filter-bar{
+		position: static !important;
+		top: auto !important;
+		z-index: auto !important;
+	}
+	#cptt-expert-filters-wrap.cptt-expertFilters{
+		position: static !important;
+		top: auto !important;
+		z-index: auto !important;
+	}
+	#cptt-views-toolbar.cev-toolbar{
+		position: static;
+		margin-top: 0 !important;
+	}
+	#cptt-views-toolbar.cev-toolbar.is-stuck-mobile{
+		position: fixed !important;
+		top: 0 !important;
+		left: 0 !important;
+		right: 0 !important;
+		width: 100% !important;
+		max-width: 100% !important;
+		margin: 0 !important;
+		z-index: 9994 !important;
+		background: var(--th-card-bg, #ffffff) !important;
+		box-shadow: 0 4px 16px rgba(15,23,42,.08) !important;
+		border-radius: 0 !important;
+		padding-left: 10px !important;
+		padding-right: 10px !important;
+	}
+	body.admin-bar #cptt-views-toolbar.cev-toolbar.is-stuck-mobile{
+		top: 46px !important; /* mobile WP admin bar height */
+	}
+	.cev-toolbar-placeholder{
+		display: none;
+	}
+	#cptt-views-toolbar.cev-toolbar.is-stuck-mobile + .cev-toolbar-placeholder{
+		display: block;
+	}
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 2) Notification settings gear (safety)
+ * ──────────────────────────────────────────────────────────── */
+#cptt-notif-settings-btn{
+	background: rgba(99,102,241,.08) !important;
+	border: 1.5px solid rgba(99,102,241,.25) !important;
+	border-radius: 8px !important;
+	width: 30px !important;
+	height: 30px !important;
+	min-width: 30px !important;
+	min-height: 30px !important;
+	padding: 0 !important;
+	line-height: 0 !important;
+	color: #4f46e5 !important;
+	display: inline-flex !important;
+	align-items: center !important;
+	justify-content: center !important;
+	flex-shrink: 0 !important;
+}
+#cptt-notif-settings-btn:hover{
+	background: rgba(99,102,241,.18) !important;
+	border-color: rgba(99,102,241,.45) !important;
+	color: #4338ca !important;
+}
+#cptt-notif-settings-btn svg{
+	width: 17px !important;
+	height: 17px !important;
+	display: block !important;
+	stroke: currentColor !important;
+	fill: none !important;
+	pointer-events: none !important;
+}
+body[class*="cptt-theme-"] #cptt-notif-settings-btn,
+body.cptt-dark #cptt-notif-settings-btn{
+	background: rgba(255,255,255,.10) !important;
+	border-color: rgba(255,255,255,.22) !important;
+	color: var(--th-text, #f1f5f9) !important;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 3) Filter inputs — 3 per row on mobile
+ * ──────────────────────────────────────────────────────────── */
+@media (max-width: 820px){
+	.cptt-expertFilters{
+		display: grid !important;
+		grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+		gap: 6px !important;
+	}
+	.cptt-expertFilters .cptt-fl--search{
+		grid-column: 1 / -1 !important;
+	}
+	.cptt-expertFilters .cptt-fl--actions{
+		grid-column: 1 / -1 !important;
+		justify-content: stretch !important;
+	}
+	.cptt-expertFilters .cptt-fl > span{
+		font-size: 10px !important;
+		margin-bottom: 2px !important;
+		white-space: nowrap !important;
+		overflow: hidden !important;
+		text-overflow: ellipsis !important;
+	}
+	.cptt-expertFilters input,
+	.cptt-expertFilters select{
+		height: 34px !important;
+		padding: 5px 8px !important;
+		font-size: 11.5px !important;
+		min-width: 0 !important;
+		width: 100% !important;
+		max-width: 100% !important;
+	}
+	.cptt-expertFilters input[type="search"]{
+		padding-right: 26px !important;
+		background-position: right 6px center !important;
+	}
+	.cptt-filter-bar__body{
+		padding: 10px !important;
+	}
+	.cptt-filter-bar__head{
+		padding: 9px 12px !important;
+		min-height: 42px !important;
+	}
+}
+@media (max-width: 360px){
+	.cptt-expertFilters{
+		grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+	}
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 4) Remove duplicate mobile filter trigger button
+ * ──────────────────────────────────────────────────────────── */
+.cptt-mobile-filter-trigger,
+#cptt-mobile-filter-btn{
+	display: none !important;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 5) Quick summary (cptt-sideList) — 2 per row on mobile
+ * ──────────────────────────────────────────────────────────── */
+@media (max-width: 820px){
+	.cptt-expertSidebar .cptt-sideBox .cptt-sideList{
+		display: grid !important;
+		grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+		gap: 6px !important;
+	}
+	.cptt-expertSidebar .cptt-sideBox .cptt-sideList li{
+		flex-direction: column !important;
+		align-items: flex-start !important;
+		gap: 2px !important;
+		padding: 8px 10px !important;
+		font-size: 11.5px !important;
+		text-align: right !important;
+	}
+	.cptt-expertSidebar .cptt-sideBox .cptt-sideList li span{
+		font-size: 10.5px !important;
+		color: #64748b !important;
+	}
+	.cptt-expertSidebar .cptt-sideBox .cptt-sideList li strong{
+		font-size: 13px !important;
+	}
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 6) Mobile stats — hide progress, show deadline tile (injected by JS)
+ *     infoGrid — collapsed hides everything
+ * ──────────────────────────────────────────────────────────── */
+@media (max-width: 820px){
+	.cptt-expertCard__stats{
+		grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+		gap: 6px !important;
+	}
+	.cptt-expertCard__stats > .cptt-stat-progress{
+		display: none !important;
+	}
+	.cptt-expertCard__stats > .cptt-stat-deadline-mobile{
+		display: block !important;
+		order: -10 !important;
+	}
+	.cptt-expertCard__infoGrid{
+		grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+		gap: 5px !important;
+	}
+	.cptt-expertCard__infoGrid > div{
+		padding: 6px 8px !important;
+		border-radius: 10px !important;
+		min-width: 0 !important;
+	}
+	.cptt-expertCard__infoGrid > div span{
+		font-size: 10px !important;
+		margin-bottom: 1px !important;
+	}
+	.cptt-expertCard__infoGrid > div strong{
+		font-size: 12px !important;
+		margin-top: 2px !important;
+		line-height: 1.4 !important;
+	}
+	.cptt-expertCard:not(.is-expanded) .cptt-expertCard__infoGrid{
+		display: none !important;
+	}
+	.cptt-expertCard.is-expanded .cptt-expertCard__infoGrid{
+		display: grid !important;
+		grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+	}
+	.cptt-expertCard.is-expanded .cptt-expertCard__infoGrid > div{
+		display: block !important;
+	}
+	.cptt-expertCard.is-expanded .cptt-expertCard__infoGrid > div[style*="grid-column"]{
+		grid-column: 1 / -1 !important;
+	}
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 7) Sort dropdown — compact button beside view buttons (mobile)
+ * ──────────────────────────────────────────────────────────── */
+@media (max-width: 900px){
+	.cev-toolbar{
+		flex-direction: row !important;
+		flex-wrap: nowrap !important;
+		align-items: center !important;
+		justify-content: space-between !important;
+		gap: 6px !important;
+		padding: 8px 10px !important;
+	}
+	.cev-toolbar__views{
+		flex: 1 1 auto !important;
+		min-width: 0 !important;
+		overflow-x: auto !important;
+		justify-content: flex-start !important;
+		gap: 4px !important;
+		-webkit-overflow-scrolling: touch !important;
+		scrollbar-width: none !important;
+	}
+	.cev-toolbar__views::-webkit-scrollbar{ display: none !important; }
+	.cev-toolbar__sort{
+		flex: 0 0 auto !important;
+		width: auto !important;
+		max-width: 140px !important;
+		justify-content: flex-start !important;
+	}
+	.cev-sort-sel{
+		flex: 0 0 auto !important;
+		width: auto !important;
+		max-width: 130px !important;
+		min-width: 100px !important;
+		padding: 7px 22px 7px 8px !important;
+		font-size: 11.5px !important;
+		font-weight: 800 !important;
+		height: 34px !important;
+		border-radius: 10px !important;
+		background-color: rgba(99,102,241,.08) !important;
+		border: 1.5px solid rgba(99,102,241,.25) !important;
+		color: #4338ca !important;
+		appearance: none !important;
+		-webkit-appearance: none !important;
+		background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 20 20' fill='none' stroke='%234338ca' stroke-width='2.5' stroke-linecap='round'><polyline points='5 8 10 13 15 8'/></svg>") !important;
+		background-repeat: no-repeat !important;
+		background-position: left 8px center !important;
+		background-size: 10px !important;
+		cursor: pointer !important;
+		text-overflow: ellipsis !important;
+		overflow: hidden !important;
+		white-space: nowrap !important;
+		direction: rtl !important;
+	}
+	body[class*="cptt-theme-"] .cev-sort-sel,
+	body.cptt-dark .cev-sort-sel{
+		background-color: rgba(255,255,255,.10) !important;
+		border-color: rgba(255,255,255,.20) !important;
+		color: var(--th-text, #f1f5f9) !important;
+	}
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 8) Card action row — [Manage 40%] [Invoice 40%] [Archive 20%]
+ *    Uses grid with explicit columns; both desktop & mobile.
+ *    Important: max-specificity selectors with explicit grid-column
+ *    AND explicit width to defeat older `width: calc(50%)` rules.
+ * ──────────────────────────────────────────────────────────── */
+.cptt-expertCard .cptt-expertCard__actions{
+	display: grid !important;
+	grid-template-columns: 2fr 2fr 1fr !important; /* 40% 40% 20% */
+	grid-auto-rows: auto !important;
+	gap: 6px !important;
+	align-items: stretch !important;
+	width: 100% !important;
+	max-width: 100% !important;
+	flex-wrap: nowrap !important; /* override the parent flex defaults */
+}
+.cptt-expertCard .cptt-expertCard__actions > *,
+.cptt-expertCard .cptt-expertCard__actions > .cptt-btn,
+.cptt-expertCard .cptt-expertCard__actions > a.cptt-btn,
+.cptt-expertCard .cptt-expertCard__actions > button.cptt-btn{
+	width: 100% !important;
+	max-width: 100% !important;
+	min-width: 0 !important;
+	flex: unset !important;
+	min-height: 40px !important;
+	height: 40px !important;
+	padding: 0 10px !important;
+	font-size: 13px !important;
+	font-weight: 800 !important;
+	line-height: 1.3 !important;
+	border-radius: 10px !important;
+	display: inline-flex !important;
+	align-items: center !important;
+	justify-content: center !important;
+	text-align: center !important;
+	white-space: nowrap !important;
+	box-sizing: border-box !important;
+}
+.cptt-expertCard .cptt-expertCard__actions > .cptt-expert-toggleProject{
+	grid-column: 1 !important;
+	grid-row: 1 !important;
+}
+.cptt-expertCard .cptt-expertCard__actions > a[href*="cptt_view_invoice"]{
+	grid-column: 2 !important;
+	grid-row: 1 !important;
+}
+.cptt-expertCard .cptt-expertCard__actions > .cptt-expert-archive-project,
+.cptt-expertCard .cptt-expertCard__actions > .cptt-expert-unarchive-project{
+	grid-column: 3 !important;
+	grid-row: 1 !important;
+	padding: 0 !important;
+	gap: 0 !important;
+	font-size: 0 !important;
+}
+.cptt-expertCard .cptt-expertCard__actions > a[href*="cptt_view_report"]{
+	grid-column: 1 / -1 !important;
+	grid-row: 2 !important;
+}
+.cptt-expertCard .cptt-expertCard__actions > .cptt-expert-delete-project{
+	grid-column: 1 / -1 !important;
+	grid-row: 3 !important;
+}
+/* Mobile: tighter sizing */
+@media (max-width: 720px){
+	.cptt-expertCard .cptt-expertCard__actions > *,
+	.cptt-expertCard .cptt-expertCard__actions > .cptt-btn,
+	.cptt-expertCard .cptt-expertCard__actions > a.cptt-btn,
+	.cptt-expertCard .cptt-expertCard__actions > button.cptt-btn{
+		min-height: 38px !important;
+		height: 38px !important;
+		font-size: 12px !important;
+		padding: 0 8px !important;
+	}
+	.cptt-expertCard .cptt-expertCard__actions > .cptt-expert-archive-project,
+	.cptt-expertCard .cptt-expertCard__actions > .cptt-expert-unarchive-project{
+		padding: 0 !important;
+	}
+}
+
+/* Archive icon-only button styles */
+.cptt-btn--archive{
+	background: linear-gradient(135deg, #fef3c7, #fde68a) !important;
+	color: #92400e !important;
+	border: 1px solid #fcd34d !important;
+	padding: 0 !important;
+	font-size: 0 !important;
+	gap: 0 !important;
+}
+.cptt-btn--archive svg{
+	width: 18px !important;
+	height: 18px !important;
+	stroke: currentColor !important;
+	fill: none !important;
+	display: block !important;
+	pointer-events: none !important;
+}
+.cptt-btn--archive:hover{
+	background: linear-gradient(135deg, #fde68a, #fcd34d) !important;
+}
+body.cptt-dark .cptt-btn--archive,
+body.cptt-theme-dark .cptt-btn--archive,
+body.cptt-theme-three-d .cptt-btn--archive{
+	background: linear-gradient(135deg, #92400e, #b45309) !important;
+	color: #fef3c7 !important;
+	border-color: #d97706 !important;
+}
+.cptt-expert-unarchive-project.cptt-btn--archive{
+	background: linear-gradient(135deg, #dbeafe, #bfdbfe) !important;
+	color: #1e40af !important;
+	border-color: #93c5fd !important;
+}
+body.cptt-dark .cptt-expert-unarchive-project.cptt-btn--archive,
+body.cptt-theme-dark .cptt-expert-unarchive-project.cptt-btn--archive,
+body.cptt-theme-three-d .cptt-expert-unarchive-project.cptt-btn--archive{
+	background: linear-gradient(135deg, #1e3a8a, #1e40af) !important;
+	color: #dbeafe !important;
+	border-color: #3b82f6 !important;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 9) Created-date display
+ * ──────────────────────────────────────────────────────────── */
+.cev-list__cr{
+	font-size: 11.5px !important;
+	color: var(--th-muted, #64748b) !important;
+	white-space: nowrap !important;
+}
+.cev-tl-meta .cev-tl-cr{
+	display: inline-flex !important;
+	align-items: center !important;
+	gap: 3px !important;
+	font-size: 10.5px !important;
+	color: var(--th-muted, #94a3b8) !important;
+}
+.cev-cal-cr,
+.cev-gantt-cr{
+	font-size: 10.5px !important;
+	color: var(--th-muted, #94a3b8) !important;
+}
+.cptt-expertCard__createdInline{
+	display: inline-flex !important;
+	align-items: center !important;
+	gap: 3px !important;
+	font-size: 10.5px !important;
+	font-weight: 700 !important;
+	color: var(--th-muted, #64748b) !important;
+	background: rgba(99,102,241,.07) !important;
+	padding: 2px 8px !important;
+	border-radius: 99px !important;
+	margin-inline-start: 6px !important;
+	white-space: nowrap !important;
+}
+.cptt-expertCard__createdInline svg{
+	width: 11px !important;
+	height: 11px !important;
+	stroke: currentColor !important;
+	fill: none !important;
+	flex-shrink: 0 !important;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 10) File-Manager / Requests modal — light-theme polish
+ *      IDs are cptt-fm-{pid} and cptt-req-{pid} (dynamic).
+ * ──────────────────────────────────────────────────────────── */
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-fm-"] .cptt-modal-dialog,
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-req-"] .cptt-modal-dialog{
+	background: #ffffff !important;
+	color: #0f172a !important;
+	border: 1px solid #e5e7eb !important;
+	box-shadow: 0 20px 60px rgba(15,23,42,.18) !important;
+}
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-fm-"] .cptt-modal-body,
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-req-"] .cptt-modal-body{
+	background: #ffffff !important;
+	color: #0f172a !important;
+}
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-fm-"] .cptt-modal-body :where(div, span, strong, b, label, p, small, li){
+	color: #0f172a !important;
+}
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-req-"] .cptt-modal-body :where(div, span, strong, b, label, p, small, li){
+	color: #0f172a !important;
+}
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-fm-"] .cptt-modal-body [style*="color:var(--th-muted"],
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-req-"] .cptt-modal-body [style*="color:var(--th-muted"]{
+	color: #64748b !important;
+}
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-fm-"] .cptt-modal-body .cptt-fm-card,
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-fm-"] .cptt-modal-body [style*="border-radius:14px"][style*="background:var(--th-card-bg"],
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-req-"] .cptt-modal-body .cptt-req-card,
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-req-"] .cptt-modal-body [style*="border-radius:14px"][style*="background:var(--th-card-bg"]{
+	background: #ffffff !important;
+	color: #0f172a !important;
+	border-color: #e5e7eb !important;
+	box-shadow: 0 2px 8px rgba(15,23,42,.06) !important;
+}
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-fm-"] .cptt-modal-body [style*="background:rgba(99,102,241,.05)"],
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-fm-"] .cptt-modal-body [style*="background:rgba(99,102,241,.03)"],
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-req-"] .cptt-modal-body [style*="background:rgba(99,102,241,.05)"],
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-req-"] .cptt-modal-body [style*="background:rgba(99,102,241,.03)"]{
+	background: #f8fafc !important;
+	border-color: #e5e7eb !important;
+}
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-fm-"] .cptt-modal-body [style*="background:rgba(99,102,241,.1)"],
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-req-"] .cptt-modal-body [style*="background:rgba(99,102,241,.1)"]{
+	background: #eef2ff !important;
+	color: #4338ca !important;
+}
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-fm-"] .cptt-modal-body input,
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-fm-"] .cptt-modal-body select,
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-fm-"] .cptt-modal-body textarea,
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-req-"] .cptt-modal-body input,
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-req-"] .cptt-modal-body select,
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-req-"] .cptt-modal-body textarea{
+	background: #ffffff !important;
+	color: #0f172a !important;
+	border-color: #d1d5db !important;
+}
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-fm-"] .cptt-modal-body button:not([style*="linear-gradient"]):not(.cptt-modal-close):not(.fm-del):not(.req-del),
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-req-"] .cptt-modal-body button:not([style*="linear-gradient"]):not(.cptt-modal-close):not(.fm-del):not(.req-del),
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-fm-"] .cptt-modal-body a[download],
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-req-"] .cptt-modal-body a[download]{
+	background: #f8fafc !important;
+	color: #0f172a !important;
+	border-color: #d1d5db !important;
+}
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-fm-"] .cptt-modal-body button:not([style*="linear-gradient"]):not(.cptt-modal-close):not(.fm-del):not(.req-del):hover,
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-req-"] .cptt-modal-body button:not([style*="linear-gradient"]):not(.cptt-modal-close):not(.fm-del):not(.req-del):hover,
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-fm-"] .cptt-modal-body a[download]:hover,
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-req-"] .cptt-modal-body a[download]:hover{
+	background: #eef2ff !important;
+	color: #4338ca !important;
+	border-color: #c7d2fe !important;
+}
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-fm-"] .cptt-modal-body .fm-del,
+body:not(.cptt-dark):not(.cptt-theme-dark):not(.cptt-theme-three-d) [id^="cptt-req-"] .cptt-modal-body .req-del{
+	background: #fef2f2 !important;
+	color: #b91c1c !important;
+	border-color: #fecaca !important;
+}
+body.cptt-dark [id^="cptt-fm-"] .cptt-modal-dialog,
+body.cptt-theme-dark [id^="cptt-fm-"] .cptt-modal-dialog,
+body.cptt-theme-three-d [id^="cptt-fm-"] .cptt-modal-dialog,
+body.cptt-dark [id^="cptt-req-"] .cptt-modal-dialog,
+body.cptt-theme-dark [id^="cptt-req-"] .cptt-modal-dialog,
+body.cptt-theme-three-d [id^="cptt-req-"] .cptt-modal-dialog{
+	background: var(--th-card-bg, #1e293b) !important;
+	color: var(--th-text, #f1f5f9) !important;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 11) Archive section
+ * ──────────────────────────────────────────────────────────── */
+.cptt-archive-section{
+	margin-top: 22px;
+	border-radius: 16px;
+	border: 1px dashed rgba(100,116,139,.25);
+	background: var(--th-card-bg, rgba(248,250,252,.6));
+	overflow: hidden;
+}
+.cptt-archive-toggle{
+	display: flex; align-items: center; gap: 10px;
+	width: 100%; padding: 12px 18px; background: transparent;
+	border: 0; cursor: pointer; font-family: inherit;
+	font-size: 14px; font-weight: 900;
+	color: var(--th-text, #0f172a); text-align: right;
+	transition: background .18s;
+}
+.cptt-archive-toggle:hover{ background: rgba(99,102,241,.06); }
+.cptt-archive-toggle__icon{
+	display: inline-flex; align-items: center; justify-content: center;
+	width: 30px; height: 30px; border-radius: 9px;
+	background: rgba(99,102,241,.12); color: #4f46e5; flex-shrink: 0;
+}
+.cptt-archive-toggle__icon svg{ display:block; }
+.cptt-archive-toggle__label{ flex: 1; }
+.cptt-archive-toggle__count{
+	min-width: 28px; padding: 2px 9px; border-radius: 99px;
+	background: rgba(99,102,241,.14); color: #4338ca;
+	font-size: 11.5px; font-weight: 900; text-align: center;
+}
+.cptt-archive-toggle__chevron{
+	display: inline-flex; align-items: center;
+	color: var(--th-muted, #94a3b8);
+	transition: transform .22s ease;
+}
+.cptt-archive-section.is-open .cptt-archive-toggle__chevron{
+	transform: rotate(180deg);
+}
+.cptt-archive-body{
+	border-top: 1px solid rgba(100,116,139,.12);
+	padding: 14px 16px;
+	background: var(--th-input-bg, rgba(248,250,255,.5));
+}
+.cptt-archive-body[hidden]{ display: none !important; }
+.cptt-archive-empty{
+	padding: 22px; text-align: center;
+	color: var(--th-muted, #64748b); font-size: 13px; line-height: 1.8;
+}
+.cptt-archive-grid{
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+	gap: 10px;
+}
+.cptt-archive-card{
+	background: var(--th-card-bg, #ffffff);
+	border: 1px solid var(--th-card-border, rgba(100,116,139,.18));
+	border-radius: 14px; padding: 12px 14px;
+	display: flex; flex-direction: column; gap: 8px;
+	box-shadow: 0 2px 8px rgba(15,23,42,.04);
+	transition: transform .15s, box-shadow .15s;
+}
+.cptt-archive-card:hover{
+	transform: translateY(-1px);
+	box-shadow: 0 8px 24px rgba(15,23,42,.08);
+}
+.cptt-archive-card__head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.cptt-archive-card__title{ flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.cptt-archive-card__title strong{
+	font-size: 14px; font-weight: 900;
+	color: var(--th-text, #0f172a);
+	white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cptt-archive-card__code{ font-size: 10.5px; font-weight: 700; color: var(--th-muted, #94a3b8); }
+.cptt-archive-card__label{ padding: 3px 10px; border-radius: 99px; font-size: 11px; font-weight: 800; }
+.cptt-archive-card__meta{ display:flex; flex-wrap:wrap; gap:6px; font-size:11.5px; color: var(--th-muted, #64748b); }
+.cptt-archive-card__meta span{ padding: 2px 8px; border-radius: 8px; background: rgba(100,116,139,.07); }
+.cptt-archive-card__actions{ display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+.cptt-archive-card__actions .cptt-btn{
+	flex: 1 1 auto;
+	font-size: 11.5px !important;
+	padding: 6px 10px !important;
+	min-height: 32px !important;
+	border-radius: 8px !important;
+}
+.cptt-expertCard.cptt-card--archived{ border: 1px dashed #fcd34d !important; }
+
+/* ────────────────────────────────────────────────────────────
+ * 14) Step extra-finance rows — compact inline rows
+ *
+ *  - No big box, no headline.
+ *  - A small "+" SVG button is injected by JS at the END of the
+ *    LAST visible finance row (either the main finance row or the
+ *    most recent extra-finance row). Clicking it appends a new
+ *    `.cptt-ef-row` below.
+ *  - Each extra row mimics the main finance row layout (title, cost,
+ *    paid) plus a small "×" remove button.
+ *  - Mobile: title goes full-width, cost+paid share row 2, remove
+ *    becomes a compact icon at the end of row 2.
+ * ──────────────────────────────────────────────────────────── */
+.cptt-step-extra-finance{
+	margin: 6px 0 0 !important;
+	padding: 0 !important;
+	background: transparent !important;
+	border: 0 !important;
+	display: flex !important;
+	flex-direction: column !important;
+	gap: 6px !important;
+}
+
+/* + button (icon-only) — sits next to "remain" cell on the LAST row */
+.cptt-ef-btn--add{
+	flex: 0 0 32px !important;
+	width: 32px !important;
+	height: 32px !important;
+	min-width: 32px !important;
+	min-height: 32px !important;
+	padding: 0 !important;
+	margin: 0 !important;
+	border-radius: 8px !important;
+	border: 1.5px solid #c7d2fe !important;
+	background: linear-gradient(135deg, #eef2ff, #e0e7ff) !important;
+	color: #4338ca !important;
+	cursor: pointer !important;
+	display: inline-flex !important;
+	align-items: center !important;
+	justify-content: center !important;
+	align-self: end !important;
+	line-height: 0 !important;
+	transition: background .15s, transform .12s;
+}
+.cptt-ef-btn--add:hover{
+	background: linear-gradient(135deg, #c7d2fe, #a5b4fc) !important;
+	transform: translateY(-1px);
+}
+.cptt-ef-btn--add svg{
+	width: 16px !important;
+	height: 16px !important;
+	stroke: currentColor !important;
+	fill: none !important;
+	pointer-events: none !important;
+}
+/* a wrapper label for + so it can live inside .cptt-step-finance-grid */
+label.cptt-ef-add-cell{
+	display: inline-flex !important;
+	flex-direction: column !important;
+	justify-content: end !important;
+	margin: 0 !important;
+	padding: 0 !important;
+	min-width: 0 !important;
+	background: transparent !important;
+	border: 0 !important;
+}
+label.cptt-ef-add-cell > span{
+	display: block !important;
+	font-size: 10.5px !important;
+	font-weight: 800 !important;
+	color: transparent !important;
+	margin-bottom: 3px !important;
+	white-space: nowrap !important;
+	visibility: hidden !important; /* keep alignment with siblings */
+	height: 15px !important;
+}
+
+/* finance row layout — extend the existing .cptt-step-finance-grid to
+   accept the extra + button as its last cell */
+.cptt-step-finance-grid.cptt-finance-grid--has-add{
+	grid-template-columns: minmax(110px,1fr) 72px minmax(110px,1fr) minmax(110px,1fr) minmax(100px,.85fr) 32px !important;
+}
+@media (max-width:820px){
+	.cptt-step-finance-grid.cptt-finance-grid--has-add{
+		grid-template-columns: 1fr 72px !important;
+	}
+	.cptt-step-finance-grid.cptt-finance-grid--has-add .cptt-ef-add-cell{
+		grid-column: 1 / -1 !important;
+		justify-self: end !important;
+	}
+	.cptt-step-finance-grid.cptt-finance-grid--has-add .cptt-ef-add-cell > span{
+		display: none !important;
+	}
+}
+
+/* ── extra-finance row ── */
+.cptt-ef-row{
+	display: grid !important;
+	grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1.2fr) 32px !important;
+	gap: 6px !important;
+	align-items: end !important;
+	padding: 0 !important;
+	background: transparent !important;
+	border: 0 !important;
+}
+.cptt-ef-row .cptt-ef-cell{
+	display: block !important;
+	margin: 0 !important;
+	padding: 0 !important;
+	min-width: 0 !important;
+	background: transparent !important;
+	border: 0 !important;
+	box-shadow: none !important;
+}
+.cptt-ef-row .cptt-ef-cell > span{
+	display: block !important;
+	font-size: 10.5px !important;
+	font-weight: 800 !important;
+	color: var(--th-muted, #64748b) !important;
+	margin-bottom: 3px !important;
+	white-space: nowrap !important;
+	overflow: hidden !important;
+	text-overflow: ellipsis !important;
+}
+.cptt-ef-row .cptt-ef-cell input{
+	width: 100% !important;
+	min-width: 0 !important;
+	height: 38px !important;
+	padding: 7px 8px !important;
+	font-size: 12px !important;
+	border-radius: 10px !important;
+	border: 1px solid rgba(100,116,139,.25) !important;
+	background: var(--th-input-bg, #fff) !important;
+	color: var(--th-text, #0f172a) !important;
+	box-sizing: border-box !important;
+}
+
+/* remove button (icon-only) */
+.cptt-ef-btn--remove{
+	flex: 0 0 32px !important;
+	width: 32px !important;
+	height: 32px !important;
+	min-width: 32px !important;
+	min-height: 32px !important;
+	padding: 0 !important;
+	border-radius: 8px !important;
+	border: 1.5px solid #fecaca !important;
+	background: #fef2f2 !important;
+	color: #b91c1c !important;
+	cursor: pointer !important;
+	display: inline-flex !important;
+	align-items: center !important;
+	justify-content: center !important;
+	align-self: end !important;
+	line-height: 0 !important;
+	margin: 0 !important;
+}
+.cptt-ef-btn--remove:hover{
+	background: #fee2e2 !important;
+}
+.cptt-ef-btn--remove svg{
+	width: 14px !important;
+	height: 14px !important;
+	stroke: currentColor !important;
+	fill: none !important;
+	pointer-events: none !important;
+}
+
+/* When the row has both × and + buttons grouped together */
+.cptt-ef-actions{
+	display: inline-flex !important;
+	gap: 4px !important;
+	align-items: center !important;
+	align-self: end !important;
+}
+.cptt-ef-row.cptt-ef-row--has-actions{
+	grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1.2fr) 70px !important;
+}
+@media (max-width: 720px){
+	.cptt-ef-row.cptt-ef-row--has-actions{
+		grid-template-columns: 1fr 1fr 70px !important;
+	}
+	.cptt-ef-row.cptt-ef-row--has-actions .cptt-ef-actions{
+		grid-column: 3 !important;
+		grid-row: 2 !important;
+	}
+}
+
+/* Mobile: 2 rows visually */
+@media (max-width: 720px){
+	.cptt-ef-row{
+		grid-template-columns: 1fr 1fr 32px !important;
+		gap: 5px !important;
+	}
+	.cptt-ef-row .cptt-ef-cell--title{
+		grid-column: 1 / -1 !important;
+		grid-row: 1 !important;
+	}
+	.cptt-ef-row .cptt-ef-cell--cost{
+		grid-column: 1 !important;
+		grid-row: 2 !important;
+	}
+	.cptt-ef-row .cptt-ef-cell--paid{
+		grid-column: 2 !important;
+		grid-row: 2 !important;
+	}
+	.cptt-ef-row .cptt-ef-btn--remove{
+		grid-column: 3 !important;
+		grid-row: 2 !important;
+	}
+}
+
+body.cptt-dark .cptt-ef-row .cptt-ef-cell input,
+body.cptt-theme-dark .cptt-ef-row .cptt-ef-cell input,
+body.cptt-theme-three-d .cptt-ef-row .cptt-ef-cell input{
+	background: #1e293b !important;
+	border-color: #334155 !important;
+	color: #f1f5f9 !important;
+}
+body.cptt-dark .cptt-ef-btn--add,
+body.cptt-theme-dark .cptt-ef-btn--add,
+body.cptt-theme-three-d .cptt-ef-btn--add{
+	background: linear-gradient(135deg, #1e3a8a, #312e81) !important;
+	color: #dbeafe !important;
+	border-color: #4338ca !important;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 12) Step header — compact, responsive, no extra row height
+ *     unless the title actually wraps.
+ *     Layout:
+ *       [⠿ drag] [TITLE (truncated single line — wraps if long)] [badge] [chevron]
+ *     Mobile: same row, just smaller paddings/fonts. If title is too long,
+ *     it naturally wraps to 2 lines and only then the row grows.
+ * ──────────────────────────────────────────────────────────── */
+.cptt-expert-step__toggle{
+	display: flex !important;
+	flex-direction: row !important;
+	align-items: center !important;
+	flex-wrap: nowrap !important;
+	gap: 8px !important;
+	padding: 10px 12px !important;
+	min-height: 0 !important;
+}
+.cptt-step-reorder-handle{
+	flex: 0 0 auto !important;
+	align-self: center !important;
+	line-height: 1 !important;
+	font-size: 18px !important;
+	color: #94a3b8 !important;
+	cursor: grab !important;
+	padding: 2px !important;
+}
+.cptt-expert-step__toggleMain{
+	flex: 1 1 auto !important;
+	min-width: 0 !important;
+	display: flex !important;
+	flex-direction: column !important;
+	overflow: hidden !important;
+	gap: 1px !important;
+}
+.cptt-expert-step__toggleMain strong{
+	display: flex !important;
+	align-items: center !important;
+	gap: 6px !important;
+	flex-wrap: wrap !important;
+	min-width: 0 !important;
+	max-width: 100% !important;
+	word-break: break-word !important;
+	overflow-wrap: anywhere !important;
+	line-height: 1.4 !important;
+	font-size: 13.5px !important;
+}
+.cptt-expert-step__toggleMain span{
+	font-size: 11.5px !important;
+	line-height: 1.3 !important;
+}
+.cptt-expert-step__toggleSide{
+	flex: 0 0 auto !important;
+	display: flex !important;
+	flex-direction: row !important;
+	align-items: center !important;
+	gap: 8px !important;
+	align-self: center !important;
+}
+.cptt-expert-step__toggleMain strong .cptt-step-toggle-avatars{
+	flex: 0 0 auto !important;
+	display: inline-flex !important;
+	align-items: center !important;
+	vertical-align: middle !important;
+}
+
+/* Mobile: same single row layout, just compacter */
+@media (max-width: 720px){
+	.cptt-expert-step__toggle{
+		padding: 8px 10px !important;
+		gap: 6px !important;
+	}
+	.cptt-step-reorder-handle{
+		font-size: 15px !important;
+		padding: 0 !important;
+	}
+	.cptt-expert-step__toggleMain strong{
+		font-size: 12.5px !important;
+		line-height: 1.4 !important;
+	}
+	.cptt-expert-step__toggleMain span{
+		font-size: 10.5px !important;
+	}
+	.cptt-expert-step__toggleSide{
+		gap: 4px !important;
+	}
+	.cptt-expert-status{
+		font-size: 10.5px !important;
+		padding: 3px 8px !important;
+		white-space: nowrap !important;
+	}
+	.cptt-expert-step__chevron{
+		font-size: 14px !important;
+	}
+	.cptt-expert-step__toggleMain strong .cptt-step-toggle-avatars img{
+		width: 22px !important;
+		height: 22px !important;
+		min-width: 22px !important;
+		max-width: 22px !important;
+		min-height: 22px !important;
+		max-height: 22px !important;
+		flex: 0 0 22px !important;
+		margin-inline-start: -5px !important;
+	}
+}
+@media (max-width: 420px){
+	.cptt-expert-step__toggleMain strong{
+		font-size: 12px !important;
+	}
+	.cptt-expert-status{
+		font-size: 10px !important;
+		padding: 2px 7px !important;
+	}
+	.cptt-expert-step__toggleMain strong .cptt-step-toggle-avatars img{
+		width: 20px !important;
+		height: 20px !important;
+		min-width: 20px !important;
+		max-width: 20px !important;
+		min-height: 20px !important;
+		max-height: 20px !important;
+		flex: 0 0 20px !important;
+	}
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 13) Customer messenger button + dropdown
+ * ──────────────────────────────────────────────────────────── */
+.cptt-customer-field{
+	display: block !important;
+}
+.cptt-customer-row{
+	display: flex !important;
+	gap: 6px !important;
+	align-items: stretch !important;
+}
+.cptt-customer-row .cptt-customer-select{
+	flex: 1 1 auto !important;
+	min-width: 0 !important;
+}
+.cptt-customer-msg-btn{
+	flex: 0 0 auto !important;
+	width: 40px !important;
+	height: 40px !important;
+	border-radius: 10px !important;
+	border: 1.5px solid #c7d2fe !important;
+	background: linear-gradient(135deg, #eef2ff, #e0e7ff) !important;
+	color: #4338ca !important;
+	cursor: pointer !important;
+	display: inline-flex !important;
+	align-items: center !important;
+	justify-content: center !important;
+	padding: 0 !important;
+	transition: transform .15s, background .15s;
+}
+.cptt-customer-msg-btn:hover{
+	background: linear-gradient(135deg, #c7d2fe, #a5b4fc) !important;
+	transform: translateY(-1px);
+}
+.cptt-customer-msg-btn svg{
+	width: 20px !important;
+	height: 20px !important;
+	stroke: currentColor !important;
+	fill: none !important;
+	pointer-events: none !important;
+}
+body.cptt-dark .cptt-customer-msg-btn,
+body.cptt-theme-dark .cptt-customer-msg-btn,
+body.cptt-theme-three-d .cptt-customer-msg-btn{
+	background: linear-gradient(135deg, #1e3a8a, #312e81) !important;
+	color: #dbeafe !important;
+	border-color: #4338ca !important;
+}
+
+/* messenger dropdown popup */
+.cptt-msg-popup{
+	position: fixed;
+	z-index: 2147483647;
+	background: #ffffff;
+	border: 1px solid #e5e7eb;
+	border-radius: 16px;
+	box-shadow: 0 20px 60px rgba(15,23,42,.22);
+	padding: 12px;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	max-width: 320px;
+	min-width: 240px;
+	direction: rtl;
+	animation: cpttMsgPopupIn .18s ease;
+}
+@keyframes cpttMsgPopupIn{
+	from{ opacity: 0; transform: translateY(-4px) scale(.96); }
+	to  { opacity: 1; transform: translateY(0) scale(1); }
+}
+.cptt-msg-popup__header{
+	width: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding-bottom: 8px;
+	margin-bottom: 4px;
+	border-bottom: 1px solid #e5e7eb;
+}
+.cptt-msg-popup__title{
+	font-size: 12.5px;
+	font-weight: 900;
+	color: #0f172a;
+}
+.cptt-msg-popup__phone{
+	font-size: 11.5px;
+	font-weight: 700;
+	color: #6366f1;
+	direction: ltr;
+}
+.cptt-msg-popup__close{
+	width: 24px; height: 24px;
+	background: rgba(15,23,42,.06);
+	border: 0;
+	border-radius: 50%;
+	color: #475569;
+	cursor: pointer;
+	font-size: 16px;
+	line-height: 1;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+.cptt-msg-popup__items{
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	width: 100%;
+	justify-content: flex-start;
+}
+.cptt-msg-popup__item{
+	display: inline-flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	width: 60px;
+	padding: 8px 4px;
+	border-radius: 12px;
+	border: 1px solid #e5e7eb;
+	background: #f9fafb;
+	color: #0f172a;
+	text-decoration: none !important;
+	cursor: pointer;
+	transition: transform .12s, background .12s, border-color .12s;
+	font-family: inherit;
+	font-size: 11px;
+	font-weight: 700;
+	text-align: center;
+}
+.cptt-msg-popup__item:hover{
+	transform: translateY(-2px);
+	background: #eef2ff;
+	border-color: #c7d2fe;
+}
+.cptt-msg-popup__item svg,
+.cptt-msg-popup__item img{
+	width: 26px;
+	height: 26px;
+	display: block;
+}
+.cptt-msg-popup__item--noPhone{
+	opacity: .5;
+	cursor: not-allowed;
+}
+body.cptt-dark .cptt-msg-popup,
+body.cptt-theme-dark .cptt-msg-popup,
+body.cptt-theme-three-d .cptt-msg-popup{
+	background: #1e293b;
+	border-color: #334155;
+	color: #f1f5f9;
+}
+body.cptt-dark .cptt-msg-popup__title,
+body.cptt-theme-dark .cptt-msg-popup__title,
+body.cptt-theme-three-d .cptt-msg-popup__title{ color: #f1f5f9; }
+body.cptt-dark .cptt-msg-popup__header,
+body.cptt-theme-dark .cptt-msg-popup__header,
+body.cptt-theme-three-d .cptt-msg-popup__header{ border-bottom-color: #334155; }
+body.cptt-dark .cptt-msg-popup__item,
+body.cptt-theme-dark .cptt-msg-popup__item,
+body.cptt-theme-three-d .cptt-msg-popup__item{
+	background: #0f172a; border-color: #334155; color: #e5e7eb;
+}
+body.cptt-dark .cptt-msg-popup__item:hover,
+body.cptt-theme-dark .cptt-msg-popup__item:hover,
+body.cptt-theme-three-d .cptt-msg-popup__item:hover{
+	background: #1e3a8a; border-color: #4338ca;
+}
+.cptt-msg-popup__toast{
+	position: fixed;
+	bottom: 24px;
+	left: 50%;
+	transform: translateX(-50%);
+	background: #047857;
+	color: #ecfdf5;
+	padding: 10px 20px;
+	border-radius: 999px;
+	font-size: 13px;
+	font-weight: 800;
+	box-shadow: 0 12px 32px rgba(4,120,87,.36);
+	z-index: 2147483647;
+	animation: cpttMsgToastIn .25s ease;
+}
+@keyframes cpttMsgToastIn{
+	from{ opacity: 0; transform: translateX(-50%) translateY(20px); }
+	to  { opacity: 1; transform: translateX(-50%) translateY(0); }
+}

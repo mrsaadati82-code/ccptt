@@ -114,36 +114,41 @@ class CPTT_Settings {
 		$faces = '';
 		$font_stack = '';
 
+		// v6.1.8 — All @font-face declarations use `font-display: swap` so
+		// the page text shows immediately with the system fallback, and the
+		// web font swaps in once downloaded. Prevents Chrome's "Slow network
+		// detected, fallback font will be used" intervention from feeling
+		// like a blocked page.
 		if ($f === 'dana') {
 			$faces = "
-				@font-face { font-family: 'Dana'; src: url('{$base}Dana/Dana-FaNum-Regular.ttf') format('truetype'); font-weight: 400; }
-				@font-face { font-family: 'Dana'; src: url('{$base}Dana/Dana-FaNum-Medium.ttf') format('truetype'); font-weight: 500; }
-				@font-face { font-family: 'Dana'; src: url('{$base}Dana/Dana-FaNum-Bold.ttf') format('truetype'); font-weight: 700; }
+				@font-face { font-family: 'Dana'; src: url('{$base}Dana/Dana-FaNum-Regular.ttf') format('truetype'); font-weight: 400; font-display: swap; }
+				@font-face { font-family: 'Dana'; src: url('{$base}Dana/Dana-FaNum-Medium.ttf') format('truetype'); font-weight: 500; font-display: swap; }
+				@font-face { font-family: 'Dana'; src: url('{$base}Dana/Dana-FaNum-Bold.ttf') format('truetype'); font-weight: 700; font-display: swap; }
 			";
 			$font_stack = "'Dana', Tahoma, sans-serif";
 		} elseif ($f === 'iransans') {
 			$faces = "
-				@font-face { font-family: 'IranSans'; src: url('{$base}iransans/IRANSansWeb(FaNum).woff2') format('woff2'); font-weight: 400; }
-				@font-face { font-family: 'IranSans'; src: url('{$base}iransans/IRANSansWeb(FaNum)_Medium.woff2') format('woff2'); font-weight: 500; }
-				@font-face { font-family: 'IranSans'; src: url('{$base}iransans/IRANSansWeb(FaNum)_Bold.woff2') format('woff2'); font-weight: 700; }
+				@font-face { font-family: 'IranSans'; src: url('{$base}iransans/IRANSansWeb(FaNum).woff2') format('woff2'); font-weight: 400; font-display: swap; }
+				@font-face { font-family: 'IranSans'; src: url('{$base}iransans/IRANSansWeb(FaNum)_Medium.woff2') format('woff2'); font-weight: 500; font-display: swap; }
+				@font-face { font-family: 'IranSans'; src: url('{$base}iransans/IRANSansWeb(FaNum)_Bold.woff2') format('woff2'); font-weight: 700; font-display: swap; }
 			";
 			$font_stack = "'IranSans', Tahoma, sans-serif";
 		} elseif ($f === 'iranyekan') {
 			$faces = "
-				@font-face { font-family: 'IranYekan'; src: url('{$base}iranyekan/IRANYekanX-Regular.woff2') format('woff2'); font-weight: 400; }
-				@font-face { font-family: 'IranYekan'; src: url('{$base}iranyekan/IRANYekanX-Bold.woff2') format('woff2'); font-weight: 700; }
+				@font-face { font-family: 'IranYekan'; src: url('{$base}iranyekan/IRANYekanX-Regular.woff2') format('woff2'); font-weight: 400; font-display: swap; }
+				@font-face { font-family: 'IranYekan'; src: url('{$base}iranyekan/IRANYekanX-Bold.woff2') format('woff2'); font-weight: 700; font-display: swap; }
 			";
 			$font_stack = "'IranYekan', Tahoma, sans-serif";
 		} elseif ($f === 'kalameh') {
 			$faces = "
-				@font-face { font-family: 'Kalameh'; src: url('{$base}kalameh/KalamehWebFaNum-Medium.woff2') format('woff2'); font-weight: 400; }
-				@font-face { font-family: 'Kalameh'; src: url('{$base}kalameh/KalamehWebFaNum-Bold.woff2') format('woff2'); font-weight: 700; }
+				@font-face { font-family: 'Kalameh'; src: url('{$base}kalameh/KalamehWebFaNum-Medium.woff2') format('woff2'); font-weight: 400; font-display: swap; }
+				@font-face { font-family: 'Kalameh'; src: url('{$base}kalameh/KalamehWebFaNum-Bold.woff2') format('woff2'); font-weight: 700; font-display: swap; }
 			";
 			$font_stack = "'Kalameh', Tahoma, sans-serif";
 		} elseif ($f === 'peyda') {
 			$faces = "
-				@font-face { font-family: 'Peyda'; src: url('{$base}peyda/PeydaWeb-Regular.woff') format('woff'); font-weight: 400; }
-				@font-face { font-family: 'Peyda'; src: url('{$base}peyda/PeydaWeb-Bold.woff') format('woff'); font-weight: 700; }
+				@font-face { font-family: 'Peyda'; src: url('{$base}peyda/PeydaWeb-Regular.woff') format('woff'); font-weight: 400; font-display: swap; }
+				@font-face { font-family: 'Peyda'; src: url('{$base}peyda/PeydaWeb-Bold.woff') format('woff'); font-weight: 700; font-display: swap; }
 			";
 			$font_stack = "'Peyda', Tahoma, sans-serif";
 		} else {

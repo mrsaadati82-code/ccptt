@@ -68,6 +68,10 @@ class CPTT_Expert {
 		add_action('wp_ajax_cptt_expert_delete_direct_message', [$this, 'ajax_delete_direct_message']);
 
 		add_action('wp_ajax_cptt_expert_delete_project', [$this, 'ajax_delete_project']);
+
+		// v6.1.1 — Archive system
+		add_action('wp_ajax_cptt_expert_archive_project',   [$this, 'ajax_archive_project']);
+		add_action('wp_ajax_cptt_expert_unarchive_project', [$this, 'ajax_unarchive_project']);
 		add_action('wp_ajax_cptt_expert_delete_step', [$this, 'ajax_delete_step']);
 		add_action('wp_ajax_cptt_expert_save_profile', [$this, 'ajax_save_own_profile']);
 		add_action('wp_ajax_cptt_expert_upload_avatar', [$this, 'ajax_upload_avatar']);
@@ -220,6 +224,9 @@ class CPTT_Expert {
 		];
 		wp_add_inline_script('cptt-expert-panels', 'var CPTT_PANELS = ' . wp_json_encode($_panels_data) . ';', 'before');
 		wp_enqueue_style('cptt-expert-additions', CPTT_URL . 'assets/css/expert-additions.css', [], CPTT_VERSION);
+		// v6.1.0 mobile UX polish (must load last so overrides win)
+		wp_enqueue_style('cptt-expert-mobile-v610', CPTT_URL . 'assets/css/expert-mobile-v610.css', ['cptt-expert-css','cptt-expert-additions','cptt-expert-views','cptt-expert-panels'], CPTT_VERSION);
+		wp_enqueue_script('cptt-expert-mobile-v610', CPTT_URL . 'assets/js/expert-mobile-v610.js', ['cptt-expert','cptt-expert-views'], CPTT_VERSION, true);
 	}
 
 	public function maybe_render_virtual_dashboard() {
@@ -233,6 +240,8 @@ class CPTT_Expert {
 		}
 		if (get_query_var(self::PUBLIC_QUERY_VAR)) {
 			$this->enqueue_assets();
+			// v6.1.9 — same anti-FOUT cleanup for the public hub virtual page
+			$this->dequeue_third_party_assets_for_dashboard();
 			status_header(200);
 			nocache_headers();
 			?><!doctype html>
@@ -263,6 +272,8 @@ class CPTT_Expert {
 		}
 
 		$this->enqueue_assets();
+		// v6.1.9 — strip theme/Elementor/other-plugin assets from this virtual page.
+		$this->dequeue_third_party_assets_for_dashboard();
 		status_header(200);
 		nocache_headers();
 		?><!doctype html>
@@ -271,6 +282,15 @@ class CPTT_Expert {
 	<meta charset="<?php bloginfo('charset'); ?>">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title>داشبورد کارشناس | <?php bloginfo('name'); ?></title>
+	<style id="cptt-anti-fout">
+		/* v6.1.9 — paint the page background immediately so the user
+		   doesn't see the active-theme background flash before our
+		   stylesheet loads. We also hide body content very briefly
+		   until our plugin CSS has had a chance to apply. */
+		html, body { background: #f8fafc !important; margin: 0; padding: 0; }
+		body { font-family: Tahoma, Vazirmatn, 'IRANSans', system-ui, sans-serif; visibility: hidden; }
+		body.cptt-ready { visibility: visible; }
+	</style>
 	<?php wp_head(); ?>
 </head>
 <body <?php body_class('cptt-expert-dashboard-page'); ?>>
@@ -278,10 +298,114 @@ class CPTT_Expert {
 	<div class="cptt-shell-page">
 		<?php echo $this->shortcode_dashboard([]); ?>
 	</div>
+	<script>
+		(function(){
+			// Mark body ready as soon as DOM finishes parsing OR after a hard
+			// timeout (so we never leave the page invisible if something fails).
+			function ready(){ document.body && document.body.classList.add('cptt-ready'); }
+			if (document.readyState === 'loading') {
+				document.addEventListener('DOMContentLoaded', ready);
+			} else { ready(); }
+			setTimeout(ready, 1500); // safety net
+		})();
+	</script>
 	<?php wp_footer(); ?>
 </body>
 </html><?php
 		exit;
+	}
+
+	/**
+	 * v6.1.9 — On the virtual dashboard page, remove all enqueued styles/scripts
+	 * that don't belong to our plugin (or WordPress core). This prevents:
+	 *   - Elementor's frontend.min.js from running (it throws
+	 *     "elementorFrontendConfig is not defined" because no Elementor page was rendered)
+	 *   - Active theme stylesheets from leaking onto our dashboard
+	 *     (which caused the "FOUT": dashboard first painted with theme styles
+	 *     and only swapped to our theme ~10s later)
+	 *   - Heavy 3rd-party plugins (page builders, slider libs, analytics, etc.)
+	 *     from blocking the network for assets that are never used here.
+	 *
+	 * We KEEP: anything whose source URL contains "/client-project-tracker/"
+	 *          + a small allow-list of WP core handles (jquery, wp-color-picker, ...)
+	 *          + dashicons + admin-bar (for logged-in users).
+	 */
+	public function dequeue_third_party_assets_for_dashboard() {
+		$allow_core = [
+			'jquery', 'jquery-core', 'jquery-migrate',
+			'jquery-ui-core', 'jquery-ui-sortable',
+			'wp-color-picker', 'wp-mediaelement',
+			'wp-i18n', 'wp-polyfill',
+			'dashicons', 'admin-bar',
+			'media-upload', 'thickbox',
+		];
+
+		$is_ours_or_core = function ($handle, $registered) use ($allow_core) {
+			if (in_array($handle, $allow_core, true)) return true;
+			if (strpos((string)$handle, 'cptt-') === 0) return true;
+			if (strpos((string)$handle, 'cptt_') === 0) return true;
+			if (strpos((string)$handle, 'ham-') === 0) return true;
+			$src = isset($registered[$handle]->src) ? (string)$registered[$handle]->src : '';
+			if ($src === '') return true; // keep inline-only handles (jquery deps etc.)
+			if (strpos($src, '/client-project-tracker/') !== false) return true;
+			if (strpos($src, '/wp-includes/') !== false) return true; // keep core
+			return false;
+		};
+
+		// Styles
+		global $wp_styles, $wp_scripts;
+		if ($wp_styles instanceof WP_Styles) {
+			foreach ((array)$wp_styles->queue as $handle) {
+				if (!$is_ours_or_core($handle, $wp_styles->registered)) {
+					wp_dequeue_style($handle);
+				}
+			}
+		}
+		// Scripts
+		if ($wp_scripts instanceof WP_Scripts) {
+			foreach ((array)$wp_scripts->queue as $handle) {
+				if (!$is_ours_or_core($handle, $wp_scripts->registered)) {
+					wp_dequeue_script($handle);
+				}
+			}
+		}
+
+		// Also block them late in case theme/plugins enqueue inside wp_head:
+		add_action('wp_print_styles', function () use ($is_ours_or_core) {
+			global $wp_styles;
+			if (!($wp_styles instanceof WP_Styles)) return;
+			foreach ((array)$wp_styles->queue as $handle) {
+				if (!$is_ours_or_core($handle, $wp_styles->registered)) {
+					wp_dequeue_style($handle);
+				}
+			}
+		}, 9999);
+		add_action('wp_print_scripts', function () use ($is_ours_or_core) {
+			global $wp_scripts;
+			if (!($wp_scripts instanceof WP_Scripts)) return;
+			foreach ((array)$wp_scripts->queue as $handle) {
+				if (!$is_ours_or_core($handle, $wp_scripts->registered)) {
+					wp_dequeue_script($handle);
+				}
+			}
+		}, 9999);
+
+		// Prevent themes/plugins that hook into wp_head/wp_footer from
+		// injecting bulky JSON/JS configs (Elementor settings, theme builder, etc.).
+		// We don't want the page builder runtime here at all.
+		remove_all_actions('elementor/frontend/before_register_scripts');
+		remove_all_actions('elementor/frontend/after_register_scripts');
+		// Common Elementor hooks (best-effort; will silently pass if Elementor isn't active):
+		if (defined('ELEMENTOR_VERSION')) {
+			// Dequeue Elementor's enqueues by handle (most use these names):
+			foreach (['elementor-frontend', 'elementor-frontend-modules', 'elementor-webpack-runtime',
+			          'elementor-frontend-legacy', 'elementor-icons-shared-0',
+			          'elementor-icons-fa-solid', 'elementor-icons-fa-regular', 'elementor-icons-fa-brands',
+			          'e-swiper', 'swiper', 'share-link', 'preloaded-modules'] as $h) {
+				wp_dequeue_script($h);
+				wp_dequeue_style($h);
+			}
+		}
 	}
 
 	private function get_all_project_users() {
@@ -313,18 +437,66 @@ class CPTT_Expert {
 		$user_id = (int) $user_id;
 		$user = get_user_by('id', $user_id);
 		if (!$user) return [];
+
+		// v6.1.1: مدیران کل تمام پروژه‌ها را می‌بینند (حتی پروژه‌هایی که عضوش نیستند)
+		$is_admin = user_can($user_id, 'manage_options');
+
 		$args = [
-			'post_type' => 'cptt_project',
+			'post_type'   => 'cptt_project',
 			'post_status' => 'any',
 			'numberposts' => -1,
-			'orderby' => 'date',
-			'order' => 'DESC',
-			'meta_query' => [[
-				'key' => '_cptt_experts_csv',
-				'value' => ',' . $user_id . ',',
-				'compare' => 'LIKE',
-			]]
+			'orderby'     => 'date',
+			'order'       => 'DESC',
 		];
+
+		// v6.1.1: حذف پروژه‌های آرشیوشده از داشبورد اصلی
+		$args['meta_query'] = [
+			'relation' => 'AND',
+			[
+				'relation' => 'OR',
+				[ 'key' => '_cptt_archived', 'value' => '1', 'compare' => '!=' ],
+				[ 'key' => '_cptt_archived', 'compare' => 'NOT EXISTS' ],
+			],
+		];
+
+		// کارشناسان عادی → فقط پروژه‌های خودشان
+		if (!$is_admin) {
+			$args['meta_query'][] = [
+				'key'     => '_cptt_experts_csv',
+				'value'   => ',' . $user_id . ',',
+				'compare' => 'LIKE',
+			];
+		}
+
+		return get_posts($args);
+	}
+
+	/**
+	 * v6.1.1 — پروژه‌های آرشیوشده‌ی قابل دسترسی برای کاربر فعلی
+	 * مدیران کل: تمام آرشیوها — کارشناسان: فقط آرشیوهای خودشان
+	 */
+	private function get_archived_projects($user_id) {
+		$user_id = (int) $user_id;
+		if (!$user_id) return [];
+		$is_admin = user_can($user_id, 'manage_options');
+		$args = [
+			'post_type'   => 'cptt_project',
+			'post_status' => 'any',
+			'numberposts' => -1,
+			'orderby'     => 'modified',
+			'order'       => 'DESC',
+			'meta_query'  => [
+				'relation' => 'AND',
+				[ 'key' => '_cptt_archived', 'value' => '1', 'compare' => '=' ],
+			],
+		];
+		if (!$is_admin) {
+			$args['meta_query'][] = [
+				'key'     => '_cptt_experts_csv',
+				'value'   => ',' . $user_id . ',',
+				'compare' => 'LIKE',
+			];
+		}
 		return get_posts($args);
 	}
 
@@ -488,6 +660,24 @@ class CPTT_Expert {
 					];
 				}
 			}
+			// v6.1.4 — فیلدهای مالی اضافی (پرداختی/دریافتی چندتایی)
+			$extra_finance = [];
+			if (!empty($row['extra_finance']) && is_array($row['extra_finance'])) {
+				foreach ($row['extra_finance'] as $ef) {
+					if (!is_array($ef)) continue;
+					$ef_title = sanitize_text_field($ef['title'] ?? '');
+					$ef_cost  = isset($ef['cost']) ? (class_exists('CPTT_Currency') ? CPTT_Currency::parse_input($ef['cost']) : (float)str_replace(",", "", (string)$ef['cost'])) : 0;
+					$ef_paid  = isset($ef['paid']) ? (class_exists('CPTT_Currency') ? CPTT_Currency::parse_input($ef['paid']) : (float)str_replace(",", "", (string)$ef['paid'])) : 0;
+					// اگر هیچ چیز پر نشده باشه، رد کن
+					if ($ef_title === '' && $ef_cost == 0 && $ef_paid == 0) continue;
+					$extra_finance[] = [
+						'title' => $ef_title,
+						'cost'  => $ef_cost,
+						'paid'  => $ef_paid,
+					];
+				}
+			}
+
 			$normalized = [
 				'status' => $status,
 				'title' => sanitize_text_field($row['title'] ?? ''),
@@ -497,6 +687,7 @@ class CPTT_Expert {
 				'paid' => isset($row['paid']) ? (class_exists('CPTT_Currency') ? CPTT_Currency::parse_input($row['paid']) : (float)str_replace(",", "", (string)$row['paid'])) : 0,
 				'expert_share' => isset($row['expert_share']) ? (float)str_replace(",", "", (string)$row['expert_share']) : 0,
 				'expert_paid' => isset($row['expert_paid']) ? (float)str_replace(",", "", (string)$row['expert_paid']) : 0,
+				'extra_finance' => $extra_finance,
 				'checklist' => $checklist,
 				'user_tasks' => $user_tasks,
 			];
@@ -644,6 +835,21 @@ class CPTT_Expert {
 				$paid = isset($row['paid']) ? (class_exists('CPTT_Currency') ? CPTT_Currency::parse_input($row['paid']) : (float)str_replace(",", "", (string)$row['paid'])) : 0;
 				$expert_share = isset($row['expert_share']) ? (float)str_replace(",", "", (string)$row['expert_share']) : 0;
 				$expert_paid = isset($row['expert_paid']) ? (float)str_replace(",", "", (string)$row['expert_paid']) : 0;
+
+				// v6.1.4 — extra_finance[] (چندتایی هزینه/دریافتی به ازای هر مرحله)
+				$extra_finance = [];
+				if (!empty($row['extra_finance']) && is_array($row['extra_finance'])) {
+					foreach ($row['extra_finance'] as $ef) {
+						if (!is_array($ef)) continue;
+						$ef_title = sanitize_text_field($ef['title'] ?? '');
+						$ef_cost  = isset($ef['cost']) ? (class_exists('CPTT_Currency') ? CPTT_Currency::parse_input($ef['cost']) : (float)str_replace(",", "", (string)$ef['cost'])) : 0;
+						$ef_paid  = isset($ef['paid']) ? (class_exists('CPTT_Currency') ? CPTT_Currency::parse_input($ef['paid']) : (float)str_replace(",", "", (string)$ef['paid'])) : 0;
+						if ($ef_title === '' && $ef_cost == 0 && $ef_paid == 0) continue;
+						$extra_finance[] = ['title' => $ef_title, 'cost' => $ef_cost, 'paid' => $ef_paid];
+					}
+				} elseif ($old_step && !empty($old_step['extra_finance']) && is_array($old_step['extra_finance'])) {
+					$extra_finance = $old_step['extra_finance'];
+				}
 
 				// تسویه مالی مرحله دیگر وضعیت اجرایی مرحله را خودکار تغییر نمی‌دهد.
 
@@ -802,6 +1008,7 @@ class CPTT_Expert {
 					'paid' => $paid,
 					'expert_share' => $expert_share,
 					'expert_paid' => $expert_paid,
+					'extra_finance' => $extra_finance,
 					'checklist' => $checklist,
 					'user_tasks' => $user_tasks,
 					'assigned_expert_ids' => $assigned_expert_ids,
@@ -1127,16 +1334,21 @@ class CPTT_Expert {
 						<span>عنوان پروژه</span>
 						<input type="text" name="project_title" value="<?php echo esc_attr($project_title); ?>">
 					</label>
-					<label>
+					<label class="cptt-customer-field">
 						<span>مشتری</span>
-						<select name="client_user_id">
-							<option value="">— انتخاب مشتری —</option>
-							<?php foreach ($customers as $u): ?>
-								<option value="<?php echo esc_attr($u->ID); ?>" data-search="<?php echo esc_attr($this->customer_option_search($u)); ?>" <?php selected($client_id, $u->ID); ?>>
-									<?php echo esc_html($this->customer_option_label($u)); ?>
-								</option>
-							<?php endforeach; ?>
-						</select>
+						<div class="cptt-customer-row">
+							<select name="client_user_id" class="cptt-customer-select">
+								<option value="">— انتخاب مشتری —</option>
+								<?php foreach ($customers as $u): ?>
+									<option value="<?php echo esc_attr($u->ID); ?>" data-search="<?php echo esc_attr($this->customer_option_search($u)); ?>" data-phone="<?php echo esc_attr($this->get_customer_phone($u->ID)); ?>" data-name="<?php echo esc_attr($u->display_name); ?>" <?php selected($client_id, $u->ID); ?>>
+										<?php echo esc_html($this->customer_option_label($u)); ?>
+									</option>
+								<?php endforeach; ?>
+							</select>
+							<button type="button" class="cptt-customer-msg-btn" title="ارسال پیام به مشتری" aria-label="ارسال پیام به مشتری">
+								<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+							</button>
+						</div>
 					</label>
 					<label>
 						<span>دسته‌بندی محصول</span>
@@ -1271,7 +1483,7 @@ class CPTT_Expert {
 							$_step_settled = !empty($step['step_settled']) ? 1 : 0;
 							$_settle_fa = isset($step['settle_at_fa']) ? (string)$step['settle_at_fa'] : '';
 							if ($_ep_paid > 0 || $_step_settled): ?>
-							<div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:6px; padding:8px 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; font-size:12px;">
+							<div style="grid-column:1/-1;display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:6px; padding:8px 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; font-size:12px;">
 								<span style="color:#475569;">💼 پرداخت به شما برای این مرحله:</span>
 								<b style="color:#2563eb;"><?php echo number_format($_ep_paid); ?> تومان</b>
 								<?php if ($_step_settled): ?>
@@ -1281,6 +1493,39 @@ class CPTT_Expert {
 								<?php endif; ?>
 							</div>
 							<?php endif; ?>
+						</div>
+
+						<?php /* v6.1.5 — Extra Finance rows (compact, no big box; + button lives inside the main finance row) */ ?>
+						<div class="cptt-step-extra-finance" data-step-id="<?php echo esc_attr($step_id); ?>">
+							<?php
+							$_extra_finance = isset($step['extra_finance']) && is_array($step['extra_finance']) ? $step['extra_finance'] : [];
+							if (!empty($_extra_finance)):
+								foreach ($_extra_finance as $_efi => $_ef):
+									$_ef_title = (string)($_ef['title'] ?? '');
+									$_ef_cost  = (float)($_ef['cost'] ?? 0);
+									$_ef_paid  = (float)($_ef['paid'] ?? 0);
+							?>
+								<div class="cptt-ef-row" data-step-id="<?php echo esc_attr($step_id); ?>">
+									<label class="cptt-ef-cell cptt-ef-cell--title">
+										<span>عنوان</span>
+										<input type="text" name="steps[<?php echo esc_attr($step_id); ?>][extra_finance][<?php echo esc_attr($_efi); ?>][title]" value="<?php echo esc_attr($_ef_title); ?>" placeholder="مثلاً: هزینه چاپ">
+									</label>
+									<label class="cptt-ef-cell cptt-ef-cell--cost">
+										<span>هزینه</span>
+										<input type="text" name="steps[<?php echo esc_attr($step_id); ?>][extra_finance][<?php echo esc_attr($_efi); ?>][cost]" value="<?php echo esc_attr(number_format($_ef_cost)); ?>" class="cptt-currency-input">
+									</label>
+									<label class="cptt-ef-cell cptt-ef-cell--paid">
+										<span>دریافتی</span>
+										<input type="text" name="steps[<?php echo esc_attr($step_id); ?>][extra_finance][<?php echo esc_attr($_efi); ?>][paid]" value="<?php echo esc_attr(number_format($_ef_paid)); ?>" class="cptt-currency-input">
+									</label>
+									<button type="button" class="cptt-ef-btn cptt-ef-btn--remove" title="حذف این ردیف مالی" aria-label="حذف">
+										<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+									</button>
+								</div>
+							<?php
+								endforeach;
+							endif;
+							?>
 						</div>
 						<?php
 						$_proj_expert_ids_step = CPTT_Core::get_project_expert_ids($project_id);
@@ -2284,6 +2529,22 @@ class CPTT_Expert {
 		return (string)($user->display_name ?? ('#'.$uid)) . ($extra ? ' (' . $extra . ')' : '');
 	}
 
+	/**
+	 * v6.1.3 — phone number of a user (normalized; for messenger links)
+	 */
+	public function get_customer_phone($uid) {
+		$uid = (int) $uid;
+		if (!$uid) return '';
+		$phone = (string) get_user_meta($uid, 'billing_phone', true);
+		if ($phone === '') $phone = (string) get_user_meta($uid, 'cptt_phone', true);
+		if ($phone === '') $phone = (string) get_user_meta($uid, 'cptt_user_phone', true);
+		if ($phone === '') $phone = (string) get_user_meta($uid, 'mobile', true);
+		// normalize to digits only
+		$phone = preg_replace('/[^0-9]/', '', $phone);
+		if ($phone !== '' && strlen($phone) === 10 && strpos($phone, '9') === 0) $phone = '0' . $phone;
+		return $phone;
+	}
+
 	private function category_terms() {
 		if (!taxonomy_exists('product_cat')) return [];
 		$terms = get_terms(['taxonomy' => 'product_cat', 'hide_empty' => false]);
@@ -2918,7 +3179,7 @@ class CPTT_Expert {
 					<label><span>عنوان پروژه</span><input type="text" name="title" placeholder="مثلاً پروژه طراحی سایت مشتری"></label>
 					
 					<?php if (($vis['client'] ?? '1') === '1'): ?>
-					<label><span>مشتری</span><select name="client_user_id"><option value="">— انتخاب مشتری —</option><?php foreach ($customers as $u): ?><option value="<?php echo esc_attr($u->ID); ?>" data-search="<?php echo esc_attr($this->customer_option_search($u)); ?>"><?php echo esc_html($this->customer_option_label($u)); ?></option><?php endforeach; ?></select></label>
+					<label class="cptt-customer-field"><span>مشتری</span><div class="cptt-customer-row"><select name="client_user_id" class="cptt-customer-select"><option value="">— انتخاب مشتری —</option><?php foreach ($customers as $u): ?><option value="<?php echo esc_attr($u->ID); ?>" data-search="<?php echo esc_attr($this->customer_option_search($u)); ?>" data-phone="<?php echo esc_attr($this->get_customer_phone($u->ID)); ?>" data-name="<?php echo esc_attr($u->display_name); ?>"><?php echo esc_html($this->customer_option_label($u)); ?></option><?php endforeach; ?></select><button type="button" class="cptt-customer-msg-btn" title="ارسال پیام به مشتری" aria-label="ارسال پیام به مشتری"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button></div></label>
 					<?php endif; ?>
 					
 					<?php if (($vis['category'] ?? '1') === '1'): ?>
@@ -3737,7 +3998,7 @@ class CPTT_Expert {
 									<strong style="font-size:14px;">اعلان‌ها</strong>
 									<div style="display:flex;align-items:center;gap:6px;">
 										<button type="button" id="cptt-mark-all-read" style="background:none;border:none;color:#6366f1;cursor:pointer;font-size:11.5px;font-weight:700;font-family:inherit;">✓ خواندن همه</button>
-										<button type="button" id="cptt-notif-settings-btn" title="تنظیمات اعلان‌ها" style="background:none;border:1.5px solid rgba(100,116,139,.2);border-radius:8px;width:28px;height:28px;cursor:pointer;color:#64748b;display:inline-flex;align-items:center;justify-content:center;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
+										<button type="button" id="cptt-notif-settings-btn" title="تنظیمات اعلان‌ها" aria-label="تنظیمات اعلان‌ها" style="background:rgba(99,102,241,.08);border:1.5px solid rgba(99,102,241,.25);border-radius:8px;width:30px;height:30px;cursor:pointer;color:#4f46e5;display:inline-flex;align-items:center;justify-content:center;padding:0;flex-shrink:0;line-height:0;"><svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="display:block;pointer-events:none;"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
 									</div>
 								</div>
 								<div class="cptt-notifications-list">
@@ -3970,9 +4231,7 @@ class CPTT_Expert {
 			</details>
 			<?php endif; ?>
 
-			<div class="cptt-mobile-filter-trigger mobile-only">
-			    <button type="button" class="cptt-btn cptt-btn--secondary" id="cptt-mobile-filter-btn">جستجو و فیلتر پروژه‌ها 🔍</button>
-			</div>
+			<?php /* v6.1.0: حذف دکمه جستجو/فیلتر تکراری در موبایل — آکاردئون به خودی خود نمایش داده می‌شود */ ?>
 
 			<!-- ── Filter Bar Accordion ── -->
 			<div class="cptt-filter-bar" id="cptt-filter-bar">
@@ -4184,14 +4443,29 @@ class CPTT_Expert {
 					</div>
 					<div class="cptt-expertCard__actions">
 						<button type="button" class="cptt-btn cptt-btn--primary cptt-expert-toggleProject">مدیریت پروژه</button>
-						<?php if (current_user_can("delete_cptt_project")): ?><button type="button" class="cptt-btn cptt-btn--danger cptt-expert-delete-project" data-project-id="<?php echo esc_attr($p->ID); ?>">🗑 حذف پروژه</button><?php endif; ?>
-						
+
 						<!-- Proforma Invoice Button -->
 						<a class="cptt-btn cptt-btn--secondary" href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=cptt_view_invoice&project_id=' . $p->ID), 'cptt_view_invoice_' . $p->ID)); ?>" target="_blank" rel="noopener noreferrer">📄 پیش‌فاکتور</a>
+
+						<?php
+						// v6.1.2 — دکمه آرشیو / بازگردانی (آیکن‌فقط)
+						$_is_archived = (string) get_post_meta($p->ID, '_cptt_archived', true) === '1';
+						?>
+						<?php if ($_is_archived): ?>
+							<button type="button" class="cptt-btn cptt-btn--archive cptt-expert-unarchive-project" data-project-id="<?php echo esc_attr($p->ID); ?>" title="بازگرداندن از آرشیو" aria-label="بازگرداندن از آرشیو">
+								<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M9 14l3-3 3 3"/><line x1="12" y1="11" x2="12" y2="18"/></svg>
+							</button>
+						<?php else: ?>
+							<button type="button" class="cptt-btn cptt-btn--archive cptt-expert-archive-project" data-project-id="<?php echo esc_attr($p->ID); ?>" title="انتقال به آرشیو (اطلاعات حذف نمی‌شود)" aria-label="آرشیو پروژه">
+								<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+							</button>
+						<?php endif; ?>
 
 						<?php if (class_exists('CPTT_Report') && CPTT_Report::is_project_complete($p->ID)): ?>
 							<a class="cptt-btn" href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=cptt_view_report&project_id=' . $p->ID), 'cptt_view_report_' . $p->ID)); ?>" target="_blank" rel="noopener noreferrer">مشاهده گزارش</a>
 						<?php endif; ?>
+
+						<?php if (current_user_can("delete_cptt_project")): ?><button type="button" class="cptt-btn cptt-btn--danger cptt-expert-delete-project" data-project-id="<?php echo esc_attr($p->ID); ?>">🗑 حذف پروژه</button><?php endif; ?>
 					</div>
 					<div class="cptt-expertCard__details" hidden>
 						<div class="cptt-expertCard__panels">
@@ -4274,6 +4548,69 @@ class CPTT_Expert {
 
 			<div class="cptt-dashboard__empty" id="cptt-expert-empty" hidden>هیچ پروژه‌ای با این فیلترها پیدا نشد.</div>
 			</div><!-- /cptt-view-container -->
+
+			<?php
+			// ──────────────────────────────────────────────────────────
+			// v6.1.1 — Archived Projects Section (collapsible)
+			// ──────────────────────────────────────────────────────────
+			$archived_projects = $this->get_archived_projects($user_id);
+			?>
+			<section class="cptt-archive-section" id="cptt-archive-section">
+				<button type="button" class="cptt-archive-toggle" id="cptt-archive-toggle" aria-expanded="false" aria-controls="cptt-archive-body">
+					<span class="cptt-archive-toggle__icon" aria-hidden="true">
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+					</span>
+					<span class="cptt-archive-toggle__label">آرشیو پروژه‌ها</span>
+					<span class="cptt-archive-toggle__count"><?php echo esc_html(number_format_i18n(count($archived_projects))); ?></span>
+					<span class="cptt-archive-toggle__chevron" aria-hidden="true">
+						<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="5 8 10 13 15 8"/></svg>
+					</span>
+				</button>
+				<div class="cptt-archive-body" id="cptt-archive-body" hidden>
+					<?php if (empty($archived_projects)): ?>
+						<div class="cptt-archive-empty">هنوز هیچ پروژه‌ای آرشیو نشده است. وقتی پروژه‌ای تکمیل شد می‌توانید روی دکمه‌ی «📦 آرشیو» در همان کارت بزنید تا اطلاعاتش حفظ شده ولی از داشبورد اصلی پاک شود.</div>
+					<?php else: ?>
+						<div class="cptt-archive-grid">
+							<?php foreach ($archived_projects as $ap):
+								$ad = $this->project_card_data($ap->ID);
+								$ap_label = is_array($ad['label']) ? $ad['label'] : null;
+								$archived_ts = (int) get_post_meta($ap->ID, '_cptt_archived_at', true);
+								$archived_fa = $archived_ts && class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime($archived_ts) : '';
+							?>
+								<article class="cptt-archive-card" data-project-id="<?php echo esc_attr($ap->ID); ?>">
+									<header class="cptt-archive-card__head">
+										<div class="cptt-archive-card__title">
+											<strong><?php echo esc_html(get_the_title($ap->ID)); ?></strong>
+											<span class="cptt-archive-card__code">#<?php echo esc_html($ad['code']); ?></span>
+										</div>
+										<?php if ($ap_label): ?>
+											<span class="cptt-archive-card__label" style="background:<?php echo esc_attr($ap_label['color'] ?? '#64748b'); ?>18;color:<?php echo esc_attr($ap_label['color'] ?? '#64748b'); ?>;"><?php echo esc_html($ap_label['name']); ?></span>
+										<?php endif; ?>
+									</header>
+									<div class="cptt-archive-card__meta">
+										<span>مشتری: <?php echo esc_html($ad['customer']); ?></span>
+										<?php if ($ad['product'] !== '—'): ?><span>محصول: <?php echo esc_html($ad['product']); ?></span><?php endif; ?>
+										<span>پیشرفت: <?php echo esc_html($ad['progress']['percent']); ?>%</span>
+										<?php if ($archived_fa): ?><span>آرشیو: <?php echo esc_html($archived_fa); ?></span><?php endif; ?>
+									</div>
+									<div class="cptt-archive-card__actions">
+										<button type="button" class="cptt-btn cptt-btn--sm cptt-expert-unarchive-project" data-project-id="<?php echo esc_attr($ap->ID); ?>">📤 خروج از آرشیو</button>
+										<a class="cptt-btn cptt-btn--sm cptt-btn--secondary" href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=cptt_view_invoice&project_id=' . $ap->ID), 'cptt_view_invoice_' . $ap->ID)); ?>" target="_blank" rel="noopener noreferrer">📄 پیش‌فاکتور</a>
+										<?php if (class_exists('CPTT_Report') && CPTT_Report::is_project_complete($ap->ID)): ?>
+											<a class="cptt-btn cptt-btn--sm" href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=cptt_view_report&project_id=' . $ap->ID), 'cptt_view_report_' . $ap->ID)); ?>" target="_blank" rel="noopener noreferrer">📊 گزارش</a>
+										<?php endif; ?>
+										<?php if (current_user_can('delete_cptt_project')): ?>
+											<button type="button" class="cptt-btn cptt-btn--sm cptt-btn--danger cptt-expert-delete-project" data-project-id="<?php echo esc_attr($ap->ID); ?>">🗑 حذف</button>
+										<?php endif; ?>
+									</div>
+								</article>
+							<?php endforeach; ?>
+						</div>
+					<?php endif; ?>
+				</div>
+			</section>
+			<!-- /v6.1.1 archive section -->
+
 			</div>
 
 			<!-- ========== EDIT PROFILE MODAL ========== -->
@@ -4380,6 +4717,36 @@ class CPTT_Expert {
 		if (!current_user_can('delete_cptt_project')) wp_send_json_error('no_access', 403);
 		wp_delete_post($project_id, true);
 		wp_send_json_success(['deleted' => true]);
+	}
+
+	/**
+	 * v6.1.1 — Archive a project (هیچ اطلاعاتی حذف نمی‌شود؛ فقط در داشبورد اصلی نمایش داده نمی‌شود)
+	 */
+	public function ajax_archive_project() {
+		if (!is_user_logged_in()) wp_send_json_error('login_required', 401);
+		check_ajax_referer('cptt_expert_nonce', 'nonce');
+		$project_id = isset($_POST['project_id']) ? absint($_POST['project_id']) : 0;
+		if (!$project_id || get_post_type($project_id) !== 'cptt_project') wp_send_json_error('invalid_project', 400);
+		if (!$this->can_manage_project($project_id, get_current_user_id())) wp_send_json_error('no_access', 403);
+		update_post_meta($project_id, '_cptt_archived', '1');
+		update_post_meta($project_id, '_cptt_archived_at', (int) current_time('timestamp', true));
+		update_post_meta($project_id, '_cptt_archived_by', (int) get_current_user_id());
+		wp_send_json_success(['archived' => true, 'project_id' => $project_id]);
+	}
+
+	/**
+	 * v6.1.1 — Unarchive
+	 */
+	public function ajax_unarchive_project() {
+		if (!is_user_logged_in()) wp_send_json_error('login_required', 401);
+		check_ajax_referer('cptt_expert_nonce', 'nonce');
+		$project_id = isset($_POST['project_id']) ? absint($_POST['project_id']) : 0;
+		if (!$project_id || get_post_type($project_id) !== 'cptt_project') wp_send_json_error('invalid_project', 400);
+		if (!$this->can_manage_project($project_id, get_current_user_id())) wp_send_json_error('no_access', 403);
+		delete_post_meta($project_id, '_cptt_archived');
+		delete_post_meta($project_id, '_cptt_archived_at');
+		delete_post_meta($project_id, '_cptt_archived_by');
+		wp_send_json_success(['archived' => false, 'project_id' => $project_id]);
 	}
 
 	public function ajax_delete_step() {
@@ -4543,95 +4910,30 @@ class CPTT_Expert {
 		header('Content-Type: application/javascript; charset=utf-8');
 		header('Service-Worker-Allowed: /');
 		header('Cache-Control: no-cache, must-revalidate, max-age=0');
-		$cache = 'hamahang-pwa-' . preg_replace('/[^a-zA-Z0-9._-]/', '-', CPTT_VERSION);
-		$v = CPTT_VERSION;
-		$precache = [
-			$this->pwa_start_url(),
-			add_query_arg(self::QUERY_VAR, 1, home_url('/')),
-			add_query_arg(self::PUBLIC_QUERY_VAR, 1, home_url('/')),
-			CPTT_URL . 'assets/css/expert.css?ver=' . $v,
-			CPTT_URL . 'assets/css/frontend.css?ver=' . $v,
-			CPTT_URL . 'assets/js/expert.js?ver=' . $v,
-			CPTT_URL . 'assets/js/frontend.js?ver=' . $v,
-			CPTT_URL . 'assets/images/icon-192.png',
-			CPTT_URL . 'assets/images/icon-512.png',
-			$this->pwa_manifest_url(),
-		];
+		// v6.1.8 — Minimal pass-through SW.
+		//
+		// The previous SW used `networkThenCache` for navigation requests
+		// and could throw when the network was slow AND nothing was in
+		// cache yet. That `throw` made the FetchEvent reject, which kept
+		// the browser's loading indicator spinning forever and made the
+		// dashboard page feel "stuck loading" on slow networks. It also
+		// shows up in console as: `the promise was rejected`.
+		//
+		// We keep the SW registered (so the app is PWA-installable and
+		// can be added to home screen) but do NOT intercept any requests.
+		// All caching is left to the browser HTTP cache.
+		$cache_buster = preg_replace('/[^a-zA-Z0-9._-]/', '-', CPTT_VERSION);
 		?>
-const HAM_CACHE = <?php echo wp_json_encode($cache); ?>;
-const PRECACHE_URLS = <?php echo wp_json_encode(array_values(array_unique($precache)), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
-const DASHBOARD_URL = <?php echo wp_json_encode(add_query_arg(self::QUERY_VAR, 1, home_url('/'))); ?>;
-const DASH_QUERY = <?php echo wp_json_encode(self::QUERY_VAR . '=1'); ?>;
-const HUB_QUERY = <?php echo wp_json_encode(self::PUBLIC_QUERY_VAR . '=1'); ?>;
-
-self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(HAM_CACHE).then(cache => cache.addAll(PRECACHE_URLS)).catch(() => null)
-  );
-  self.skipWaiting();
-});
-
-self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(keys => Promise.all(keys.map(key => key !== HAM_CACHE ? caches.delete(key) : Promise.resolve())))
-      .then(() => self.clients.claim())
+/* CPTT minimal SW <?php echo esc_html($cache_buster); ?> */
+self.addEventListener('install',  function(e){ self.skipWaiting(); });
+self.addEventListener('activate', function(e){
+  e.waitUntil(
+    caches.keys()
+      .then(function(keys){ return Promise.all(keys.map(function(k){ return caches.delete(k); })); })
+      .then(function(){ return self.clients.claim(); })
   );
 });
-
-async function networkThenCache(request) {
-  const cache = await caches.open(HAM_CACHE);
-  try {
-    const response = await fetch(request);
-    if (response && response.ok && request.method === 'GET') {
-      cache.put(request, response.clone()).catch(() => null);
-    }
-    return response;
-  } catch (error) {
-    const cached = await cache.match(request, { ignoreSearch: false });
-    if (cached) return cached;
-    if (request.mode === 'navigate') {
-      const dashboard = await cache.match(DASHBOARD_URL, { ignoreSearch: true });
-      if (dashboard) return dashboard;
-      return new Response('<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>هماهنگ</title><body style="margin:0;font-family:sans-serif;background:#0f172a;color:#fff;display:grid;place-items:center;min-height:100vh"><div style="text-align:center;padding:24px"><h2 style="margin:0 0 10px">آفلاین</h2><p style="margin:0;opacity:.8">نسخه ذخیره‌شده‌ای برای این صفحه پیدا نشد.</p></div></body></html>', { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
-    }
-    throw error;
-  }
-}
-
-self.addEventListener('fetch', event => {
-  const request = event.request;
-  if (request.method !== 'GET') return;
-  const url = new URL(request.url);
-  if (url.pathname.includes('/wp-admin/admin-ajax.php')) return;
-
-  const isSameOrigin = url.origin === self.location.origin;
-  const isStatic = isSameOrigin && /(\/assets\/|\.(?:css|js|png|jpg|jpeg|webp|svg|woff2?|ttf))(\?|$)/i.test(url.pathname + url.search);
-  const isNavigate = request.mode === 'navigate';
-
-  if (isNavigate) {
-    event.respondWith(networkThenCache(request));
-    return;
-  }
-
-  if (isStatic) {
-    event.respondWith(
-      caches.match(request, { ignoreSearch: false }).then(cached => {
-        const network = fetch(request).then(response => {
-          if (response && response.ok) {
-            caches.open(HAM_CACHE).then(cache => cache.put(request, response.clone())).catch(() => null);
-          }
-          return response;
-        }).catch(() => cached);
-        return cached || network;
-      })
-    );
-    return;
-  }
-
-  if (isSameOrigin && (url.search.includes(DASH_QUERY) || url.search.includes(HUB_QUERY))) {
-    event.respondWith(networkThenCache(request));
-  }
-});
+/* NO `fetch` handler on purpose — browser handles all requests directly. */
 		<?php
 	}
 

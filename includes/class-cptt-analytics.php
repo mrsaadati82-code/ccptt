@@ -102,6 +102,12 @@ class CPTT_Analytics {
 
 			foreach ($steps as $s) {
 				$status = $s['status'] ?? 'todo';
+
+				// v6.1.4 — برای آمار مالی، فقط مراحلی محاسبه می‌شوند که این کارشناس عضوشان است.
+				$step_assigned = isset($s['assigned_expert_ids']) && is_array($s['assigned_expert_ids']) ? array_map('intval', $s['assigned_expert_ids']) : [];
+				if (empty($step_assigned) && !empty($s['assigned_expert_id'])) $step_assigned = [(int)$s['assigned_expert_id']];
+				$is_my_step = empty($step_assigned) ? true /* پروژه‌اش هستم → اگر مرحله کارشناس خاصی ندارد، جزو من حساب می‌شود */ : in_array((int)$user_id, $step_assigned, true);
+
 				if ($status === 'done') {
 					$done_steps++;
 					$p_done++;
@@ -132,8 +138,18 @@ class CPTT_Analytics {
 					}
 				}
 
-				$p_cost += (float)($s['cost'] ?? 0);
-				$p_paid += (float)($s['paid'] ?? 0);
+				// v6.1.4 — فقط مراحل خود کارشناس را در هزینه/دریافتی حساب کن
+				if ($is_my_step) {
+					$p_cost += (float)($s['cost'] ?? 0);
+					$p_paid += (float)($s['paid'] ?? 0);
+					// اگر فیلدهای مالی اضافی (extra_finance) داشت، آن‌ها را هم اضافه کن
+					if (!empty($s['extra_finance']) && is_array($s['extra_finance'])) {
+						foreach ($s['extra_finance'] as $ef) {
+							$p_cost += (float)($ef['cost'] ?? 0);
+							$p_paid += (float)($ef['paid'] ?? 0);
+						}
+					}
+				}
 
 				// Step completion time
 				if ($status === 'done' && !empty($s['updated_at']) && !empty($s['due_at'])) {

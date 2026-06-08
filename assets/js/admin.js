@@ -650,7 +650,6 @@ jQuery(function($){
 
   buildDashboardKpis();
   refreshStepAccordions();
-});
 
   // Currency formatter
   document.addEventListener('keyup', function(e) {
@@ -722,6 +721,8 @@ jQuery(function($){
       }
     });
   });
+
+}); // close jQuery wrapper opened at "/* ===== Pro UI enhancements... */"
 
 jQuery(function($){
   var $client = $('#cptt_client_user_id');

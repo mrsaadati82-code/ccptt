@@ -1039,6 +1039,9 @@
 
 
   function initClientSearchPickers() { /* disabled: search is only for create form and is bound by isolated v5.4.10 code */ }
+  // v6.1.8 — expose globally so other IIFEs in this file (e.g. line ~1882)
+  // don't crash with "initClientSearchPickers is not defined".
+  if (typeof window !== 'undefined') window.initClientSearchPickers = initClientSearchPickers;
 
   function initKanban() {
     var dataEl = qs('#cptt-kanban-data');
@@ -1879,7 +1882,8 @@
 
     // Init new customer modal trigger for existing forms
     initNewCustomerModals();
-    initClientSearchPickers();
+    if (typeof initClientSearchPickers === 'function') initClientSearchPickers();
+    else if (typeof window !== 'undefined' && typeof window.initClientSearchPickers === 'function') window.initClientSearchPickers();
     bindNewCustomerSubmit();
 
     // Watch for dynamically opened project cards (delegation)
@@ -1896,7 +1900,7 @@
             if (node.querySelector && node.querySelector('select[name="client_user_id"]')) {
               initNewCustomerModals();
               bindNewCustomerSubmit();
-              initClientSearchPickers();
+              if (typeof window !== 'undefined' && typeof window.initClientSearchPickers === 'function') window.initClientSearchPickers();
             }
           });
         });
@@ -3261,58 +3265,36 @@
 })();
 
 /* =========================================================
-   HAM v5.5.10 — safe sticky filters fallback + mobile FAB hard size
+   HAM v5.5.10 — DISABLED in v6.1.2 (replaced by native CSS sticky)
+   The old sticky filter handler caused the filter accordion to
+   open off-screen on mobile and overlap the admin bar on desktop.
+   Now we use pure CSS `position: sticky` in expert-mobile-v610.css.
    ========================================================= */
 (function(){
   'use strict';
   function ready(fn){ if(document.readyState !== 'loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
   function qsa(s,c){ return Array.prototype.slice.call((c||document).querySelectorAll(s)); }
-  function setupStickyFilter(el){
-    if(!el || el.dataset.cpttStickyBound) return;
-    el.dataset.cpttStickyBound='1';
-    var ph=document.createElement('div');
-    ph.className='cptt-filter-sticky-placeholder';
-    ph.style.display='none';
-    el.parentNode.insertBefore(ph, el);
-    function update(){
-      if(!document.body.contains(el)) return;
-      if(el.classList.contains('cptt-filter-fixed')){
-        var prect=ph.getBoundingClientRect();
-        if(prect.top > 10){
-          el.classList.remove('cptt-filter-fixed');
-          el.style.width=''; el.style.left=''; el.style.right=''; el.style.top='';
-          ph.style.display='none'; ph.style.height='0px';
-          return;
-        }
-        var wrect=ph.getBoundingClientRect();
-        el.style.width=Math.round(wrect.width)+'px';
-        el.style.left=Math.round(wrect.left)+'px';
-        el.style.right='auto';
-        return;
-      }
-      var rect=el.getBoundingClientRect();
-      if(rect.top <= 10 && window.scrollY > 80){
-        ph.style.height=Math.round(rect.height)+'px';
-        ph.style.display='block';
-        el.classList.add('cptt-filter-fixed');
-        var prect=ph.getBoundingClientRect();
-        el.style.width=Math.round(prect.width)+'px';
-        el.style.left=Math.round(prect.left)+'px';
-        el.style.right='auto';
-        el.style.top='10px';
-      }
-    }
-    var stickyTicking = false;
-    window.addEventListener('scroll', function(){
-      if (stickyTicking) return;
-      stickyTicking = true;
-      requestAnimationFrame(function(){ update(); stickyTicking = false; });
-    }, {passive:true});
-    window.addEventListener('resize', function(){ if(el.classList.contains('cptt-filter-fixed')){ el.classList.remove('cptt-filter-fixed'); el.style.cssText=''; ph.style.display='none'; } setTimeout(update,80); }, {passive:true});
-    setTimeout(update,100);
+  // Hard-clean any old fixed state if present from prior cached runs.
+  function cleanLegacyFixed(){
+    qsa('.cptt-filter-fixed,.cptt-expertFilters.cptt-filter-fixed,.cptt-hubFilters.cptt-filter-fixed').forEach(function(el){
+      el.classList.remove('cptt-filter-fixed');
+      el.style.position = '';
+      el.style.top = '';
+      el.style.left = '';
+      el.style.right = '';
+      el.style.width = '';
+      el.style.transform = '';
+    });
+    qsa('.cptt-filter-sticky-placeholder').forEach(function(ph){
+      ph.style.display = 'none';
+      ph.style.height = '0';
+    });
   }
-  ready(function(){ if (!(window.matchMedia && window.matchMedia('(max-width: 820px)').matches)) qsa('.cptt-expertFilters,.cptt-hubFilters').forEach(setupStickyFilter); });
+  ready(cleanLegacyFixed);
+  window.addEventListener('scroll', cleanLegacyFixed, { passive: true });
+  window.addEventListener('resize', cleanLegacyFixed, { passive: true });
 })();
+
 
 /* =========================================================
    HAM v5.5.12 — admin pages embedded as dashboard content (no iframe)
@@ -3692,10 +3674,10 @@
     setTimeout(function(){ if(!deferred) show(); }, 2500);
   }
   function initSplash(){
-    if(sessionStorage.getItem('ham_splash_done')==='1') return;
-    var s=document.createElement('div'); s.className='ham-pwa-splash'; s.innerHTML='<div class="ham-pwa-splash__mark">هما</div><strong>هماهنگ</strong><span>در حال آماده‌سازی داشبورد...</span>';
-    document.body.appendChild(s); sessionStorage.setItem('ham_splash_done','1');
-    setTimeout(function(){s.classList.add('is-hide'); setTimeout(function(){s.remove();},420);},900);
+    // v6.1.3 — disabled in non-PWA contexts. PWA splash is handled by
+    // initLogoSplash() / initStandaloneSplash() which check standalone mode
+    // and show the splash only once per day.
+    return;
   }
   ready(function(){ initSimpleNav(); restoreAccountingTable(document); initPwaPrompt(); initSplash(); updateSaveState(); });
   document.addEventListener('click', function(e){ if(e.target.closest('.cptt-expert-toggleProject')) setTimeout(updateSaveState,180); });
@@ -3977,6 +3959,14 @@
 
   function initStandaloneSplash(){
     if (!document.body.classList.contains('cptt-expert-dashboard-page') || !isStandalone()) return;
+    // v6.1.3 — show splash only once per day (per device) inside PWA standalone mode.
+    try {
+      var today = new Date();
+      var key = 'ham_splash_day';
+      var todayStr = today.getFullYear() + '-' + (today.getMonth()+1) + '-' + today.getDate();
+      if (localStorage.getItem(key) === todayStr) return;
+      localStorage.setItem(key, todayStr);
+    } catch(e) {}
     qsa('.ham-pwa-splash,.ham-pwa-install,.ham-pwa-card').forEach(function(el){ el.remove(); });
     var splash = document.createElement('div');
     splash.className = 'ham-standalone-splash';
@@ -4707,6 +4697,16 @@
   function initLogoSplash(){
     if (!document.body.classList.contains('cptt-expert-dashboard-page') || !isStandalone()) return;
     qsa('.ham-standalone-splash').forEach(function(el){ el.remove(); });
+
+    // v6.1.3 — show splash only once per day (per device) inside PWA standalone mode.
+    try {
+      var today = new Date();
+      var key = 'ham_splash_day';
+      var todayStr = today.getFullYear() + '-' + (today.getMonth()+1) + '-' + today.getDate();
+      if (localStorage.getItem(key) === todayStr) return; // already shown today
+      localStorage.setItem(key, todayStr);
+    } catch(e) {}
+
     var cfg = window.CPTT_PWA_CONFIG || {};
     var logo = cfg.logo || '';
     var splash = document.createElement('div');
@@ -4763,6 +4763,16 @@
 
   function initUniversalSplash(){
     if (!isDashboard()) return;
+    // v6.1.3 — splash is for PWA standalone mode only, once per day per device.
+    try {
+      var _isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true || String(document.referrer||'').indexOf('android-app://') === 0;
+      if (!_isStandalone) return;
+      var today = new Date();
+      var key = 'ham_splash_day';
+      var todayStr = today.getFullYear() + '-' + (today.getMonth()+1) + '-' + today.getDate();
+      if (localStorage.getItem(key) === todayStr) return;
+      localStorage.setItem(key, todayStr);
+    } catch(e) {}
     qsa('.ham-pwa-splash,.ham-standalone-splash,.ham-universal-splash').forEach(function(el){ el.remove(); });
     var cfg = window.CPTT_PWA_CONFIG || {};
     var logo = cfg.logo || '';
