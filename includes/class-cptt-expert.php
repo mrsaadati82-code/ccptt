@@ -47,6 +47,14 @@ class CPTT_Expert {
 		add_action('admin_enqueue_scripts', [$this, 'admin_assets']);
 		add_action('personal_options_update', [$this, 'save_expert_profile_fields']);
 		add_action('edit_user_profile_update', [$this, 'save_expert_profile_fields']);
+		// v6.1.10 — Lazy load the heavy "manage project" form on demand.
+		// This single endpoint is what makes the dashboard scale: instead
+		// of rendering 385 lines of HTML × N projects (which for an admin
+		// with 50+ projects = ~20k lines + dozens of DB reads), we now
+		// render an empty <details> shell and fetch the form HTML the
+		// first time the user clicks "مدیریت پروژه".
+		add_action('wp_ajax_cptt_expert_load_manage_form', [$this, 'ajax_load_manage_form']);
+
 		add_action('wp_ajax_cptt_expert_save_project', [$this, 'ajax_save_project']);
 		add_action('wp_ajax_cptt_expert_update_step_status', [$this, 'ajax_update_step_status']);
 		add_action('wp_ajax_cptt_expert_save_step_experts', [$this, 'ajax_save_step_experts']);
@@ -227,6 +235,26 @@ class CPTT_Expert {
 		// v6.1.0 mobile UX polish (must load last so overrides win)
 		wp_enqueue_style('cptt-expert-mobile-v610', CPTT_URL . 'assets/css/expert-mobile-v610.css', ['cptt-expert-css','cptt-expert-additions','cptt-expert-views','cptt-expert-panels'], CPTT_VERSION);
 		wp_enqueue_script('cptt-expert-mobile-v610', CPTT_URL . 'assets/js/expert-mobile-v610.js', ['cptt-expert','cptt-expert-views'], CPTT_VERSION, true);
+
+		// v6.2.0 — AI Assistant widget
+		if (class_exists('CPTT_AI_Assistant')) {
+			$ai_settings = CPTT_AI_Assistant::get_settings();
+			if (($ai_settings['enabled'] ?? '0') === '1') {
+				wp_enqueue_style('cptt-ai-assistant', CPTT_URL . 'assets/css/ai-assistant.css', [], CPTT_VERSION);
+				wp_enqueue_script('cptt-ai-assistant', CPTT_URL . 'assets/js/ai-assistant.js', [], CPTT_VERSION, true);
+				wp_localize_script('cptt-ai-assistant', 'CPTT_AI', [
+					'ajax'  => admin_url('admin-ajax.php'),
+					'nonce' => wp_create_nonce(CPTT_AI_Assistant::NONCE),
+				]);
+			}
+		}
+
+		// v6.3.0 — Reminders (popup + browser notifications for deadlines)
+		if (class_exists('CPTT_Reminders')) {
+			wp_enqueue_style('cptt-reminders', CPTT_URL . 'assets/css/reminders.css', [], CPTT_VERSION);
+			wp_enqueue_script('cptt-reminders', CPTT_URL . 'assets/js/reminders.js', [], CPTT_VERSION, true);
+			wp_localize_script('cptt-reminders', 'CPTT_REMINDERS', CPTT_Reminders::localized_config(wp_get_current_user()));
+		}
 	}
 
 	public function maybe_render_virtual_dashboard() {
@@ -1134,6 +1162,103 @@ class CPTT_Expert {
 	}
 
 
+	/**
+	 * v6.1.10 — Return the full HTML of one project's "manage" details panel
+	 * (main form + side notes/chat/files/requests/summary). Called on the
+	 * first click of "مدیریت پروژه" in the lazy-loaded dashboard.
+	 *
+	 * Why: rendering this for every card up-front made the dashboard
+	 * unusable for admins with 30+ projects because each card calls
+	 * `render_project_manage_form()` (385 lines + meta reads + step loops).
+	 */
+	public function ajax_load_manage_form() {
+		if (!is_user_logged_in()) wp_send_json_error('login_required', 401);
+		check_ajax_referer('cptt_expert_nonce', 'nonce');
+		$project_id = isset($_POST['project_id']) ? absint($_POST['project_id']) : 0;
+		if (!$project_id || get_post_type($project_id) !== 'cptt_project') {
+			wp_send_json_error('invalid_project', 400);
+		}
+		if (!$this->can_manage_project($project_id, get_current_user_id())) {
+			wp_send_json_error('no_access', 403);
+		}
+
+		$data = $this->project_card_data($project_id);
+		$p = get_post($project_id);
+
+		ob_start();
+		?>
+		<div class="cptt-expertCard__panels">
+			<div class="cptt-expertCard__mainPanel">
+				<?php $this->render_project_manage_form($project_id); ?>
+			</div>
+			<aside class="cptt-expertCard__sidePanel">
+				<div class="cptt-sideBox">
+					<div class="cptt-sideBox__title">آخرین یادداشت‌ها</div>
+					<div class="cptt-expert-notesWrap">
+						<?php $this->render_note_list($data['notes']); ?>
+					</div>
+				</div>
+				<div class="cptt-sideBox">
+					<div class="cptt-sideBox__title">پیام بین کارشناسان</div>
+					<div class="cptt-sideBox__actions">
+						<button type="button" class="cptt-btn cptt-expert-chat-launch">
+							<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0zM8 9v1m0 4h.01M12 9v1"/></svg>
+							چت پروژه
+						</button>
+						<button type="button" class="cptt-btn cptt-btn--file-manager" data-project-id="<?php echo esc_attr($p->ID); ?>">
+							<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7z"/><polyline points="13 2 13 7 18 7"/></svg>
+							مدیریت فایل
+						</button>
+						<button type="button" class="cptt-btn cptt-btn--requests" data-project-id="<?php echo esc_attr($p->ID); ?>">
+							<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="8"/><line x1="10" y1="6" x2="10" y2="10"/><line x1="10" y1="14" x2="10.01" y2="14"/></svg>
+							درخواست‌ها
+						</button>
+					</div>
+					<div class="cptt-expert-chatModal" hidden>
+						<div class="cptt-expert-chatModal__backdrop"></div>
+						<div class="cptt-expert-chatModal__dialog">
+							<button type="button" class="cptt-expert-chatModal__close">×</button>
+							<div class="cptt-sideBox__title">چت کارشناسان پروژه</div>
+							<form class="cptt-expert-message-form" data-project-id="<?php echo esc_attr($p->ID); ?>">
+								<input type="hidden" name="project_id" value="<?php echo esc_attr($p->ID); ?>">
+								<select name="recipient_id">
+									<option value="0">همه کارشناسان پروژه</option>
+									<?php foreach (self::get_existing_experts($p->ID) as $eid):
+										if ((int)$eid === (int)get_current_user_id()) continue;
+										$eu = get_user_by('id', (int)$eid);
+										if (!$eu) continue;
+									?><option value="<?php echo esc_attr($eid); ?>"><?php echo esc_html($eu->display_name); ?></option><?php endforeach; ?>
+								</select>
+								<textarea name="content" rows="3" placeholder="پیام کوتاه برای کارشناس دیگر..."></textarea>
+								<input type="file" name="chat_file" id="project-chat-file-<?php echo esc_attr($p->ID); ?>" style="display:none;" />
+								<div class="cptt-expert-formActions">
+									<button type="button" class="cptt-btn cptt-btn--secondary" onclick="document.getElementById('project-chat-file-<?php echo esc_attr($p->ID); ?>').click();">پیوست فایل</button>
+									<button type="submit" class="cptt-btn">ارسال پیام</button>
+								</div>
+								<div class="cptt-expert-formMsg" aria-live="polite"></div>
+							</form>
+							<div class="cptt-expert-notesWrap cptt-expert-messagesWrap">
+								<?php $this->render_message_list($data['messages']); ?>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="cptt-sideBox">
+					<div class="cptt-sideBox__title">خلاصه پروژه</div>
+					<ul class="cptt-sideList">
+						<li><span>کل مراحل</span><strong><?php echo esc_html(number_format_i18n($data['progress']['total'])); ?></strong></li>
+						<li><span>مرحله‌های تکمیل‌شده</span><strong><?php echo esc_html(number_format_i18n($data['progress']['done'])); ?></strong></li>
+						<li><span>چک‌لیست انجام‌شده</span><strong><?php echo esc_html(number_format_i18n($data['checklist_done'])); ?></strong></li>
+						<li><span>تسک مشتری باز</span><strong><?php echo esc_html(number_format_i18n(max(0, $data['user_tasks_total'] - $data['user_tasks_done']))); ?></strong></li>
+					</ul>
+				</div>
+			</aside>
+		</div>
+		<?php
+		$html = ob_get_clean();
+		wp_send_json_success(['html' => $html]);
+	}
+
 	public function ajax_update_step_status() {
 		if (!is_user_logged_in()) wp_send_json_error('login_required', 401);
 		check_ajax_referer('cptt_expert_nonce', 'nonce');
@@ -1217,7 +1342,7 @@ class CPTT_Expert {
 		wp_send_json_success(['expert_ids' => $expert_ids, 'avatars' => $avatars, 'last_update' => $now]);
 	}
 
-	private function project_card_data($project_id) {
+	private function project_card_data($project_id, $include_heavy = true) {
 		$product_id = (int) get_post_meta($project_id, '_cptt_product_id', true);
 		if (!$product_id) $product_id = (int) get_post_meta($project_id, '_cptt_wc_product_id', true);
 		$progress = $this->progress_data($project_id);
@@ -1273,8 +1398,12 @@ class CPTT_Expert {
 			'checklist_done' => $checklist_done,
 			'user_tasks_total' => $user_tasks_total,
 			'user_tasks_done' => $user_tasks_done,
-			'notes' => $this->get_recent_notes($project_id, 4),
-			'messages' => $this->get_recent_messages($project_id, 50),
+			// v6.1.10 — these are only used inside the lazy "manage" panel.
+			// Skipping them in the initial render saves N×2 DB reads for an
+			// admin with many projects. The ajax_load_manage_form() endpoint
+			// passes $include_heavy=true so the full data is loaded on demand.
+			'notes'    => $include_heavy ? $this->get_recent_notes($project_id, 4)     : [],
+			'messages' => $include_heavy ? $this->get_recent_messages($project_id, 50) : [],
 			'delivery_method' => $delivery_method_raw,
 			'delivery_method_label' => $delivery_method_label,
 			'delivery_province' => (string)get_post_meta($project_id, '_cptt_delivery_province', true),
@@ -1322,7 +1451,10 @@ class CPTT_Expert {
 		$project_labels = class_exists('CPTT_Core') ? CPTT_Core::get_project_labels() : [];
 		$current_label_id = (string)get_post_meta($project_id, '_cptt_project_label_id', true);
 		?>
-		<form class="cptt-expert-project-form" data-project-id="<?php echo esc_attr($project_id); ?>">
+		<?php /* v6.2.1 — action="#" + onsubmit return false as belt-and-braces
+		     so if JS hasn't bound yet (e.g. on lazy-load race), the form
+		     won't redirect the user to a garbled GET URL. */ ?>
+		<form class="cptt-expert-project-form" method="post" action="#" onsubmit="return false;" data-project-id="<?php echo esc_attr($project_id); ?>">
 			<input type="hidden" name="project_id" value="<?php echo esc_attr($project_id); ?>">
 			<input type="hidden" name="loaded_last_update" value="<?php echo esc_attr((string)get_post_meta($project_id, '_cptt_last_update', true)); ?>">
 
@@ -3948,7 +4080,10 @@ class CPTT_Expert {
 		$stats = $this->collect_dashboard_stats($projects);
 		$clients_map = []; $products_map = []; $cats_map = [];
 		foreach ($projects as $__p) {
-			$__data = $this->project_card_data($__p->ID);
+			// v6.1.10 — fast variant: skip the heavy notes/messages reads
+			// in the initial maps-building loop (these run for EVERY project
+			// on every dashboard load).
+			$__data = $this->project_card_data($__p->ID, false);
 			$clients_map[(int)$__data['customer_id']] = $__data['customer'];
 			$products_map[(int)$__data['product_id']] = $__data['product'];
 			if (!empty($__data['term_ids']) && !empty($__data['term_names'])) {
@@ -4347,7 +4482,9 @@ class CPTT_Expert {
 				<?php if (empty($projects)): ?>
 					<div class="cptt-empty">در حال حاضر پروژه‌ای به شما اختصاص داده نشده است.</div>
 				<?php else: foreach ($projects as $p):
-					$data = $this->project_card_data($p->ID);
+					// v6.1.10 — preview cards don't need notes/messages (those
+					// are only rendered inside the lazy-loaded manage panel).
+					$data = $this->project_card_data($p->ID, false);
 					$label_id = is_array($data['label']) ? (string)$data['label']['id'] : '';
 					$search = strtolower(get_the_title($p->ID) . ' ' . $data['customer'] . ' ' . $data['product'] . ' ' . implode(' ', $data['experts']) . ' ' . ($data['code'] ?? ''));
 				?>
@@ -4467,71 +4604,12 @@ class CPTT_Expert {
 
 						<?php if (current_user_can("delete_cptt_project")): ?><button type="button" class="cptt-btn cptt-btn--danger cptt-expert-delete-project" data-project-id="<?php echo esc_attr($p->ID); ?>">🗑 حذف پروژه</button><?php endif; ?>
 					</div>
-					<div class="cptt-expertCard__details" hidden>
-						<div class="cptt-expertCard__panels">
-							<div class="cptt-expertCard__mainPanel">
-								<?php $this->render_project_manage_form($p->ID); ?>
-							</div>
-							<aside class="cptt-expertCard__sidePanel">
-								<div class="cptt-sideBox">
-									<div class="cptt-sideBox__title">آخرین یادداشت‌ها</div>
-									<div class="cptt-expert-notesWrap">
-										<?php $this->render_note_list($data['notes']); ?>
-									</div>
-								</div>
-								<div class="cptt-sideBox">
-									<div class="cptt-sideBox__title">پیام بین کارشناسان</div>
-									<div class="cptt-sideBox__actions">
-										<button type="button" class="cptt-btn cptt-expert-chat-launch">
-											<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0zM8 9v1m0 4h.01M12 9v1"/></svg>
-											چت پروژه
-										</button>
-										<button type="button" class="cptt-btn cptt-btn--file-manager" data-project-id="<?php echo esc_attr($p->ID); ?>">
-											<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7z"/><polyline points="13 2 13 7 18 7"/></svg>
-											مدیریت فایل
-										</button>
-										<button type="button" class="cptt-btn cptt-btn--requests" data-project-id="<?php echo esc_attr($p->ID); ?>">
-											<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="8"/><line x1="10" y1="6" x2="10" y2="10"/><line x1="10" y1="14" x2="10.01" y2="14"/></svg>
-											درخواست‌ها
-										</button>
-									</div>
-									<div class="cptt-expert-chatModal" hidden>
-										<div class="cptt-expert-chatModal__backdrop"></div>
-										<div class="cptt-expert-chatModal__dialog">
-											<button type="button" class="cptt-expert-chatModal__close">×</button>
-											<div class="cptt-sideBox__title">چت کارشناسان پروژه</div>
-											
-											<form class="cptt-expert-message-form" data-project-id="<?php echo esc_attr($p->ID); ?>">
-												<input type="hidden" name="project_id" value="<?php echo esc_attr($p->ID); ?>">
-												<select name="recipient_id">
-													<option value="0">همه کارشناسان پروژه</option>
-													<?php foreach (self::get_existing_experts($p->ID) as $eid): if ((int)$eid === (int)get_current_user_id()) continue; $eu = get_user_by('id', (int)$eid); if (!$eu) continue; ?><option value="<?php echo esc_attr($eid); ?>"><?php echo esc_html($eu->display_name); ?></option><?php endforeach; ?>
-												</select>
-												<textarea name="content" rows="3" placeholder="پیام کوتاه برای کارشناس دیگر..."></textarea>
-												<input type="file" name="chat_file" id="project-chat-file-<?php echo esc_attr($p->ID); ?>" style="display:none;" />
-												<div class="cptt-expert-formActions">
-													<button type="button" class="cptt-btn cptt-btn--secondary" onclick="document.getElementById('project-chat-file-<?php echo esc_attr($p->ID); ?>').click();">پیوست فایل</button>
-													<button type="submit" class="cptt-btn">ارسال پیام</button>
-												</div>
-												<div class="cptt-expert-formMsg" aria-live="polite"></div>
-											</form>
-
-											<div class="cptt-expert-notesWrap cptt-expert-messagesWrap">
-												<?php $this->render_message_list($data['messages']); ?>
-											</div>
-										</div>
-									</div>
-								</div>
-								<div class="cptt-sideBox">
-									<div class="cptt-sideBox__title">خلاصه پروژه</div>
-									<ul class="cptt-sideList">
-										<li><span>کل مراحل</span><strong><?php echo esc_html(number_format_i18n($data['progress']['total'])); ?></strong></li>
-										<li><span>مرحله‌های تکمیل‌شده</span><strong><?php echo esc_html(number_format_i18n($data['progress']['done'])); ?></strong></li>
-										<li><span>چک‌لیست انجام‌شده</span><strong><?php echo esc_html(number_format_i18n($data['checklist_done'])); ?></strong></li>
-										<li><span>تسک مشتری باز</span><strong><?php echo esc_html(number_format_i18n(max(0, $data['user_tasks_total'] - $data['user_tasks_done']))); ?></strong></li>
-									</ul>
-								</div>
-							</aside>
+					<?php /* v6.1.10 — Lazy-loaded panels. Empty until user clicks "مدیریت پروژه".
+					     The contents are fetched via AJAX (cptt_expert_load_manage_form) so the
+					     initial page render is fast even for admins with many projects. */ ?>
+					<div class="cptt-expertCard__details cptt-lazy-details" data-project-id="<?php echo esc_attr($p->ID); ?>" data-loaded="0" hidden>
+						<div class="cptt-lazy-details__placeholder" style="padding:24px;text-align:center;color:#94a3b8;font-size:13px;">
+							در حال بارگذاری اطلاعات پروژه...
 						</div>
 					</div>
 				</article>
@@ -4572,12 +4650,23 @@ class CPTT_Expert {
 					<?php else: ?>
 						<div class="cptt-archive-grid">
 							<?php foreach ($archived_projects as $ap):
-								$ad = $this->project_card_data($ap->ID);
+								$ad = $this->project_card_data($ap->ID, false);
 								$ap_label = is_array($ad['label']) ? $ad['label'] : null;
 								$archived_ts = (int) get_post_meta($ap->ID, '_cptt_archived_at', true);
 								$archived_fa = $archived_ts && class_exists('CPTT_Core') ? CPTT_Core::jalali_datetime($archived_ts) : '';
+								$_ap_label_id = is_array($ap_label) ? (string)$ap_label['id'] : '';
+								$_ap_search = strtolower(get_the_title($ap->ID) . ' ' . $ad['customer'] . ' ' . $ad['product'] . ' ' . implode(' ', $ad['experts']) . ' ' . ($ad['code'] ?? ''));
 							?>
-								<article class="cptt-archive-card" data-project-id="<?php echo esc_attr($ap->ID); ?>">
+								<article class="cptt-archive-card"
+									data-project-id="<?php echo esc_attr($ap->ID); ?>"
+									data-search="<?php echo esc_attr($_ap_search); ?>"
+									data-status="<?php echo esc_attr($ad['progress']['status']); ?>"
+									data-settled="<?php echo esc_attr((string)$ad['settled']); ?>"
+									data-client="<?php echo esc_attr((string)$ad['customer_id']); ?>"
+									data-product="<?php echo esc_attr((string)$ad['product_id']); ?>"
+									data-cats=",<?php echo esc_attr(implode(',', array_map('intval', (array)$ad['term_ids']))); ?>,"
+									data-label="<?php echo esc_attr($_ap_label_id); ?>"
+									data-customer-name="<?php echo esc_attr($ad['customer']); ?>">
 									<header class="cptt-archive-card__head">
 										<div class="cptt-archive-card__title">
 											<strong><?php echo esc_html(get_the_title($ap->ID)); ?></strong>
@@ -4704,6 +4793,9 @@ class CPTT_Expert {
 
 	<!-- Floating Back to Top Button -->
 	<button type="button" id="cptt-back-to-top" style="display:none;" title="برو به بالا">▲</button>
+
+	<?php /* v6.2.0 — AI Assistant chat widget */ ?>
+	<?php if (class_exists('CPTT_AI_Assistant')) CPTT_AI_Assistant::render_widget($current_user); ?>
 
 		<?php
 		return ob_get_clean();

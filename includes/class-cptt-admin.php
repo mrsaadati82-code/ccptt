@@ -62,7 +62,9 @@ class CPTT_Admin {
 	}
 	public function dashboard_menu() {
 		add_submenu_page('edit.php?post_type=cptt_project','داشبورد پروژه‌ها','داشبورد پروژه‌ها','edit_cptt_projects','cptt-project-dashboard',[$this,'render_dashboard_page']);
-		add_submenu_page('edit.php?post_type=cptt_project','حساب و کتاب','حساب و کتاب','edit_cptt_projects','cptt-accounting',[$this,'render_accounting_page']);
+		// v6.4.1 — "حساب و کتاب" was moved to the Finance menu (admin.php?page=cptt-finance-classic).
+		// Keep the page callback registered (without a submenu entry) so deep-links still work.
+		add_submenu_page(null, 'حساب و کتاب', 'حساب و کتاب', 'edit_cptt_projects', 'cptt-accounting', [$this, 'render_accounting_page']);
 		add_submenu_page('edit.php?post_type=cptt_project','لیبل‌های پروژه','لیبل‌های پروژه','manage_options','cptt-project-labels',[$this,'render_labels_page']);
 		add_submenu_page('edit.php?post_type=cptt_project','مشتریان','مشتریان','manage_options','cptt-customers',[$this,'render_customers_page']);
 		add_submenu_page('edit.php?post_type=cptt_project','گزارش فعالیت‌ها','گزارش فعالیت‌ها','manage_options','cptt-activity-log',[$this,'render_activity_log_page']);
@@ -2110,6 +2112,8 @@ class CPTT_Admin {
 			CPTT_Core::activity_log('user', $expert_id, 'manual_expert_payment', 'ثبت پرداخت دستی به کارشناس: ' . number_format($amount));
 		}
 		if (class_exists('CPTT_Bale')) CPTT_Bale::notify_via_bale($expert_id, '💸 پرداخت دستی به مبلغ ' . number_format($amount) . ' تومان ثبت شد.' . ($note ? "\n".$note : ''), 'expert_payout', 0);
+		// v6.4.0 — Auto-log into the unified finance ledger.
+		do_action('cptt_after_manual_expert_payment', $expert_id, $amount, $note);
 		wp_send_json_success();
 	}
 
@@ -2340,6 +2344,10 @@ class CPTT_Admin {
 			}
 			CPTT_Expert::instance()->insert_notification($expert_id, 'expert_payout', $msg, $project_id, CPTT_Expert::dashboard_url() . '#project-' . $project_id);
 		}
+
+		// v6.4.0 — Auto-log into the unified finance ledger.
+		$step_id_for_log = isset($steps[$i]['id']) ? (string)$steps[$i]['id'] : '';
+		do_action('cptt_after_expert_payout', $project_id, $step_id_for_log, $expert_id, $amount, $mode);
 
 		wp_send_json_success(['msg' => 'ذخیره شد']);
 	}

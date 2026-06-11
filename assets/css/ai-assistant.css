@@ -1,0 +1,367 @@
+/* =====================================================================
+ * CPTT AI Assistant — embedded chat widget
+ * v6.2.0
+ * ===================================================================== */
+.cptt-ai-widget{
+	position: fixed;
+	left: 18px;
+	bottom: 18px;
+	z-index: 999990;
+	font-family: inherit;
+	direction: rtl;
+}
+.cptt-ai-fab{
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 10px 14px;
+	border-radius: 999px;
+	border: 0;
+	background: linear-gradient(135deg, #7c3aed, #4f46e5);
+	color: #fff;
+	font-weight: 900;
+	font-size: 13px;
+	font-family: inherit;
+	cursor: pointer;
+	box-shadow: 0 14px 30px rgba(79, 70, 229, .35);
+	transition: transform .15s, box-shadow .15s;
+}
+.cptt-ai-fab:hover{
+	transform: translateY(-2px);
+	box-shadow: 0 18px 38px rgba(79, 70, 229, .45);
+}
+.cptt-ai-fab svg{
+	flex-shrink: 0;
+	stroke: currentColor;
+	fill: none;
+}
+.cptt-ai-fab.is-busy{
+	animation: cpttAiPulse 1.2s ease-in-out infinite;
+}
+@keyframes cpttAiPulse{
+	0%,100%{ box-shadow: 0 14px 30px rgba(79,70,229,.35); }
+	50%    { box-shadow: 0 14px 30px rgba(124,58,237,.85); }
+}
+
+.cptt-ai-panel{
+	position: fixed;
+	left: 18px;
+	bottom: 80px;
+	width: 380px;
+	max-width: calc(100vw - 24px);
+	height: 560px;
+	max-height: calc(100vh - 100px);
+	background: #ffffff;
+	border-radius: 18px;
+	box-shadow: 0 25px 60px rgba(15, 23, 42, .25);
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	border: 1px solid rgba(99, 102, 241, .18);
+	animation: cpttAiPanelIn .2s ease;
+}
+@keyframes cpttAiPanelIn{
+	from { opacity: 0; transform: translateY(10px) scale(.97); }
+	to   { opacity: 1; transform: translateY(0)    scale(1);   }
+}
+.cptt-ai-panel[hidden]{ display: none !important; }
+
+.cptt-ai-panel__head{
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 12px 16px;
+	background: linear-gradient(135deg, #7c3aed, #4f46e5);
+	color: #fff;
+	flex-shrink: 0;
+}
+.cptt-ai-panel__title{
+	display: flex; align-items: center; gap: 10px;
+}
+.cptt-ai-panel__avatar{
+	width: 36px; height: 36px;
+	border-radius: 50%;
+	background: rgba(255,255,255,.18);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 18px;
+	flex-shrink: 0;
+}
+.cptt-ai-panel__title strong{
+	display: block;
+	font-size: 14px;
+	font-weight: 900;
+	line-height: 1.3;
+	color: #fff;
+}
+.cptt-ai-panel__title small{
+	display: block;
+	font-size: 10.5px;
+	opacity: .85;
+	color: #fff;
+}
+.cptt-ai-panel__head-actions{
+	display: flex; gap: 4px;
+}
+.cptt-ai-close, .cptt-ai-clear{
+	width: 28px; height: 28px;
+	border-radius: 50%;
+	border: 1.5px solid rgba(255,255,255,.35);
+	background: rgba(255,255,255,.12);
+	color: #fff;
+	font-size: 16px;
+	line-height: 1;
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	transition: background .15s;
+}
+.cptt-ai-close:hover, .cptt-ai-clear:hover{
+	background: rgba(255,255,255,.25);
+}
+
+.cptt-ai-panel__messages{
+	flex: 1;
+	overflow-y: auto;
+	overflow-x: hidden;
+	padding: 14px;
+	background: #f8fafc;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	scroll-behavior: smooth;
+}
+
+.cptt-ai-msg{
+	display: flex;
+	max-width: 100%;
+}
+.cptt-ai-msg--user{ justify-content: flex-end; }
+.cptt-ai-msg--bot { justify-content: flex-start; }
+.cptt-ai-msg__bubble{
+	max-width: 85%;
+	padding: 9px 13px;
+	border-radius: 14px;
+	font-size: 13px;
+	line-height: 1.85;
+	color: #0f172a;
+	word-break: break-word;
+	overflow-wrap: anywhere;
+	white-space: pre-wrap;
+	box-shadow: 0 2px 8px rgba(15, 23, 42, .06);
+}
+.cptt-ai-msg--user .cptt-ai-msg__bubble{
+	background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+	color: #1e3a8a;
+	border-bottom-right-radius: 4px;
+}
+.cptt-ai-msg--bot .cptt-ai-msg__bubble{
+	background: #ffffff;
+	border: 1px solid #e5e7eb;
+	border-bottom-left-radius: 4px;
+}
+.cptt-ai-msg__bubble strong{ font-weight: 900; }
+.cptt-ai-msg__bubble code{
+	background: rgba(15,23,42,.08);
+	border-radius: 5px;
+	padding: 1px 5px;
+	font-size: 12px;
+	font-family: monospace, ui-monospace, SFMono-Regular, Menlo;
+}
+.cptt-ai-msg__bubble ul, .cptt-ai-msg__bubble ol{
+	padding-inline-start: 18px;
+	margin: 6px 0;
+}
+.cptt-ai-msg__bubble li{ margin: 2px 0; }
+
+.cptt-ai-msg__action-result{
+	margin-top: 6px;
+	padding: 6px 10px;
+	border-radius: 10px;
+	font-size: 11.5px;
+	font-weight: 800;
+	border: 1px solid;
+}
+.cptt-ai-msg__action-result--ok{
+	background: #dcfce7;
+	color: #166534;
+	border-color: #86efac;
+}
+.cptt-ai-msg__action-result--err{
+	background: #fef2f2;
+	color: #991b1b;
+	border-color: #fecaca;
+}
+
+.cptt-ai-typing{
+	display: inline-flex;
+	gap: 3px;
+	align-items: center;
+}
+.cptt-ai-typing span{
+	width: 6px; height: 6px;
+	border-radius: 50%;
+	background: #6366f1;
+	opacity: .4;
+	animation: cpttAiDot 1s infinite;
+}
+.cptt-ai-typing span:nth-child(2){ animation-delay: .15s; }
+.cptt-ai-typing span:nth-child(3){ animation-delay: .30s; }
+@keyframes cpttAiDot{
+	0%,80%,100% { opacity: .25; transform: scale(.85); }
+	40%         { opacity: 1;   transform: scale(1.15); }
+}
+
+.cptt-ai-panel__no-key{
+	padding: 18px;
+	background: #fef3c7;
+	border-top: 1px solid #fcd34d;
+	color: #92400e;
+	font-size: 12px;
+	line-height: 1.7;
+	text-align: center;
+}
+.cptt-ai-panel__no-key strong{ display: block; margin-bottom: 4px; font-size: 13px; color: #78350f; }
+.cptt-ai-panel__no-key p{ margin: 0; }
+
+.cptt-ai-panel__form{
+	display: flex;
+	gap: 6px;
+	padding: 10px;
+	background: #ffffff;
+	border-top: 1px solid #e5e7eb;
+	flex-shrink: 0;
+	align-items: flex-end;
+}
+.cptt-ai-panel__form textarea{
+	flex: 1;
+	resize: none;
+	border: 1.5px solid #e5e7eb;
+	border-radius: 14px;
+	padding: 9px 12px;
+	font-family: inherit;
+	font-size: 13px;
+	color: #0f172a;
+	background: #f8fafc;
+	outline: none;
+	min-height: 38px;
+	max-height: 100px;
+	transition: border-color .15s, box-shadow .15s;
+	box-sizing: border-box;
+}
+.cptt-ai-panel__form textarea:focus{
+	border-color: #6366f1;
+	background: #fff;
+	box-shadow: 0 0 0 3px rgba(99,102,241,.15);
+}
+.cptt-ai-send{
+	width: 40px; height: 40px;
+	border-radius: 50%;
+	border: 0;
+	background: linear-gradient(135deg, #7c3aed, #4f46e5);
+	color: #fff;
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	transition: transform .15s, box-shadow .15s;
+	box-shadow: 0 6px 16px rgba(79,70,229,.30);
+}
+.cptt-ai-send:hover{ transform: translateY(-1px); box-shadow: 0 10px 22px rgba(79,70,229,.42); }
+.cptt-ai-send:disabled{ opacity: .55; cursor: wait; transform: none; }
+.cptt-ai-send svg{ stroke: currentColor; fill: none; }
+
+/* Dark themes */
+body.cptt-dark .cptt-ai-panel,
+body.cptt-theme-dark .cptt-ai-panel,
+body.cptt-theme-three-d .cptt-ai-panel{
+	background: #0f172a;
+	border-color: #334155;
+}
+body.cptt-dark .cptt-ai-panel__messages,
+body.cptt-theme-dark .cptt-ai-panel__messages,
+body.cptt-theme-three-d .cptt-ai-panel__messages{
+	background: #020617;
+}
+body.cptt-dark .cptt-ai-msg--bot .cptt-ai-msg__bubble,
+body.cptt-theme-dark .cptt-ai-msg--bot .cptt-ai-msg__bubble,
+body.cptt-theme-three-d .cptt-ai-msg--bot .cptt-ai-msg__bubble{
+	background: #1e293b;
+	border-color: #334155;
+	color: #e5e7eb;
+}
+body.cptt-dark .cptt-ai-msg--user .cptt-ai-msg__bubble,
+body.cptt-theme-dark .cptt-ai-msg--user .cptt-ai-msg__bubble,
+body.cptt-theme-three-d .cptt-ai-msg--user .cptt-ai-msg__bubble{
+	background: linear-gradient(135deg, #1e3a8a, #312e81);
+	color: #dbeafe;
+}
+body.cptt-dark .cptt-ai-panel__form,
+body.cptt-theme-dark .cptt-ai-panel__form,
+body.cptt-theme-three-d .cptt-ai-panel__form{
+	background: #0f172a;
+	border-top-color: #334155;
+}
+body.cptt-dark .cptt-ai-panel__form textarea,
+body.cptt-theme-dark .cptt-ai-panel__form textarea,
+body.cptt-theme-three-d .cptt-ai-panel__form textarea{
+	background: #1e293b;
+	border-color: #334155;
+	color: #f1f5f9;
+}
+
+/* Mobile */
+@media (max-width: 640px){
+	.cptt-ai-widget{ left: 14px; bottom: 14px; }
+	.cptt-ai-fab{ padding: 10px; }
+	.cptt-ai-fab__label{ display: none; }
+	.cptt-ai-panel{
+		left: 8px;
+		right: 8px;
+		bottom: 72px;
+		width: auto;
+		max-width: none;
+		height: 70vh;
+	}
+}
+
+/* Admin: AI Assistant settings tab */
+.cptt-ai-admin-grid{
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 14px;
+}
+@media (max-width: 900px){
+	.cptt-ai-admin-grid{ grid-template-columns: 1fr; }
+}
+.cptt-ai-admin-grid .cptt-set-field.full{ grid-column: 1 / -1; }
+.cptt-ai-admin-help{
+	background: #eff6ff;
+	border: 1px solid #bfdbfe;
+	color: #1e3a8a;
+	border-radius: 10px;
+	padding: 10px 14px;
+	font-size: 13px;
+	line-height: 1.8;
+	margin: 14px 0;
+}
+.cptt-ai-admin-help code{
+	background: rgba(15,23,42,.06);
+	padding: 1px 6px;
+	border-radius: 5px;
+}
+.cptt-ai-admin-help a{ color: #1d4ed8; text-decoration: underline; }
+.cptt-ai-test-result{
+	display: inline-block;
+	margin-inline-start: 10px;
+	padding: 4px 12px;
+	border-radius: 99px;
+	font-size: 12px;
+	font-weight: 800;
+}
+.cptt-ai-test-result--ok { background: #dcfce7; color: #166534; }
+.cptt-ai-test-result--err{ background: #fef2f2; color: #991b1b; }

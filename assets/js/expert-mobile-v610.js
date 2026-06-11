@@ -745,6 +745,173 @@
 		setTimeout(update, 200);
 	}
 
+	/* =====================================================================
+	 * v6.3.2 — Apply the dashboard filter/search ALSO to archived cards.
+	 *
+	 * The main filter (in expert-views.js) only walks `.cptt-expertCard`.
+	 * Archived cards live in `.cptt-archive-card` blocks. Here we mirror
+	 * the same filter logic onto those cards, AND auto-expand the
+	 * "آرشیو پروژه‌ها" section when at least one archived match is found
+	 * (so the user actually sees the result).
+	 * ===================================================================== */
+	function initArchiveFilterMirror(){
+		var ids = ['cptt-expert-search','cptt-expert-status','cptt-expert-settled',
+		           'cptt-expert-client','cptt-expert-product','cptt-expert-cat','cptt-expert-label'];
+
+		function applyArchiveFilter(){
+			var search = lower((document.getElementById('cptt-expert-search') || {}).value || '');
+			var status = (document.getElementById('cptt-expert-status') || {}).value || '';
+			var settled = (document.getElementById('cptt-expert-settled') || {}).value || '';
+			var client = (document.getElementById('cptt-expert-client') || {}).value || '';
+			var product = (document.getElementById('cptt-expert-product') || {}).value || '';
+			var cat = (document.getElementById('cptt-expert-cat') || {}).value || '';
+			var label = (document.getElementById('cptt-expert-label') || {}).value || '';
+
+			var hasFilter = !!(search || status || settled || client || product || cat || label);
+			var archCards = document.querySelectorAll('.cptt-archive-card');
+			var matches = 0;
+			for (var i = 0; i < archCards.length; i++){
+				var c = archCards[i];
+				var ok = true;
+				if (search && (c.getAttribute('data-search') || '').indexOf(search) === -1) ok = false;
+				if (ok && status && (c.getAttribute('data-status') || '') !== status) ok = false;
+				if (ok && settled !== '' && (c.getAttribute('data-settled') || '') !== settled) ok = false;
+				if (ok && client && (c.getAttribute('data-client') || '') !== client) ok = false;
+				if (ok && product && (c.getAttribute('data-product') || '') !== product) ok = false;
+				if (ok && cat && (c.getAttribute('data-cats') || '').indexOf(',' + cat + ',') === -1) ok = false;
+				if (ok && label && (c.getAttribute('data-label') || '') !== label) ok = false;
+				c.style.display = ok ? '' : 'none';
+				if (ok) matches++;
+			}
+			// Auto-open archive section if filtering with matches
+			var sec = document.getElementById('cptt-archive-section');
+			var btn = document.getElementById('cptt-archive-toggle');
+			var body = document.getElementById('cptt-archive-body');
+			if (sec && btn && body){
+				if (hasFilter && matches > 0){
+					body.removeAttribute('hidden');
+					sec.classList.add('is-open');
+					btn.setAttribute('aria-expanded', 'true');
+					// Update count badge to show "X از Y"
+					var totalCnt = archCards.length;
+					var badge = btn.querySelector('.cptt-archive-toggle__count');
+					if (badge) {
+						if (matches !== totalCnt){
+							badge.textContent = toFa(matches) + ' / ' + toFa(totalCnt);
+							badge.dataset.cpttFiltering = '1';
+						}
+					}
+				} else {
+					// Restore original badge count when no filter
+					if (!hasFilter){
+						var badge2 = btn.querySelector('.cptt-archive-toggle__count');
+						if (badge2 && badge2.dataset.cpttFiltering === '1'){
+							badge2.textContent = toFa(archCards.length);
+							badge2.dataset.cpttFiltering = '0';
+						}
+					}
+				}
+			}
+		}
+		function lower(s){
+			try { return String(s||'').toLowerCase(); } catch(_) { return ''; }
+		}
+		function toFa(n){
+			var fa = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
+			return String(n).replace(/[0-9]/g, function(d){ return fa[+d]; });
+		}
+
+		// Hook into each input/select with debounce so we don't fight the
+		// main filter (which also re-renders the views).
+		var deb = null;
+		function schedule(){
+			if (deb) clearTimeout(deb);
+			deb = setTimeout(applyArchiveFilter, 120);
+		}
+		ids.forEach(function(id){
+			var el = document.getElementById(id);
+			if (!el) return;
+			el.addEventListener('input',  schedule);
+			el.addEventListener('change', schedule);
+		});
+		var resetBtn = document.getElementById('cptt-expert-reset');
+		if (resetBtn) resetBtn.addEventListener('click', schedule);
+		// Fire once on load (in case persisted filters are restored)
+		setTimeout(applyArchiveFilter, 800);
+	}
+
+	/* =====================================================================
+	 * v6.1.10 — Lazy-load the "manage project" form on first click.
+	 *
+	 * Previously every dashboard card pre-rendered the 385-line form +
+	 * steps + notes + chat + summary. For an admin with 30-50 projects
+	 * this meant ~20k lines of HTML and dozens of DB reads per page load,
+	 * causing severe lag.
+	 *
+	 * Now the card just has an empty <div class="cptt-expertCard__details
+	 * cptt-lazy-details" data-loaded="0"> placeholder. The first time the
+	 * user clicks "مدیریت پروژه" on that card, we fetch the form HTML
+	 * via AJAX `cptt_expert_load_manage_form` and inject it. Subsequent
+	 * clicks just show/hide the cached content.
+	 * ===================================================================== */
+	function initLazyManageForm(){
+		document.addEventListener('click', function(e){
+			var btn = e.target.closest('.cptt-expert-toggleProject');
+			if (!btn) return;
+			var card = btn.closest('.cptt-expertCard');
+			if (!card) return;
+			var details = card.querySelector('.cptt-expertCard__details.cptt-lazy-details');
+			if (!details) return;
+			if (details.dataset.loaded === '1') return;        // already loaded → let expert.js toggle normally
+			if (details.dataset.loading === '1') return;       // request already in-flight
+			var pid = details.dataset.projectId || '';
+			if (!pid) return;
+
+			// Let expert.js do its normal "open card" flow — it will reveal
+			// the placeholder ("در حال بارگذاری اطلاعات پروژه..."). We just
+			// fetch the real content in parallel and inject it when it arrives.
+			details.dataset.loading = '1';
+
+			ajaxPost('cptt_expert_load_manage_form', { project_id: pid }, function(r){
+				details.dataset.loading = '0';
+				if (r && r.success && r.data && r.data.html){
+					details.innerHTML = r.data.html;
+					details.dataset.loaded = '1';
+					try {
+						card.dispatchEvent(new CustomEvent('cptt:manage-form-loaded', { bubbles: true, detail: { projectId: pid } }));
+					} catch(err){}
+					// Re-trigger the various expert.js initializers that rely
+					// on the toggle click. Easiest: click the button again
+					// (it's now a no-op for show/hide because we'll re-set it).
+					setTimeout(function(){
+						// Ensure card stays open with new content visible
+						details.hidden = false;
+						card.classList.add('is-expanded');
+						btn.textContent = 'بستن مدیریت';
+						// v6.2.1 — CRITICAL: re-bind the save form's submit
+						// handler. Without this, the "save" button submits
+						// the form to the page URL (browser default).
+						try { if (typeof window.bindSaveForms === 'function') window.bindSaveForms(); } catch(_){}
+						// Best-effort: poke known global helpers if exposed.
+						try { if (typeof window.layoutAllFinance === 'function') window.layoutAllFinance(); } catch(_){}
+						try { if (typeof window.enhanceManageFinancialFields === 'function') window.enhanceManageFinancialFields(card); } catch(_){}
+						try { if (typeof window.hardFloatingSave === 'function') window.hardFloatingSave(); } catch(_){}
+						try { if (typeof window.bindStepAccordions === 'function') window.bindStepAccordions(card); } catch(_){}
+						try { if (typeof window.bindProjectToggles === 'function') window.bindProjectToggles(); } catch(_){}
+						// Dispatch generic event so other modules can re-init.
+						try {
+							document.dispatchEvent(new Event('cptt:relayout'));
+						} catch(_){}
+						// Re-run our own injectors for the new step rows.
+						try { injectAddButtons(); } catch(_){}
+					}, 30);
+				} else {
+					details.innerHTML = '<div style="padding:24px;text-align:center;color:#dc2626;font-size:13px;">خطا در بارگذاری فرم مدیریت پروژه</div>';
+				}
+			});
+		});
+	}
+
 	/* ─── Observer with debounce + idempotent guards ─── */
 	function observe(){
 		var targets = [
@@ -799,6 +966,8 @@
 		bindMessengerButtons();
 		bindExtraFinanceButtons();
 		initMobileStickyToolbar();
+		initLazyManageForm();
+		initArchiveFilterMirror();
 
 		document.addEventListener('click', function(e){
 			if (e.target.closest('.cev-view-btn') || e.target.closest('.cev-tl-mode-btn')){

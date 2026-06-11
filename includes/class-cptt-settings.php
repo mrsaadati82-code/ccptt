@@ -103,6 +103,12 @@ class CPTT_Settings {
 		wp_enqueue_style('wp-color-picker');
 		wp_enqueue_script('cptt-settings-js', CPTT_URL . 'assets/js/settings.js', ['jquery', 'wp-color-picker'], CPTT_VERSION, true);
 		wp_enqueue_style('cptt-settings-css', CPTT_URL . 'assets/css/settings.css', [], CPTT_VERSION);
+		// v6.2.0 — AI Assistant tab styles + admin nonce for "test connection"
+		wp_enqueue_style('cptt-ai-assistant-admin', CPTT_URL . 'assets/css/ai-assistant.css', [], CPTT_VERSION);
+		wp_localize_script('cptt-settings-js', 'CPTT_ADMIN', [
+			'ajax'  => admin_url('admin-ajax.php'),
+			'nonce' => wp_create_nonce('cptt_admin_nonce'),
+		]);
 	}
 
 	public function inject_dynamic_css() {
@@ -863,6 +869,7 @@ class CPTT_Settings {
 					<a href="?post_type=cptt_project&page=cptt-settings&tab=fields" class="<?php echo $tab==='fields'?'is-active':'';?>">تنظیمات فیلدها</a>
 					<a href="?post_type=cptt_project&page=cptt-settings&tab=advanced" class="<?php echo $tab==='advanced'?'is-active':'';?>">تنظیمات سیستمی</a>
 					<a href="?post_type=cptt_project&page=cptt-settings&tab=bale" class="<?php echo $tab==='bale'?'is-active':'';?>">ربات بله</a>
+					<a href="?post_type=cptt_project&page=cptt-settings&tab=ai" class="<?php echo $tab==='ai'?'is-active':'';?>">🤖 دستیار هوشمند</a>
 				</aside>
 				<main class="cptt-set-main">
 					<form method="post" action="options.php" id="cptt-settings-form">
@@ -1295,6 +1302,152 @@ class CPTT_Settings {
 									<a href="<?php echo esc_url(add_query_arg('bale_action', 'test_connection')); ?>" class="button" style="padding:6px 14px; text-decoration:none; border-radius:4px;">تست اتصال ربات (getMe)</a>
 								</div>
 							</div>
+						<?php elseif ($tab === 'ai'):
+							$ai = class_exists('CPTT_AI_Assistant') ? CPTT_AI_Assistant::get_settings() : [];
+							$presets = class_exists('CPTT_AI_Assistant') ? CPTT_AI_Assistant::provider_presets() : [];
+						?>
+							<h2 style="margin:0 0 6px;">🤖 تنظیمات دستیار هوشمند</h2>
+							<p style="color:#64748b;margin:0 0 16px;font-size:13px;line-height:1.8;">
+								دستیار به کارشناسان کمک می‌کند تا با امکانات افزونه آشنا شوند و حتی به دستور متنی شما کارهایی مثل ساخت پروژه را انجام دهد.
+								برای فعال‌سازی، یک سرویس‌دهنده انتخاب کرده و کلید API آن را وارد کنید.
+							</p>
+
+							<div class="cptt-ai-admin-grid">
+								<div class="cptt-set-field full">
+									<label>
+										<input type="checkbox" name="cptt_ai_assistant[enabled]" value="1" <?php checked(($ai['enabled'] ?? '0'), '1'); ?>>
+										فعال‌سازی دستیار هوشمند روی داشبورد کارشناس
+									</label>
+								</div>
+
+								<div class="cptt-set-field">
+									<label>سرویس‌دهنده API</label>
+									<select name="cptt_ai_assistant[provider]" id="cptt-ai-provider">
+										<?php foreach ($presets as $key => $p): ?>
+											<option value="<?php echo esc_attr($key); ?>" <?php selected(($ai['provider'] ?? 'openrouter'), $key); ?> data-base="<?php echo esc_attr($p['base_url']); ?>" data-default-model="<?php echo esc_attr($p['default_model']); ?>" data-models="<?php echo esc_attr(wp_json_encode($p['models'])); ?>" data-docs="<?php echo esc_attr($p['docs']); ?>">
+												<?php echo esc_html($p['label']); ?>
+											</option>
+										<?php endforeach; ?>
+									</select>
+								</div>
+
+								<div class="cptt-set-field">
+									<label>کلید API</label>
+									<input type="password" name="cptt_ai_assistant[api_key]" value="<?php echo esc_attr($ai['api_key'] ?? ''); ?>" placeholder="sk-..." autocomplete="off" dir="ltr">
+									<small id="cptt-ai-docs-link" style="display:block;margin-top:4px;color:#64748b;font-size:11.5px;"></small>
+								</div>
+
+								<div class="cptt-set-field">
+									<label>مدل (Model)</label>
+									<input type="text" list="cptt-ai-model-list" name="cptt_ai_assistant[model]" id="cptt-ai-model-input" value="<?php echo esc_attr($ai['model'] ?? ''); ?>" placeholder="مثلاً gpt-4o-mini" dir="ltr">
+									<datalist id="cptt-ai-model-list"></datalist>
+									<small style="display:block;margin-top:4px;color:#64748b;font-size:11.5px;">اگر خالی بگذارید مدل پیش‌فرض سرویس‌دهنده استفاده می‌شود.</small>
+								</div>
+
+								<div class="cptt-set-field">
+									<label>Base URL (اختیاری)</label>
+									<input type="text" name="cptt_ai_assistant[base_url]" id="cptt-ai-base-url" value="<?php echo esc_attr($ai['base_url'] ?? ''); ?>" placeholder="پیش‌فرض سرویس‌دهنده" dir="ltr">
+								</div>
+
+								<div class="cptt-set-field">
+									<label>Temperature (خلاقیت پاسخ)</label>
+									<input type="number" step="0.05" min="0" max="2" name="cptt_ai_assistant[temperature]" value="<?php echo esc_attr($ai['temperature'] ?? '0.3'); ?>">
+								</div>
+
+								<div class="cptt-set-field">
+									<label>حداکثر طول پاسخ (max_tokens)</label>
+									<input type="number" min="64" max="4000" name="cptt_ai_assistant[max_tokens]" value="<?php echo esc_attr($ai['max_tokens'] ?? '600'); ?>">
+									<small style="display:block;margin-top:4px;color:#64748b;font-size:11.5px;">برای صرفه‌جویی در توکن، عدد کوچک‌تر (مثلاً ۴۰۰) پیشنهاد می‌شود.</small>
+								</div>
+
+								<div class="cptt-set-field full">
+									<label>
+										<input type="checkbox" name="cptt_ai_assistant[allow_actions]" value="1" <?php checked(($ai['allow_actions'] ?? '0'), '1'); ?>>
+										اجازه‌ی انجام عملیات (ساخت پروژه، افزودن مرحله، آرشیو، علامت زدن مرحله انجام‌شده) با دستور متنی کاربر
+									</label>
+								</div>
+
+								<div class="cptt-set-field full">
+									<label>پیام خوش‌آمد</label>
+									<textarea name="cptt_ai_assistant[welcome]" rows="3" style="width:100%;font-family:inherit;"><?php echo esc_textarea($ai['welcome'] ?? ''); ?></textarea>
+									<small style="display:block;margin-top:4px;color:#64748b;font-size:11.5px;">از <code>{name}</code> برای نمایش نام کاربر استفاده کنید.</small>
+								</div>
+							</div>
+
+							<div class="cptt-ai-admin-help">
+								💡 <strong>صرفه‌جویی در توکن</strong>: دستیار به‌صورت پیش‌فرض فقط ۸ پیام آخر گفتگو را به مدل می‌فرستد و دستورالعمل سیستمی را کوتاه نگه می‌دارد. اگر مدل ارزان‌تر می‌خواهید: <code>gpt-4o-mini</code> در OpenAI، <code>llama-3.3-70b-versatile</code> در Groq، یا <code>google/gemini-2.0-flash-exp:free</code> در OpenRouter.
+							</div>
+
+							<div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+								<button type="button" id="cptt-ai-test-btn" class="button button-primary" style="background:#7c3aed;border-color:#7c3aed;">🔌 تست اتصال</button>
+								<span id="cptt-ai-test-result" class="cptt-ai-test-result" style="display:none;"></span>
+								<small style="color:#64748b;">قبل از تست، تنظیمات را ذخیره کنید.</small>
+							</div>
+
+							<script>
+							(function(){
+								var providerSel = document.getElementById('cptt-ai-provider');
+								var modelInput  = document.getElementById('cptt-ai-model-input');
+								var modelList   = document.getElementById('cptt-ai-model-list');
+								var baseInput   = document.getElementById('cptt-ai-base-url');
+								var docsEl      = document.getElementById('cptt-ai-docs-link');
+								var testBtn     = document.getElementById('cptt-ai-test-btn');
+								var testRes     = document.getElementById('cptt-ai-test-result');
+
+								function fillModels(){
+									if (!providerSel || !modelList) return;
+									var opt = providerSel.options[providerSel.selectedIndex];
+									if (!opt) return;
+									var models = [];
+									try { models = JSON.parse(opt.dataset.models || '[]'); } catch(e){}
+									modelList.innerHTML = '';
+									models.forEach(function(m){
+										var o = document.createElement('option');
+										o.value = m;
+										modelList.appendChild(o);
+									});
+									if (baseInput && baseInput.placeholder !== undefined) baseInput.placeholder = opt.dataset.base || 'پیش‌فرض سرویس‌دهنده';
+									if (modelInput && !modelInput.value) modelInput.placeholder = opt.dataset.defaultModel ? ('مثلاً ' + opt.dataset.defaultModel) : '';
+									if (docsEl){
+										docsEl.innerHTML = opt.dataset.docs
+											? 'دریافت کلید: <a href="' + opt.dataset.docs + '" target="_blank" rel="noopener">' + opt.dataset.docs + '</a>'
+											: '';
+									}
+								}
+								if (providerSel){
+									providerSel.addEventListener('change', fillModels);
+									fillModels();
+								}
+								if (testBtn){
+									testBtn.addEventListener('click', function(){
+										testBtn.disabled = true;
+										testRes.style.display = 'inline-block';
+										testRes.className = 'cptt-ai-test-result';
+										testRes.textContent = 'در حال تست...';
+										var fd = new FormData();
+										fd.append('action', 'cptt_ai_test_connection');
+										fd.append('nonce', (window.CPTT_ADMIN && CPTT_ADMIN.nonce) || '');
+										fetch((window.CPTT_ADMIN && CPTT_ADMIN.ajax) || ajaxurl, { method: 'POST', credentials: 'same-origin', body: fd })
+											.then(function(r){ return r.json(); })
+											.then(function(j){
+												testBtn.disabled = false;
+												if (j && j.success){
+													testRes.classList.add('cptt-ai-test-result--ok');
+													testRes.textContent = '✓ اتصال موفق — پاسخ مدل: ' + (j.data && j.data.text ? j.data.text : 'OK');
+												} else {
+													testRes.classList.add('cptt-ai-test-result--err');
+													testRes.textContent = '✗ خطا: ' + ((j && j.data) ? j.data : 'ناشناخته');
+												}
+											})
+											.catch(function(){
+												testBtn.disabled = false;
+												testRes.classList.add('cptt-ai-test-result--err');
+												testRes.textContent = '✗ خطای ارتباط با سرور';
+											});
+									});
+								}
+							})();
+							</script>
 						<?php endif; ?>
 					</form>
 				</main>

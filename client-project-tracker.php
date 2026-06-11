@@ -2,14 +2,14 @@
 /**
  * Plugin Name: هماهنگ - افزونه ی مدیریت پروژه و تیم
  * Description: هماهنگ، اولین افزونه ی اختصاصی ایرانی مدیریت پروژه است که امکاناتی فراتر از مدیریت پروژه دارد و مطابق با نیاز کسب و کار های ایرانی ساخته شده است. 
- * Version: 6.1.9
+ * Version: 7.1.0
  * Author: امیرحسین سعادتی
  * Text Domain: cptt
  */
 
 if ( ! defined('ABSPATH') ) exit;
 
-define('CPTT_VERSION', '6.1.9');
+define('CPTT_VERSION', '7.1.0');
 define('CPTT_PATH', plugin_dir_path(__FILE__));
 define('CPTT_URL', plugin_dir_url(__FILE__));
 
@@ -33,6 +33,10 @@ require_once CPTT_PATH . 'includes/class-cptt-payment.php';
 require_once CPTT_PATH . 'includes/class-cptt-form-builder.php';
 require_once CPTT_PATH . 'includes/class-cptt-file-manager.php';
 require_once CPTT_PATH . 'includes/class-cptt-requests.php';
+require_once CPTT_PATH . 'includes/class-cptt-ai-assistant.php';
+require_once CPTT_PATH . 'includes/class-cptt-reminders.php';
+require_once CPTT_PATH . 'includes/class-cptt-finance.php';
+require_once CPTT_PATH . 'includes/class-cptt-finance-erp.php';
 
 register_activation_hook(__FILE__, ['CPTT_Core', 'activate']);
 register_activation_hook(__FILE__, function(){
@@ -122,4 +126,17 @@ add_action('plugins_loaded', function () {
 	CPTT_Form_Builder::instance();
 	CPTT_File_Manager::instance();
 	CPTT_Requests::instance();
+	CPTT_AI_Assistant::instance();
+	CPTT_Reminders::instance();
+	CPTT_Finance::instance();
+	CPTT_Finance_ERP::instance();
+});
+
+/* v6.4.0 — Ensure finance tables exist on activation. */
+register_activation_hook(__FILE__, function(){
+	if (class_exists('CPTT_Finance')) {
+		CPTT_Finance::install_tables();
+		update_option('cptt_finance_db_version', CPTT_Finance::DB_VERSION);
+		CPTT_Finance::seed_defaults();
+	}
 });

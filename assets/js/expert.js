@@ -691,6 +691,28 @@
     if (stat[0]) stat[0].textContent = (data.progress.percent || 0) + '%';
   }
 
+  // v6.1.10 — expose helpers globally so the lazy-load handler in
+  // expert-mobile-v610.js can re-initialize step accordions & step
+  // numbering on freshly-injected manage-form HTML.
+  if (typeof window !== 'undefined') {
+    window.bindStepAccordions = bindStepAccordions;
+    window.refreshStepNumbers = refreshStepNumbers;
+    window.bindProjectToggles = bindProjectToggles;
+    // v6.2.1 — bindSaveForms MUST be re-run after a lazy manage form is
+    // injected, otherwise pressing "ذخیره تغییرات" submits the form to the
+    // current page URL (the browser default) and the user is redirected
+    // to a garbled `https://site.com/?project_id=...` URL.
+    window.bindSaveForms = bindSaveForms;
+  }
+  // Auto re-bind on lazy-loaded form
+  document.addEventListener('cptt:manage-form-loaded', function(){
+    setTimeout(function(){
+      try { bindSaveForms(); } catch(_){}
+      try { bindStepAccordions(); } catch(_){}
+      try { bindProjectToggles(); } catch(_){}
+    }, 50);
+  });
+
   function bindCreateForm() {
     qsa('.cptt-expert-create-form').forEach(function (form) {
       if (form.dataset.bound) return;
@@ -3190,9 +3212,23 @@
       var form=e.target.closest('.cptt-expert-project-form'); if(form && e.target.matches('.cptt-currency-input,.cptt-step-paid,.cptt-step-cost')) updateManageSummary(form);
       if(e.target.classList && e.target.classList.contains('cptt-bell-badge')) forceBadgesWhite();
     });
+    // v6.2.1 — also re-enhance after a lazy-loaded manage form is injected.
+    document.addEventListener('cptt:manage-form-loaded', function(){
+      setTimeout(function(){
+        enhanceManageFinancialFields(document); addSettleButtons(); hardFloatingSave();
+      }, 60);
+    });
     window.addEventListener('resize', hardFloatingSave);
     window.addEventListener('scroll', function(){ var b=document.querySelector('body > .cptt-expert-save-floating'); if(b) b.style.zIndex='999995'; }, {passive:true});
   });
+
+  // v6.2.1 — expose enhanceManageFinancialFields & hardFloatingSave to global
+  // scope (we previously tried to do this in a different IIFE where the
+  // function wasn't defined, which caused "ReferenceError" at line 3271).
+  if (typeof window !== 'undefined') {
+    window.enhanceManageFinancialFields = enhanceManageFinancialFields;
+    window.hardFloatingSave = hardFloatingSave;
+  }
 })();
 
 /* =========================================================
@@ -3256,11 +3292,23 @@
     btn.style.zIndex='999995';
     btn.style.display = anyModalOpen() ? 'none' : 'inline-flex';
   }
+  // v6.1.10 — expose finance helpers so lazy-loaded manage forms can use them
+  // (enhanceManageFinancialFields lives in a different IIFE — exposed there)
+  if (typeof window !== 'undefined') {
+    window.layoutAllFinance = layoutAllFinance;
+  }
+
   ready(function(){
     layoutAllFinance(); moveSettleButtonsToProjectInfo(); modalAwareSave();
     document.addEventListener('click', function(e){ if(e.target.closest('.cptt-expert-toggleProject,.cptt-expert-add-step')) setTimeout(function(){layoutAllFinance(); moveSettleButtonsToProjectInfo(); modalAwareSave();},100); });
     document.addEventListener('input', function(e){ if(e.target.matches('.cptt-step-unit-price,.cptt-step-qty,.cptt-step-cost,.cptt-step-paid')) updateRemain(e.target.closest('.cptt-expert-step')); });
     document.addEventListener('click', function(){ setTimeout(modalAwareSave, 80); });
+    // v6.1.10 — also re-layout when a lazy manage-form is just injected.
+    document.addEventListener('cptt:manage-form-loaded', function(){
+      setTimeout(function(){
+        layoutAllFinance(); moveSettleButtonsToProjectInfo(); modalAwareSave();
+      }, 60);
+    });
   });
 })();
 
