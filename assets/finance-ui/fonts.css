@@ -1,0 +1,41 @@
+/* Local Persian fonts for ERP UI + Print/PDF/Excel exports.
+   URLs in this file are relative to this file's location:
+   /wp-content/plugins/.../assets/finance-ui/fonts.css
+   So "../fonts/Dana/..." resolves to /wp-content/plugins/.../assets/fonts/Dana/... */
+
+@font-face {
+  font-family: 'Dana';
+  src: url('../fonts/Dana/Dana-FaNum-Regular.ttf') format('truetype');
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Dana';
+  src: url('../fonts/Dana/Dana-FaNum-Medium.ttf') format('truetype');
+  font-weight: 500; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Dana';
+  src: url('../fonts/Dana/Dana-FaNum-Bold.ttf') format('truetype');
+  font-weight: 700; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Dana';
+  src: url('../fonts/Dana/Dana-FaNum-Light.ttf') format('truetype');
+  font-weight: 300; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Dana';
+  src: url('../fonts/Dana/Dana-FaNum-Black.ttf') format('truetype');
+  font-weight: 900; font-style: normal; font-display: swap;
+}
+
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('../fonts/Vazirmatn-Regular.ttf') format('truetype');
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('../fonts/Vazirmatn-Bold.ttf') format('truetype');
+  font-weight: 700; font-style: normal; font-display: swap;
+}
