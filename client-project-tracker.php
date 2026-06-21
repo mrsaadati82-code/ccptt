@@ -2,14 +2,14 @@
 /**
  * Plugin Name: هماهنگ - افزونه ی مدیریت پروژه و تیم
  * Description: هماهنگ، اولین افزونه ی اختصاصی ایرانی مدیریت پروژه است که امکاناتی فراتر از مدیریت پروژه دارد و مطابق با نیاز کسب و کار های ایرانی ساخته شده است. 
- * Version: 7.1.0
+ * Version: 8.0.1
  * Author: امیرحسین سعادتی
  * Text Domain: cptt
  */
 
 if ( ! defined('ABSPATH') ) exit;
 
-define('CPTT_VERSION', '7.1.0');
+define('CPTT_VERSION', '8.0.1');
 define('CPTT_PATH', plugin_dir_path(__FILE__));
 define('CPTT_URL', plugin_dir_url(__FILE__));
 
@@ -139,4 +139,39 @@ register_activation_hook(__FILE__, function(){
 		update_option('cptt_finance_db_version', CPTT_Finance::DB_VERSION);
 		CPTT_Finance::seed_defaults();
 	}
+});
+
+/* v7.10.0 (Phase 4) — Ensure ERP tables + roles exist on activation. */
+register_activation_hook(__FILE__, function(){
+	if (class_exists('CPTT_Finance_ERP')) {
+		// Install/upgrade tables (idempotent)
+		$erp = CPTT_Finance_ERP::instance();
+		if (method_exists($erp, 'install_all_tables'))           $erp->install_all_tables();
+		if (method_exists($erp, 'ensure_ledger_has_voucher_id')) $erp->ensure_ledger_has_voucher_id();
+		if (method_exists($erp, 'migrate_options_to_tables'))    $erp->migrate_options_to_tables();
+		// Phase 7: schedule cron jobs immediately on activation
+		if (method_exists($erp, 'maybe_schedule_crons'))         $erp->maybe_schedule_crons();
+	}
+	// Register ERP-specific WordPress roles (Phase 4 RBAC)
+	$base_caps = [
+		'read' => true,
+		'edit_cptt_projects' => true,
+		'read_cptt_project' => true,
+	];
+	$roles = [
+		'cptt_financial_manager' => 'مدیر مالی (ERP)',
+		'cptt_accountant'        => 'حسابدار (ERP)',
+		'cptt_cashier'           => 'تحویل‌دار صندوق (ERP)',
+	];
+	foreach ($roles as $key => $label) {
+		if (!get_role($key)) add_role($key, $label, $base_caps);
+	}
+});
+
+/* v7.13.0 (Phase 7) — Cleanup cron jobs on deactivation */
+register_deactivation_hook(__FILE__, function(){
+	$h_daily  = wp_next_scheduled('cpttf_erp_daily_cron');
+	$h_hourly = wp_next_scheduled('cpttf_erp_hourly_cron');
+	if ($h_daily)  wp_unschedule_event($h_daily,  'cpttf_erp_daily_cron');
+	if ($h_hourly) wp_unschedule_event($h_hourly, 'cpttf_erp_hourly_cron');
 });

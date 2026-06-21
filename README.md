@@ -1,6 +1,1123 @@
 # هماهنگ — افزونه‌ی مدیریت پروژه و تیم (CPTT)
 
-نسخه: **7.1.0**
+نسخه: **8.0.1**
+
+## 🔧 تغییرات نسخه‌ی 8.0.1 — حل مشکل M-۱: ذخیره‌ی source های React
+
+این یک patch کوچک است که زیرساخت لازم برای فاز ۹ را آماده می‌کند.
+
+### مشکل قبلی
+source های React (TypeScript) در `/tmp/mali` ذخیره می‌شدند که بین جلسات پاک می‌شد. این یعنی نمی‌توان به پنل React چیز جدیدی اضافه کرد یا تغییر داد.
+
+### راه‌حل
+ساخت پوشه‌ی جدید `ui-src/` در ریشه‌ی پلاگین که شامل:
+
+```
+ui-src/
+├── package.json           # dependency ها
+├── package-lock.json
+├── tsconfig.json          # تنظیمات TypeScript
+├── vite.config.ts         # build config با singlefile plugin
+├── index.html
+├── scripts/
+│   └── extract-bundle.py  # استخراج build شده به assets/
+├── README.md              # راهنمای کامل
+└── src/
+    ├── main.tsx
+    ├── index.css          # ۲۲۰ خط (Tailwind + FilterBar + anti-theme overrides)
+    ├── utils/
+    │   ├── cn.ts
+    │   ├── jalali.ts        # تقویم شمسی (self-contained)
+    │   ├── forceStyle.ts    # anti-WordPress-theme CSS forcing
+    │   ├── wpBridge.ts      # bridge کامل با ۱۲۴ endpoint
+    │   └── exporter.ts      # CSV/Excel/Print با فونت Dana
+    ├── context/             # (در فاز ۹ بازنویسی می‌شود)
+    └── components/          # (در فاز ۹ بازنویسی می‌شود)
+```
+
+### چه چیزی تغییر نکرد
+- پنل React موجود (`assets/finance-ui/app.js` با ۴۴۶ KB) **دست‌نخورده است**
+- هیچ قابلیتی حذف نشد
+- هیچ عملکردی تغییر نکرد
+- پلاگین مثل قبل کار می‌کند
+
+### چه چیزی اضافه شد
+- زیرساخت کامل برای rebuild پنل React در فاز ۹
+- ۸۱۵ خط کد util (۵ فایل کلیدی)
+- script استخراج خودکار bundle
+- README کامل با توضیح وضعیت و راهنمای build
+
+### فایل‌های تغییر یافته
+- ✨ پوشه‌ی جدید `ui-src/` با ۱۰ فایل اصلی
+- 🔁 `client-project-tracker.php` — bump به 8.0.1
+- 🔁 `README.md` — این بخش
+- 🔁 `ERP_MASTER_STATUS.txt` — مشکل M-۱ به DONE تغییر کرد
+
+### قدم بعدی (فاز ۹)
+حالا که زیرساخت ذخیره‌ی sources آماده است، در فاز ۹:
+- بازنویسی `AppContext.tsx` با ۱۲۴ endpoint
+- بازنویسی App.tsx + Sidebar + Navbar
+- بازنویسی ۲۴ component (همه بهبودهای فاز ۱-۸ حفظ می‌شود)
+- اضافه‌کردن ۶ تب جدید (Mapping, FY Close, Reports, Ops, Integrations, Invoices)
+
+---
+
+## 🎊 تغییرات نسخه‌ی 8.0.0 — فاز ۸: Integrations & Automations
+
+این نسخه پایان **فاز ۸** و **پایان کامل Roadmap** است. ۸ ماژول جدید + ۲۸ Endpoint جدید + ۲ صفحه‌ی admin کامل.
+
+### ۱) Bulk Import (CSV)
+- پشتیبانی از ۴ نوع داده: درآمد/هزینه، چک‌ها، بدهی‌ها، سرفصل حساب‌ها
+- ۲ حالت: **preview** (validate بدون save) + **commit** (ذخیره نهایی)
+- گزارش per-line موفق/ناموفق با پیام خطای واضح
+- نرمال‌سازی اعداد فارسی → انگلیسی خودکار
+- چک period lock در commit
+- در income_expense: voucher RV/PV خودکار + ledger
+- 2 endpoint: `import_preview`, `import_commit`
+
+### ۲) Multi-currency نرخ روزانه
+- ذخیره نرخ ارز per (currency, jalali_date)
+- جستجو با fallback به نزدیک‌ترین نرخ قبل
+- `currency_convert(from, to, amount, date)` با محاسبه دقیق از طریق TOMAN
+- 4 endpoint: `rates_list/save/delete`, `currency_convert`
+
+### ۳) Invoice/Quote Module
+- ۳ نوع: فاکتور، پیش‌فاکتور (quote)، پروفرما
+- جداول جدید: `wp_cptt_erp_invoices` + `_rows`
+- محاسبه‌ی خودکار: subtotal، discount، tax_amount، total
+- ۵ status: draft / sent / paid / cancelled / partial
+- **تبدیل به سند RV** (با یک کلیک پس از تسویه)
+- **چاپ رسمی** با template Dana
+- صفحه‌ی admin مستقل با لیست + فرم خط‌خط (lines)
+- 6 endpoint: `invoice_list/save/delete/status/to_voucher/print`
+
+### ۴) Webhooks خروجی
+- ذخیره URL + events + secret (HMAC-SHA256)
+- fire-and-forget روی event های کلیدی (voucher.created, invoice.saved, invoice.status)
+- header `X-Hamahang-Signature` با امضای HMAC
+- دکمه «⚡ تست» برای validation اتصال
+- 4 endpoint: `webhook_list/save/delete/test`
+
+### ۵) REST API عمومی (read-only)
+- namespace: `cpttf-erp/v1`
+- احراز با header `X-API-Key`
+- ۸ endpoint: `health`, `vouchers`, `accounts`, `receivables`, `cheques`, `payables`, `invoices`, `kpis`
+- مدیریت کلیدها در UI: ایجاد، list (با last 4)، باطل کردن
+- last_used tracking
+- نمایش full key فقط همان ۱ بار در ایجاد
+- 3 endpoint: `apikey_list/create/revoke`
+
+### ۶) ۲FA سبک‌وزن
+- TOTP-like با کد ۶ رقمی هر ۳۰ ثانیه
+- ارسال OTP به ایمیل کاربر در فعال‌سازی
+- tolerance ±30s در verify
+- audit log فعال‌سازی/غیرفعال‌سازی
+- 4 endpoint: `2fa_status/enable/verify/disable`
+
+### ۷) Standard Iran COA کامل
+سرفصل استاندارد جامعه‌ی حسابداران رسمی (~۵۰ حساب) که در فاز ۲ اضافه شد، حالا کاملاً قابل extend از طریق Bulk Import CSV.
+
+### ۸) ۲ صفحه‌ی Admin کامل
+- **🔌 یکپارچه‌سازی**: ۵ تب (Import / Rates / Webhooks / API / 2FA)
+- **🧾 فاکتورها**: لیست + فرم صدور با line editor + چاپ
+
+### ۲ جدول جدید
+- `wp_cptt_erp_invoices` (header)
+- `wp_cptt_erp_invoice_rows` (line items)
+
+### ۴ Option جدید
+- `OPT_CURRENCY_RATES` — نرخ‌های ارز
+- `OPT_WEBHOOKS` — webhook subscriptions
+- `OPT_API_KEYS` — REST API keys
+- `OPT_2FA` — ۲FA opt-in flags
+
+### معیارهای پذیرش فاز ۸ ✅
+1. ✅ سررسید چک ۷ روز قبل → SMS/Bale به مدیر مالی (در فاز ۷)
+2. ✅ Import یک CSV درآمد/هزینه با voucher خودکار
+3. ✅ صدور پیش‌فاکتور → تبدیل به فاکتور → چاپ → ثبت voucher
+4. ✅ Webhook به Slack/Discord روی voucher.created
+5. ✅ REST API با curl + X-API-Key
+6. ✅ ۲FA با کد ایمیل برای admin
+
+### آمار کل پایان Roadmap (v7.6.0 → v8.0.0)
+- **۸ فاز کامل ✅**
+- **+5,790 خط PHP** (از ~۲٫۳۵۰ خط v7.6 به ~۸٫۱۵۰ خط)
+- **+115 endpoint جدید** (از ۵۲ به ~۱۶۷)
+- **+9 جدول SQL جدید**
+- **+15+ admin page** برای مدیریت
+- **+4 print template** رسمی
+- **+2 WP-Cron jobs**
+- **+8 REST API routes**
+
+### آنچه به Frontend React منتقل می‌شود (فاز Future)
+صفحات admin این روادمپ به‌صورت **standalone PHP page** ساخته شدند تا React app موجود (با تمام بهبودهای فاز ۱-۷.۶) دست‌نخورده باقی بماند. در Future Phase می‌توان sources React را persist کرد و این صفحات را به sidebar یکپارچه نمود.
+
+---
+
+## ⚙ تغییرات نسخه‌ی 7.13.0 — فاز ۷: Operational Polish
+
+این نسخه پایان **فاز ۷** از Roadmap است. ۱۳ Endpoint جدید، ۴ template چاپ، ۲ WP-Cron job، ۱ admin page یکپارچه برای عملیات.
+
+### ۱) صفحه‌ی جدید «⚙ عملیات و اتوماسیون»
+- زیر منوی CPTT-Finance — برای همه نقش‌های ERP
+- ۴ تب: تکرارشونده / دفترچه چک / WP-Cron / چاپ سند
+
+### ۲) تراکنش‌های تکرارشونده (Recurring Transactions)
+- 4 frequency: روزانه/هفتگی/ماهانه/سالانه + interval قابل تنظیم
+- تاریخ شروع، پایان (اختیاری)، اجرای بعدی، اجرای آخر، شمارش اجراها
+- وضعیت فعال/غیرفعال
+- اجرای دستی فوری برای تست
+- اجرای خودکار توسط WP-Cron ساعتی
+- در هر اجرا: ledger entry + voucher RV/PV با ref_type=erp_recurring
+- 4 endpoint: `recurring_list/save/delete/run_now`
+
+### ۳) دفترچه چک (Cheque-Book Numbering)
+- تعریف دفترچه با: نام، بانک، سری حروف، سری صیادی، شماره شروع/پایان
+- محاسبه‌ی شماره بعدی خودکار
+- چک duplicate (هشدار اگر شماره با چک موجود تکراری باشد)
+- نمایش باقی‌مانده برگ‌ها با رنگ‌بندی (قرمز < ۵)
+- 4 endpoint: `chequebook_list/save/delete/next`
+
+### ۴) WP-Cron (اتوماسیون)
+دو cron job ثبت می‌شود (روی activate + admin_init):
+- **روزانه** (`cpttf_erp_daily_cron`):
+  - بازمحاسبه‌ی overdue chequeها، اقساط، payables
+  - ارسال reminder Bale به مدیر مالی برای چک‌های ۷/۳/۱ روز مانده
+  - ارسال reminder برای اقساط overdue
+  - حذف audit_log بالای ۱ سال
+- **ساعتی** (`cpttf_erp_hourly_cron`):
+  - اجرای recurring transactionsهای فعال که nextRun ≤ امروز
+  - update last_run + runs_count + next_run
+
+- لاگ هر اجرا در `OPT_CRON_LOG` ذخیره می‌شود
+- صفحه‌ی Cron نشان می‌دهد: زمان اجرای بعدی + گزارش آخرین اجرا
+- دکمه «اجرای دستی» برای CEO/admin
+- deactivation hook ⇒ unschedule
+
+### ۵) KPI Drill-down
+- endpoint جدید `kpi_drilldown` برای کلیک روی KPI dashboard
+- پشتیبانی از ۷ metric: revenue, expense, profit, cash_in, cash_out, receivables, payables
+- بازه‌ی تاریخ اختیاری
+- برگرداندن: total + لیست تراکنش‌ها با voucher_id برای لینک
+
+### ۶) Voucher Batch Entry
+- endpoint `voucher_batch` — ثبت چند سند در یک call
+- validation per voucher (debit==credit + period lock)
+- return: success count + failed count + per-voucher result
+- مفید برای import CSV
+
+### ۷) Unfinalize Voucher (CEO only)
+- endpoint `voucher_unfinalize` — بازکردن سند FINALIZED به DRAFT
+- فقط CEO + manage_options
+- چک period lock (نمی‌توان سند در دوره بسته را unfinalize کرد)
+- پاک کردن approver fields
+- audit log کامل
+
+### ۸) ۴ Template چاپ رسمی
+endpoint های جدید که HTML کامل با فونت Dana، header شرکت، signatures و print-bar برمی‌گردانند:
+
+| Endpoint | پارامتر | محتوا |
+|----------|---------|-------|
+| `print_voucher` | `id` | جزئیات سند + ردیف‌ها + جمع‌بندی + ۳ امضا |
+| `print_cheque` | `id` | اطلاعات کامل چک با مبلغ بزرگ |
+| `print_payslip` | `expert_id, from, to` | فیش پرداخت کارشناس با تاریخچه |
+| `print_statement` | `party_type, party_id, from, to` | صورت‌حساب اشخاص با running balance |
+
+- فونت Dana محلی، RTL، A4، CSS print-only
+- print-bar شناور (در حالت print مخفی)
+- header شرکت + تاریخ چاپ خودکار
+- signatures section: تنظیم‌کننده / تأییدکننده / مدیرعامل
+
+### ۹) Helper جدید
+- `fa_add_days($jalali, $days)` — افزودن روز به تاریخ شمسی
+- `next_run_after($rec)` — محاسبه‌ی اجرای بعدی recurring
+- `execute_recurring_item($rec)` — اجرای واقعی recurring (ledger + voucher)
+- `send_due_reminders()` — ارسال یادآور Bale
+- `print_styles()`, `company_header()`, `print_bar()`, `signatures()`, `fmt_money()` — print helpers
+
+### معیارهای پذیرش فاز ۷ ✅
+1. ✅ Cron روزانه اجرا و overdue ها به‌روز می‌شوند
+2. ✅ Cron ساعتی recurringها را اجرا می‌کند
+3. ✅ Drill-down روی هر KPI با لیست تراکنش‌ها
+4. ✅ Batch entry با success/failed report
+5. ✅ Print voucher با header شرکت + signatures + Dana
+6. ✅ Cheque-book numbering با duplicate guard
+7. ✅ Unfinalize با مجوز CEO + audit log
+8. ✅ deactivation hook برای cleanup cron
+
+### فایل‌های تغییر یافته
+- `includes/class-cptt-finance-erp.php`:
+  - +۷۰۰ خط Phase 7 logic (recurring, chequebook, cron, drilldown, batch, unfinalize)
+  - +۴۰۰ خط 4 print templates
+  - +۲۵۰ خط admin page «عملیات و اتوماسیون»
+  - +۱۳ endpoint جدید
+  - +۳ option جدید: OPT_RECURRING, OPT_CHEQUEBOOKS, OPT_CRON_LOG
+- `client-project-tracker.php`:
+  - schedule cron در activation
+  - deactivation hook برای unschedule
+
+---
+
+## 📊 تغییرات نسخه‌ی 7.12.0 — فاز ۶: گزارش‌های پیشرفته
+
+این نسخه پایان **فاز ۶** از Roadmap است. ۷ گزارش جدید استاندارد ERP اضافه شد، همگی در یک صفحه‌ی مستقل با تب‌بندی.
+
+### ۱) صفحه‌ی جدید «📊 گزارش‌های پیشرفته»
+- زیر منوی CPTT-Finance → «📊 گزارش‌های پیشرفته»
+- دسترسی: `edit_cptt_projects` (همه‌ی نقش‌های ERP)
+- ۷ تب با interface استاندارد و RTL کامل
+
+### ۲) صورت جریان وجوه نقد (Cash Flow Statement)
+- روش غیرمستقیم، ۳ سکشن استاندارد:
+  - **عملیاتی**: تغییرات دارایی‌های جاری + بدهی‌ها + درآمد/هزینه
+  - **سرمایه‌گذاری**: حساب‌های گروه ۲ (دارایی‌های غیرجاری)
+  - **تأمین مالی**: حساب‌های گروه ۴ (سرمایه/سود انباشته)
+- محاسبه‌ی مانده ابتدا/انتها/تغییر خالص بر اساس حساب‌های نقد (a1_1_*)
+- نمایش جزئیات هر تراکنش با حساب طرف و توضیح
+
+### ۳) مقایسه دوره‌ای (Period-over-Period)
+- دو بازه‌ی تاریخ A و B
+- مقایسه‌ی درآمد / هزینه / سود
+- محاسبه‌ی delta و درصد تغییر با رنگ‌بندی
+- مفید برای مقایسه «فروردین ۱۴۰۴ vs فروردین ۱۴۰۳»
+
+### ۴) بودجه vs واقعی
+- per cost center
+- نمایش بودجه تعریف‌شده، واقعی مصرف‌شده، اختلاف، درصد مصرف
+- progress bar رنگی (سبز < 80٪، زرد 80-100٪، قرمز > 100٪)
+- وضعیت: سالم / هشدار / بیش از بودجه / بدون بودجه
+
+### ۵) Aging مطالبات با پارامترهای دلخواه
+- تاریخ پایه قابل تنظیم (پیش‌فرض امروز)
+- بازه‌های قابل تنظیم با کاما (مثلاً `30,60,90,180,99999`)
+- محاسبه آخرین پرداخت هر مشتری از ledger
+- بازه‌بندی هر مشتری و جمع هر بازه
+
+### ۶) Aging چک‌ها
+- بازه‌بندی بر اساس روزها تا سررسید (منفی = گذشته)
+- ۵ بازه پیش‌فرض: گذشته (-30)، تا یک‌ماه آینده، 30/60/60+
+- تفکیک دریافتی و پرداختی
+
+### ۷) WIP Report (Work-In-Progress)
+- per پروژه: فاکتورشده / تکمیل‌شده / وصول‌شده
+- محاسبه over_billed / under_billed / matched
+- درصد تکمیل و درصد وصول با progress bar
+
+### ۸) Bank Reconciliation MVP
+- انتخاب حساب بانکی + بازه تاریخ
+- نمایش تمام حرکات ledger با checkbox تطبیق
+- ذخیره‌ی تطبیق‌شده‌ها در `OPT_BANK_RECON` per account
+- خلاصه: جمع ورود/خروج، تطبیق‌شده، تطبیق‌نشده
+- دکمه «انتخاب همه» / «انتخاب هیچ‌کدام»
+
+### ۹) ۸ Endpoint جدید
+- `cpttf_erp_cash_flow` (reports_view)
+- `cpttf_erp_period_compare` (reports_view)
+- `cpttf_erp_budget_actual` (reports_view)
+- `cpttf_erp_aging_custom` (reports_view)
+- `cpttf_erp_aging_cheques` (reports_view)
+- `cpttf_erp_wip_report` (reports_view)
+- `cpttf_erp_bank_recon` (reports_view)
+- `cpttf_erp_bank_recon_save` (treasury_payment)
+
+### ۱۰) Helper جدید
+- `fa_to_gregorian_ts($jalali)` — تبدیل تاریخ شمسی به Unix timestamp Gregorian
+- `compute_pl_range($from, $to)` — محاسبه سود/زیان بازه‌ای (استفاده در مقایسه)
+
+### معیارهای پذیرش فاز ۶ ✅
+1. ✅ Cash Flow با مانده‌ی صحیح ابتدا و انتها
+2. ✅ مقایسه دوره‌ای با درصد تغییر
+3. ✅ Budget vs Actual با progress bar رنگی
+4. ✅ Aging قابل تنظیم با بازه‌های دلخواه
+5. ✅ Aging چک‌های در جریان وصول و سررسید
+6. ✅ WIP per پروژه با over/under billing
+7. ✅ Bank Reconciliation با ذخیره‌ی تطبیق
+
+### فایل‌های تغییر یافته
+- `includes/class-cptt-finance-erp.php`:
+  - +۸ endpoint جدید (~۴۰۰ خط)
+  - +۲ helper جدید
+  - +constant `OPT_BANK_RECON`
+  - +صفحه‌ی admin جدید `render_reports_page()` با ۷ تب (~۳۸۰ خط)
+- `client-project-tracker.php` — bump به 7.12.0
+
+### نکته
+صفحه‌ی گزارش‌های پیشرفته، مانند صفحات قبلی فاز ۲ و ۵، standalone PHP page است (بدون نیاز به rebuild bundle React).
+
+---
+
+## 🗓 تغییرات نسخه‌ی 7.11.0 — فاز ۵: Period Locking & Fiscal Year Closing
+
+این نسخه پایان **فاز ۵** از Roadmap است. قفل دوره از حالت «نمایشی» به **اجبار واقعی در backend** ارتقا یافت + بستن سال مالی به‌صورت خودکار سند اختتامیه و افتتاحیه تولید می‌کند.
+
+### ۱) Period Locking واقعی (Backend Enforcement)
+- تابع `is_date_locked($jalali_date)`:
+  - چک تمام سال‌های مالی `CLOSED` → اگر تاریخ داخل بازه باشد → locked
+  - چک تمام `cpttf_erp_locks` با `isLocked=true`
+  - پشتیبانی از قفل با start/end خالی (یعنی کل FY)
+  - پشتیبانی از قفل با start فقط، end فقط، یا هر دو
+- تابع `reject_if_locked($date, $context)`:
+  - اگر date locked است → ۴۲۳ JSON با پیام واضح فارسی
+  - super-admin (manage_options) escape hatch دارد
+- enforcement در ۱۲ endpoint نوشتنی:
+  - `voucher_save` (با date کاربر)
+  - `voucher_delete` (با date سند موجود)
+  - `ie_save` (با date کاربر)
+  - `treasury_transfer/deposit/withdraw` (با امروز)
+  - `settle_steps/manual` (با امروز)
+  - `cheque_save` (با issueDate)
+  - `cheque_status` (با امروز)
+  - `installment_pay` (با امروز)
+  - `payable_pay` (با امروز)
+  - `project_quick_pay` (با امروز)
+
+### ۲) صفحه‌ی جدید «🗓 بستن سال مالی»
+- منوی جدید: CPTT-Finance → «🗓 بستن سال مالی» (فقط CEO/admin)
+- نمایش لیست سال‌های مالی با وضعیت + قفل
+- ۳ عملیات اصلی per FY:
+  1. **پیش‌نمایش بستن** — سود/زیان دوره + جزئیات حساب‌های موقت + مانده‌های دائمی
+  2. **اجرای بستن** — سند CV خودکار + قفل دوره + (اختیاری) سند OV برای سال بعدی
+  3. **بازکردن دوباره** — برای CEO + audit log
+
+### ۳) سند اختتامیه (CV) خودکار
+- تابع `fy_pl_summary($fy)`:
+  - aggregate همه‌ی vouchers FINALIZED در بازه‌ی FY
+  - حساب‌های گروه ۵ (درآمد) → balance بستانکار
+  - حساب‌های گروه ۶ (هزینه) → balance بدهکار
+  - skip CV/OV قبلی (جلوگیری از حلقه)
+  - return: revenue, expense, profit, rev_by_account, exp_by_account
+- در `ajax_fy_close_execute()`:
+  - debit هر حساب درآمدی به مبلغ مانده‌اش (zero-out)
+  - credit هر حساب هزینه‌ای به مبلغ مانده‌اش (zero-out)
+  - net (profit) به `retained_earnings` (پیش‌فرض a4_3) منتقل
+  - اگر زیان → debit به سود انباشته؛ اگر سود → credit
+- نوع سند: CV با date = endDate فیسکال یئر
+- status: FINALIZED، isAutoGenerated: true
+
+### ۴) سند افتتاحیه (OV) خودکار
+- تابع `fy_permanent_balances($fy)`:
+  - aggregate همه‌ی vouchers FINALIZED تا endDate
+  - حساب‌های گروه ۱-۴ (دارایی، بدهی، حقوق صاحبان سهام) → balance running
+  - filter حساب‌های با مانده ۰
+- در closing با next_fy_id:
+  - هر حساب دائمی با مانده‌اش به‌عنوان debit یا credit
+  - اگر sum debit ≠ sum credit (تفاوت گرد کردن) → plug به retained_earnings
+  - نوع سند: OV با date = startDate سال بعد
+
+### ۵) ۵ Endpoint جدید
+- `cpttf_erp_period_check` — کوئری: آیا این تاریخ قفل است؟ (برای UI)
+- `cpttf_erp_fy_close_preview` — preview سود/زیان قبل از بستن
+- `cpttf_erp_fy_close_execute` — اجرای واقعی بستن (CEO only)
+- `cpttf_erp_fy_reopen` — بازکردن دوباره FY (CEO only)
+- `cpttf_erp_lock_clear` — حذف تمام قفل‌های یک FY (CEO only)
+
+### ۶) ۲ Account Mapping جدید
+- `retained_earnings` — سود (زیان) انباشته (پیش‌فرض a4_3)
+- `profit_loss_summary` — حساب کنترلی جمع‌بندی سود/زیان
+
+### ۷) Backward Compatibility
+- super-admin (administrator) همیشه می‌تواند روی دوره‌ی بسته تراکنش ثبت کند (escape hatch)
+- سند CV/OV قابل reverse هستند (با دکمه «↻ برگشت سند» در صفحه Vouchers)
+- reopen FY سند CV/OV را حذف نمی‌کند — audit trail سالم می‌ماند
+
+### معیارهای پذیرش فاز ۵ ✅
+1. ✅ ثبت سند با تاریخ در دوره‌ی قفل → پیام خطای ۴۲۳ واضح
+2. ✅ بستن سال مالی، سند CV متعادل تولید می‌کند
+3. ✅ سال جدید با مانده‌ی صحیح حساب‌های دائمی شروع می‌شود (سند OV)
+4. ✅ CEO می‌تواند FY بسته را reopen کند
+5. ✅ همه‌ی عملیات در audit_log ثبت می‌شوند
+6. ✅ super-admin escape hatch دارد
+
+### فایل‌های تغییر یافته
+- `includes/class-cptt-finance-erp.php`:
+  - +۳۰۰ خط helpers: `fa_date_cmp`, `to_en_digits`, `is_date_locked`, `reject_if_locked`, `fy_for_date`, `fy_pl_summary`, `fy_permanent_balances`
+  - +۵ endpoint: `ajax_period_check`, `ajax_fy_close_preview`, `ajax_fy_close_execute`, `ajax_fy_reopen`, `ajax_lock_clear`
+  - +reject_if_locked در ۱۲ endpoint نوشتنی
+  - +۲ purpose در default_account_mapping (retained_earnings, profit_loss_summary)
+  - +صفحه‌ی admin جدید `render_fyclose_page()` با CSS+JS داخلی
+- `client-project-tracker.php` — bump به 7.11.0
+
+### نکته
+صفحه‌ی «🗓 بستن سال مالی» مانند صفحه‌ی Account Mapping به‌صورت standalone PHP rendered است (نیازی به rebuild bundle ندارد).
+
+---
+
+## 🔐 تغییرات نسخه‌ی 7.10.0 — فاز ۴: Security & RBAC واقعی
+
+این نسخه پایان **فاز ۴** از Roadmap است. permission matrix که قبلاً فقط در UI کار می‌کرد، حالا در backend هم enforce می‌شود. کاربر کارشناس دیگر دسترسی کامل به ERP ندارد.
+
+### ۱) سیستم RBAC جدید (Backend Enforcement)
+- تابع جدید `current_role_key()`: نقش ERP کاربر را از WordPress role می‌خواند
+  - `administrator` → ceo
+  - `cptt_financial_manager` → financial_manager
+  - `cptt_accountant` → accountant
+  - `cptt_cashier` → cashier
+  - `cptt_expert` → **viewer** (تنها مشاهده) — قبلاً به‌عنوان accountant کامل دسترسی داشت!
+  - سایر → viewer
+- تابع `role_has_perm($perm)`: چک می‌کند نقش فعلی این permission را دارد یا نه
+  - manage_options (super-admin) همیشه pass می‌شود (escape hatch)
+  - خواندن از matrix ذخیره‌شده در `OPT_PERMS`، در صورت نبود به `default_role_perms()` fallback
+- تابع `check_perm($perm)`: nonce + base capability + specific perm را چک می‌کند
+
+### ۲) ۱۲ Permission Key
+- voucher_view, voucher_create, voucher_approve, voucher_delete, voucher_reverse
+- reports_view, treasury_view, treasury_payment, project_finance_view
+- audit_view, settings_manage, mapping_manage
+
+### ۳) ۴۱ Endpoint به perm-aware تبدیل شد
+هر endpoint حالا فقط با permission مناسب فراخوانی می‌شود (نه فقط `edit_cptt_projects`):
+- ۴ Voucher endpoint
+- ۸ Settings endpoint (coa, cc, fy, fincat, lock)
+- ۵ Treasury endpoint
+- ۲ IE endpoint
+- ۲ Settlement endpoint
+- ۳ Cheque endpoint
+- ۳ Installment endpoint
+- ۳ Payable endpoint
+- ۲ Attachment endpoint
+- ۳ Project endpoint
+- ۳ Mapping endpoint (mapping_manage)
+- ۲ Audit/Permissions endpoint
+
+### ۴) Rate-Limiting
+- روی endpointهای حساس write: حداکثر ۶۰ request در ۶۰ ثانیه per (user, perm)
+- استفاده از transient API وردپرس
+- پیام خطای ۴۲۹ با متن فارسی
+
+### ۵) MIME Type Validation واقعی روی Upload
+- تابع جدید `validate_uploaded_file()`:
+  - inspect actual file contents با `wp_check_filetype_and_ext()` (نه فقط extension)
+  - فایل با extension `.jpg` ولی محتوای .php → reject
+  - حداکثر سایز قابل تنظیم با filter `cpttf_erp_max_upload_bytes` (پیش‌فرض ۱۰ MB)
+  - whitelist: PDF, JPG/JPEG, PNG, ZIP
+
+### ۶) KSES Sanitization Helper
+- تابع جدید `safe_text($v, $allow_basic = false)`:
+  - default: `wp_strip_all_tags()` + truncate ۵۰۰۰ char
+  - با `allow_basic=true`: KSES با whitelist محدود (br, p, b, strong, i, em, u, span, a)
+  - برای استفاده در فاز ۵ به بعد روی description ها
+
+### ۷) Audit Log به همه‌ی CRUD ها اضافه شد
+عملیات‌هایی که قبلاً audit نمی‌شدند، حالا می‌شوند:
+- `income_expense` create/delete (با reverse_voucher_id)
+- `treasury_deposit/withdraw/transfer` create
+- `cost_center` create/update/delete
+- `fiscal_year` create/close
+- `period_lock` toggle
+- موارد قبلی (voucher, cheque, payable, installment, attachment, permissions, mapping, coa) دست‌نخورده
+
+### ۸) نقش‌های ERP در Activation
+- روی `register_activation_hook` سه نقش جدید WordPress ساخته می‌شوند:
+  - `cptt_financial_manager` — مدیر مالی (ERP)
+  - `cptt_accountant` — حسابدار (ERP)
+  - `cptt_cashier` — تحویل‌دار صندوق (ERP)
+- هر کدام capability پایه `edit_cptt_projects` را دارند (برای ورود به ERP)
+- نقش `cptt_expert` موجود بدون تغییر باقی می‌ماند، اما در ERP دسترسی محدود `viewer` می‌گیرد
+
+### ۹) Activation Hook Phase 3 جدید
+- روی activation: install tables + ensure_ledger_has_voucher_id + migrate_options
+- روی نصب اولیه، migration در همان لحظه‌ی activate رخ می‌دهد (نه در admin_init)
+
+### معیارهای پذیرش فاز ۴ ✅
+1. ✅ Cashier نمی‌تواند voucher create کند حتی با direct AJAX call
+2. ✅ کارشناس نمی‌تواند permissions را عوض کند (only viewer)
+3. ✅ آپلود فایل .php با extension تقلبی .jpg → reject با پیام واضح
+4. ✅ هر CRUD در audit_log ثبت می‌شود
+5. ✅ Rate-limit برای جلوگیری از abuse و brute-force
+6. ✅ Super-admin (manage_options) همیشه escape hatch دارد
+7. ✅ ۳ نقش جدید WordPress در فعال‌سازی ساخته می‌شوند
+
+### فایل‌های تغییر یافته
+- `includes/class-cptt-finance-erp.php`:
+  - +۱۶۰ خط (helpers: `current_role_key`, `default_role_perms`, `role_has_perm`, `check_perm`, `rate_limit_check`, `validate_uploaded_file`, `safe_text`)
+  - ۴۱ endpoint با `check()` → `check_perm($perm)`
+  - ۵ audit_log جدید
+  - ۳ جا hardcoded role mapping با `current_role_key()` جایگزین شد
+  - `ajax_attachment_upload` با MIME validation سفت‌شده
+- `client-project-tracker.php`:
+  - bump به 7.10.0
+  - activation hook جدید: install ERP tables + add roles
+
+### مهاجرت ایمن
+- کاربر کارشناس که قبلاً وارد ERP می‌شد، حالا نقش `viewer` می‌گیرد (read-only)
+- اگر می‌خواهید کارشناس خاصی دسترسی editing داشته باشد، نقش او را در WP به `cptt_financial_manager` یا `cptt_accountant` تغییر دهید
+- permissions matrix در صفحه «سطوح دسترسی» همان UI قبلی است؛ الان واقعاً اثر دارد
+
+---
+
+## ⚡ تغییرات نسخه‌ی 7.9.0 — فاز ۳: Migration دیتابیس + کارایی
+
+این نسخه پایان **فاز ۳** از Roadmap است. تمام داده‌های ERP که در `wp_options` array-style ذخیره می‌شدند (و بزرگ‌ترین scalability bottleneck بودند) به **جداول اختصاصی** منتقل شدند.
+
+### ۱) ۶ جدول جدید + Migration خودکار
+- `wp_cptt_erp_vouchers` — هدر سند (با ۶ index: type, status, date, ref, fy, number)
+- `wp_cptt_erp_voucher_rows` — ردیف‌های سند (با ۵ index: voucher, account, project, customer, expert)
+- `wp_cptt_erp_cheques` — چک‌ها (با ۶ index: kind, status, due, party, sayyadi, bank)
+- `wp_cptt_erp_payables` — بدهی‌ها (با ۳ index: party, status, due)
+- `wp_cptt_erp_installments` — برنامه‌های قسط (با ۳ index)
+- `wp_cptt_erp_installment_rows` — قسط‌های جداگانه (با UNIQUE plan_no + ۲ index)
+
+**Migration Runner**: روی `admin_init` خودکار اجرا می‌شود (idempotent). هر بار کد بالاتر از `DB_VERSION` ذخیره‌شده باشد:
+- `install_all_tables()` — `dbDelta` همه‌ی جداول
+- `ensure_ledger_has_voucher_id()` — اضافه‌کردن ستون `voucher_id` به `wp_cptt_fin_ledger` + ۴ index جدید (date_at, project_id, customer_id, ref_type)
+- `migrate_options_to_tables()` — انتقال داده‌های موجود از options به جداول
+- `disable_autoload_for_legacy_options()` — حذف autoload از ۷ option بزرگ
+
+### ۲) Voucher Engine روی Table
+- `gen_voucher()` حالا مستقیماً به `wp_cptt_erp_vouchers` + `_rows` می‌نویسد
+- `ajax_voucher_save/approve/delete` همگی روی جدول کار می‌کنند
+- `read_vouchers_from_table()` با single JOIN: همه‌ی vouchers + rows در ۲ کوئری (نه N+1)
+- legacy `get_vouchers_legacy()` به‌عنوان fallback نگه داشته شده
+
+### ۳) Cheques/Payables/Installments روی Table
+- خواندن و نوشتن همگی روی جداول
+- legacy option fallback برای backward compatibility
+- saveOnce strategy: callers لیست کامل می‌فرستند، table با TRUNCATE+rebuild هم‌گاه می‌شود
+
+### ۴) Index های بهینه روی `wp_cptt_fin_ledger`
+- `date_at_idx` — برای فیلتر بازه‌ی تاریخ
+- `project_id_idx` — برای گزارش پروژه
+- `customer_id_idx` — برای صورت‌حساب مشتری
+- `ref_type_idx` — برای group-by منبع
+- `voucher_id_idx` — برای back-ref به سند (ستون جدید)
+
+### ۵) N+1 Killer در `build_*` methods
+- `build_receivables()`:
+  - `update_meta_cache('post', $pids)` — یک کوئری برای همه meta
+  - `get_users(include=$cids)` — یک کوئری برای همه‌ی customer ها
+  - `static $roles_cache` — حذف فراخوانی تکراری
+- `build_projects_full()`:
+  - `update_meta_cache('post', $pids)` — یک کوئری به‌جای N×3
+  - `no_found_rows=true` — سرعت بیشتر
+
+### ۶) Chunked Bootstrap (۵ endpoint جدید)
+به‌جای یک `full_bootstrap` سنگین، می‌توان بخش‌بخش بارگذاری کرد:
+- `cpttf_erp_bootstrap_core` — companies, branches, fy, accounts, role, mapping
+- `cpttf_erp_bootstrap_treasury` — treasuryAccounts, cheques, payables, installments
+- `cpttf_erp_bootstrap_projects` — projectsFull, receivables, experts, steps
+- `cpttf_erp_bootstrap_reports` — vouchers, settlements, ie, categories, locks
+- `cpttf_erp_bootstrap_kpis` — kpis, monthlySeries, topCustomers, breakdowns, notifs
+
+⚠ نکته: React app موجود همچنان `full_bootstrap` را صدا می‌زند (backward compatible). فاز ۸/۹ یک React refactor می‌کند تا از chunkها استفاده کند.
+
+### ۷) Audit Log Pagination
+- `cpttf_erp_audit_list` حالا با `page` و `per_page` (پیش‌فرض ۵۰) کار می‌کند
+- return شامل `total`, `total_pages`, `page`, `per_page`
+- پیش از این `LIMIT 500` ثابت بود
+
+### ۸) Diagnostics Endpoint
+- `cpttf_erp_migration_status` — برمی‌گرداند:
+  - `db_version` فعلی
+  - `target_version` کد
+  - تعداد ردیف هر جدول
+  - تعداد item های هر option قدیمی
+  - برای troubleshooting و monitoring
+
+### معیارهای پذیرش فاز ۳ ✅
+1. ✅ Migration خودکار روی نصب بدون مداخله‌ی کاربر
+2. ✅ هیچ option ای بزرگ‌تر از ۱۰ KB autoload نمی‌شود
+3. ✅ جداول با مناسب‌ترین index ها ساخته می‌شوند
+4. ✅ N+1 در build_receivables و build_projects_full حل شده
+5. ✅ Audit log با pagination واقعی کار می‌کند
+6. ✅ Voucher CRUD به‌صورت native روی جدول کار می‌کند
+7. ✅ Backward compatible: legacy options به‌عنوان fallback نگه داشته شده
+
+### فایل‌های تغییر یافته
+- `includes/class-cptt-finance-erp.php` — ۷۶۵+ خط جدید:
+  - constants: `OPT_DB_VERSION`, `DB_VERSION`, ۶ `TBL_*`
+  - methods: `maybe_run_migrations()`, `install_all_tables()`, `ensure_ledger_has_voucher_id()`, `migrate_options_to_tables()`, `disable_autoload_for_legacy_options()`, `insert_*_into_table()` x4, `read_vouchers_from_table()`, `get_vouchers_legacy()`, ۵ `ajax_bootstrap_*`, `ajax_migration_status`
+  - بازنویسی: `get_vouchers()`, `get_cheques()`, `save_cheques()`, `get_payables()`, `save_payables()`, `get_installment_plans()`, `save_installment_plans()`, `ajax_voucher_save/approve/delete`, `gen_voucher()`
+- `client-project-tracker.php` — bump به 7.9.0
+
+### پس از نصب اولین بار
+- وارد ادمین وردپرس شوید → migration خودکار اجرا می‌شود
+- در URL `?page=cptt-finance-erp&action=migration_status` (یا با ajax tool) چک کنید همه جدول‌ها ساخته شده‌اند
+- تعداد ردیف هر جدول باید با تعداد item قدیمی option مطابق باشد
+
+---
+
+## 🎯 تغییرات نسخه‌ی 7.8.0
+
+## 🎯 تغییرات نسخه‌ی 7.8.0 — فاز ۲: Account Mapping قابل پیکربندی
+
+این نسخه پایان **فاز ۲** از Roadmap است. هیچ account ID دیگر در voucher engine hardcode نیست. کاربر CEO می‌تواند نگاشت پیش‌فرض را در یک صفحه ساده تنظیم کند.
+
+### ۱) صفحه‌ی جدید «🧭 نگاشت حساب‌های پیش‌فرض»
+- منوی جدید زیر CPTT → «🧭 نگاشت حساب‌ها» (فقط CEO/admin)
+- ۱۲ نگاشت قابل تنظیم در ۵ گروه (دارایی، بدهی، درآمد، هزینه، اختیاری):
+  - `cash_default` — صندوق پیش‌فرض (برای CASH treasury)
+  - `bank_default` — بانک پیش‌فرض (برای BANK treasury)
+  - `receivable_default` — بدهکاران تجاری
+  - `notes_receivable` — اسناد دریافتنی (چک‌های دریافتی)
+  - `payable_default` — بستانکاران تجاری
+  - `notes_payable` — اسناد پرداختنی (چک‌های پرداختی)
+  - `expert_payable` — بدهی به کارشناسان
+  - `revenue_default` — درآمد ارائه خدمات
+  - `other_income` — سایر درآمدها
+  - `expense_default` — هزینه‌های اداری
+  - `expert_payroll` — دستمزد کارشناس
+  - `transfer_clearing` — حساب کلیرینگ (اختیاری)
+- هر فیلد یک Select از همه‌ی حساب‌های CoA با indent بر اساس type
+- نمایش hint توضیحی زیر هر فیلد
+
+### ۲) نگاشت per-treasury → CoA subsidiary
+- هر صندوق/بانک می‌تواند به یک حساب CoA خاص نگاشت شود (override بر pre-default)
+- اگر تعیین نشد، fallback به `cash_default` یا `bank_default` بر اساس نوع
+- ذخیره در `OPT_TREASURY_COA_MAP`
+
+### ۳) وارد کردن سرفصل استاندارد ایران
+- دکمه‌ی «➕ افزودن (Merge)»: حساب‌های جدید استاندارد اضافه می‌شوند، موجودها حفظ
+- دکمه‌ی «⚠ جایگزینی (Replace)»: کل کدینگ پاک و سرفصل ۴-سطحی استاندارد جایگزین می‌شود
+- سرفصل استاندارد شامل ~۵۰ حساب در ۶ گروه اصلی (دارایی جاری/غیرجاری، بدهی، حقوق صاحبان سهام، درآمد، هزینه) با subaccount های رایج
+
+### ۴) محاسبه‌ی مانده‌ی زنده روی CoA tree
+- تابع جدید `get_coa_with_balances()` در PHP
+- aggregate از voucherها با parent chain rollup (انتخاب حساب کل، جمع زیرحساب‌ها)
+- فقط vouchers با status `FINALIZED/MANAGER_APPROVED/ACCOUNTANT_APPROVED` لحاظ می‌شوند
+- مانده زنده در bootstrap به‌جای زدن ۰، عدد واقعی فرستاده می‌شود
+- صفحه‌ی «نگاشت حساب‌ها» جدول مانده‌ی زنده‌ی سرفصل‌های کل/گروه را نشان می‌دهد
+- صفحه‌ی «کدینگ حساب‌ها» در React app هم خودکار از این داده استفاده می‌کند
+
+### ۵) Voucher Engine بدون hardcode
+همه‌ی `gen_voucher()` calls حالا از `map_account('purpose')` استفاده می‌کنند:
+- treasury_deposit, withdraw, transfer
+- ie_save (income/expense)
+- project_quick_pay
+- auto_voucher_expert_payout, manual_payment
+- cheque save/status
+- installment_pay
+- payable_pay
+- map_treasury_to_coa هم از نگاشت می‌خواند
+
+### ۶) Endpoint های جدید Backend
+- `cpttf_erp_mapping_get` — برگرداندن نگاشت فعلی + accountها + treasury + purposes
+- `cpttf_erp_mapping_save` — ذخیره با validation (CoA id باید موجود باشد)
+- `cpttf_erp_coa_balances` — برگرداندن `{coa_id: {debit, credit, balance}}`
+- `cpttf_erp_coa_import_standard` — import با mode merge/replace
+- `cpttf_erp_coa_treasury_map_save` — ذخیره‌ی per-treasury map (sub-API)
+
+### ۷) Bootstrap Payload Extend
+- `accountMapping` — نگاشت فعلی
+- `treasuryCoaMap` — نگاشت per-treasury
+- `mappingPurposes` — labels فارسی برای purpose keys
+- `accounts` حالا با balance زنده می‌آید (بدون تغییر API)
+
+### معیارهای پذیرش فاز ۲ ✅
+1. ✅ تغییر کدینگ هیچ‌گاه باعث ثبت voucher به حساب اشتباه نمی‌شود (همه از map_account)
+2. ✅ balance روی هر node در ChartOfAccounts زنده است (از voucherها)
+3. ✅ COA استاندارد ایران در یک کلیک import می‌شود (Merge یا Replace)
+4. ✅ CEO می‌تواند نگاشت‌ها را در UI تنظیم کند
+5. ✅ per-treasury override برای حساب‌های خاص
+
+### فایل‌های تغییر یافته
+- `includes/class-cptt-finance-erp.php` — ۶۰۰+ خط جدید:
+  - constants: `OPT_ACCOUNT_MAPPING`, `OPT_TREASURY_COA_MAP`
+  - methods: `default_account_mapping()`, `get_account_mapping()`, `map_account()`, `get_coa_with_balances()`, `standard_iran_coa()`, `account_mapping_purpose_labels()`, `get_treasury_coa_map()`
+  - endpoints: ۵ endpoint جدید
+  - admin page: `render_mapping_page()` با CSS + JS داخلی
+- `client-project-tracker.php` — bump به 7.8.0
+
+### نکته‌ی فاز ۳
+صفحه‌ی نگاشت در فاز ۲ به‌صورت admin page مستقل (PHP-rendered) تحویل داده شده تا app.js بازسازی نشود. در فاز ۳ که migration پایگاه‌داده انجام می‌شود، React component مشابه به sidebar اضافه می‌شود.
+
+---
+
+## 🔥 تغییرات نسخه‌ی 7.7.0
+
+## 🔥 تغییرات نسخه‌ی 7.7.0 — فاز ۱: Voucher Engine کامل
+
+این نسخه پایان **فاز ۱** از Roadmap (ERP_FIX_ROADMAP.md) است. تمام gapهای موتور حسابداری که در ERP_AUDIT_REPORT گزارش شدند، رفع شد.
+
+### رفع gap های Voucher Engine
+رویدادهایی که قبلاً voucher تولید نمی‌کردند و حالا تولید می‌کنند:
+
+| رویداد | قبل | حالا |
+|--------|-----|------|
+| Customer Quick Pay | ❌ فقط ledger | ✅ RV voucher + ledger |
+| Income (IncomeExpense save) | ❌ فقط ledger | ✅ RV voucher + ledger |
+| Expense (IncomeExpense save) | ❌ فقط ledger | ✅ PV voucher + ledger |
+| Treasury Deposit | ❌ فقط ledger | ✅ RV voucher + ledger |
+| Treasury Withdraw | ❌ فقط ledger | ✅ PV voucher + ledger |
+| Treasury Transfer | ❌ فقط ۲ ledger | ✅ TV voucher + ۲ ledger |
+| IncomeExpense Delete | ❌ بدون reverse | ✅ تولید سند برگشتی خودکار |
+
+### ابزارهای جدید Backend
+- **`map_treasury_to_coa($treasury_id)`**: نگاشت خودکار حساب treasury (CASH→a1_1_2, BANK→a1_1_1) به subsidiary استاندارد در CoA. نام به صورت «بانک‌های ریالی — ملت ۱۲۳» تولید می‌شود.
+- **`validate_voucher_rows($rows)`**: اعتبارسنجی backend (debit==credit ±۱ ریال tolerance، عدم منفی، عدم همزمانی debit/credit در یک ردیف، حداقل یک ردیف). در `ajax_voucher_save` و `gen_voucher` اعمال می‌شود.
+- **`gen_reverse_voucher($voucher_id, $note)`**: تولید سند برگشتی با debit/credit عوض‌شده، status `FINALIZED`، با لینک به مرجع.
+- **`coa_name($account_id)`**: lookup خودکار نام حساب از CoA (در voucher rows دیگر نام نباید hardcoded باشد).
+
+### Endpoint جدید
+- `cpttf_erp_voucher_reverse` — تولید سند برگشتی برای هر voucher موجود
+
+### بهبود `gen_voucher()`
+- نام حساب از CoA به‌صورت خودکار خوانده می‌شود (نه hardcoded)
+- پشتیبانی از پارامتر `date` (اختیاری، پیش‌فرض امروز شمسی)
+- پارامتر `strict` (default true) — اگر validation شکست بخورد، `WP_Error` برمی‌گرداند
+- نرمال‌سازی types: float برای amount، int برای IDها، sanitize_text_field برای description
+
+### COA پیش‌فرض گسترش یافت
+حساب‌های جدید برای پشتیبانی از Phase 1:
+- `a1_1_3` — اسناد دریافتنی (چک‌های دریافتی)
+- `a3_1` — حساب‌ها و اسناد پرداختنی (general)
+- `a3_1_1` — بستانکاران تجاری (پیمانکاران/تامین‌کنندگان)
+- `a3_1_2` — اسناد پرداختنی (چک‌های پرداختی)
+- `a3_1_3` — بدهی به کارشناسان
+- `a5_1` — درآمد ارائه خدمات
+- `a5_2` — سایر درآمدها
+
+### دکمه «↻ برگشت سند» در UI
+- در صفحه‌ی Vouchers، اسناد `FINALIZED` دکمه‌ی جدید «برگشت سند» دارند
+- با prompt برای توضیح اختیاری
+- تولید سند معکوس متعادل با ref به مرجع
+- پیشنهاد: به‌جای حذف سند، از این دکمه استفاده شود (audit trail سالم می‌ماند)
+
+### معیارهای پذیرش فاز ۱ ✅
+1. ✅ ثبت یک income → در دفتر روزنامه‌ی واقعی دیده می‌شود (بدون نیاز به synth)
+2. ✅ Transfer بین دو حساب → یک سند TV متعادل در دفتر کل ظاهر می‌شود
+3. ✅ debit ≠ credit در backend reject می‌شود با پیام واضح
+4. ✅ حذف IE → سند برگشتی خودکار تولید می‌شود (audit trail کامل)
+5. ✅ نام حساب در voucher rows خودکار از CoA fetch می‌شود
+
+### فایل‌های تغییر یافته
+- `includes/class-cptt-finance-erp.php` — ۲۶۰+ خط جدید (helpers + ۸ endpoint بازنویسی)
+- `assets/finance-ui/app.js` + `app.css` — rebuild
+- `src/utils/wpBridge.ts` — `reverseVoucher` endpoint
+- `src/context/AppContext.tsx` — `reverseVoucher` در public API
+- `src/components/Vouchers.tsx` — دکمه «برگشت سند»
+
+### Phase 2 → آغاز بعدی
+Account Mapping قابل پیکربندی (جایگزینی hardcoded a3_1_1, a5_1 و … با تنظیمات قابل ویرایش در UI).
+
+---
+
+## 🎯 تغییرات نسخه‌ی 7.6.0
+
+## 🎯 تغییرات نسخه‌ی 7.6.0 (UX فیلترها، تب تسویه‌شده، گزارش‌های دقیق)
+
+### 1️⃣ کامپوننت یکپارچه FilterBar (همه صفحات لیست)
+- کامپوننت جدید `FilterBar` + `CompactField` در `UI.tsx`
+- CSS جدید `.cptt-filterbar` با grid responsive:
+  - موبایل: ۲ ستون
+  - تبلت (sm): ۳ ستون / (md): ۴ ستون
+  - دسکتاپ (lg): ۶ ستون / (xl): ۸ ستون
+- فیلدهای داخل filterbar فشرده‌ترند: padding 0.45rem 0.7rem، font 0.72rem، height 2.25rem
+- بدین ترتیب همه فیلترها در ۱ تا حداکثر ۲ ردیف جای می‌گیرند
+- صفحات بازنویسی‌شده:
+  - **اسناد حسابداری** (Vouchers) — ۸ فیلتر در یک نگاه
+  - **درآمدها و هزینه‌ها** (IncomeExpense) — ۴ فیلتر
+  - **مطالبات مشتریان** (Receivables) — ۳ فیلتر
+  - **صورت‌حساب اشخاص** (PartyStatement) — ۶ فیلتر
+  - **خزانه‌داری** (Treasury) — ۲ + ۲ filter بار
+  - **گردش حساب یکپارچه** (Ledger) — ۳ فیلتر
+  - **چک‌ها** (Cheques) — ۷ فیلتر
+  - **بدهی‌ها** (Payables) — ۶ فیلتر
+  - **حساب پروژه‌ها** (ProjectAccounting) — ۴ فیلتر
+  - **دفاتر و گزارشات مالی** (FinancialReports) — ۶ فیلتر
+
+### 2️⃣ تب «تسویه‌شده» در تسویه کارشناسان
+- ۳ تب جدید در صفحه تسویه کارشناسان:
+  - **منتظر تسویه** — کارشناسان با `pendingBalance > 0`
+  - **تسویه‌شده** — کارشناسان با `pendingBalance == 0 && paidBalance > 0` با نمایش جزئیات: مراحل تسویه‌شده و رکوردهای پرداخت
+  - **تاریخچه تسویه‌ها** — جدول کامل با فیلتر (جستجو، کارشناس، بازه تاریخ) + Pagination + جمع کل
+- KPI چهارم اضافه شد: «رکوردهای تسویه»
+
+### 3️⃣ دکمه «انتقال بین حساب‌ها» در منو فعال شد
+- در `App.tsx` تب `transfers` با prop `initialMode="transfer"` به کامپوننت Treasury هدایت شد
+- prop جدید در Treasury: وقتی `initialMode === 'transfer'`، خودکار Modal «انتقال وجه بین حساب‌ها» باز می‌شود با حساب اولین تنظیم‌شده به‌عنوان مبدا
+
+### 4️⃣ گزارشات مالی — اصلاح ریشه‌ای
+**مشکل قبلی:** lookup حساب‌ها فقط از حساب‌هایی که در voucherها ظاهر شده بودند انجام می‌شد → اگر voucher ثبت نشده بود، dropdown خالی بود.
+- `LedgerReport` بازنویسی شد:
+  - تمام درخت حساب‌ها (`accounts`) flat می‌شود
+  - بر اساس `mode='general'` فقط حساب‌های کل/گروه؛ `mode='subsidiary'` فقط معین/تفصیلی
+  - label با فرمت `کد — نام`
+  - aggregation با parent chain: انتخاب یک حساب کل، جمع زیرحساب‌هایش را نشان می‌دهد
+  - نمایش حساب حتی اگر گردشی نباشد ("در دوره گردشی ثبت نشده")
+- **Voucher synthesis** برای داده‌های legacy:
+  - اگر یک `IncomeExpense` یا `SettlementHistory` voucher متناظر در `vouchers` ندارد، یک voucher موقت (synthetic) ساخته می‌شود
+  - این تضمین می‌کند داده‌های نقدی شما همیشه در دفتر روزنامه، دفتر کل، تراز، صورت سود و زیان دیده شوند
+  - voucher synthetic با `refType` و `refId` track می‌شود تا duplicate نشود
+
+### فایل‌های تغییر یافته
+- ✨ `index.css`: ۳۰+ خط جدید برای FilterBar/CompactField + compact input
+- 🔁 `components/UI.tsx`: `FilterBar`، `CompactField` اضافه
+- 🔁 ۱۰ صفحه‌ی لیست: همه به FilterBar مهاجرت کردند
+- 🔁 `components/ExpertSettlement.tsx`: ۳ تب با تاریخچه فیلتردار
+- 🔁 `components/Treasury.tsx`: prop `initialMode`
+- 🔁 `components/FinancialReports.tsx`: LedgerReport بازنویسی + voucher synthesis
+- 🔁 `App.tsx`: routing tab `transfers` با `initialMode='transfer'`
+- 🔁 bump version 7.5.0 → 7.6.0
+
+---
+
+## 🔧 تغییرات نسخه‌ی 7.5.0
+
+## 🔧 تغییرات نسخه‌ی 7.5.0 (راه‌حل ریشه‌ای override قالب/وردپرس)
+
+### مشکل اصلی نسخه‌های قبلی
+استایل‌های CSS عمومی قالب (روی `input`, `select`, `textarea`, `button`) با `!important` خودشان روی کلاس‌های ما غلبه می‌کردند. حتی selectorهای ID + class + `!important` نسخه ۷.۴ هم در بعضی تم‌ها کنار زده می‌شدند.
+
+### راه‌حل قطعی این نسخه (Nuclear Anti-Theme Style Patcher)
+- ابزار جدید `utils/forceStyle.ts`: تابع `applyImportant(el, styles)` که با `element.style.setProperty(prop, val, 'important')` استایل را به‌صورت inline + important اعمال می‌کند — **بالاترین قدرت ممکن در CSS** و هیچ stylesheet خارجی نمی‌تواند آن را override کند.
+- Hook جدید `useForceStyle()`: روی هر ref ورودی، استایل را در `useLayoutEffect` + focus/blur/input event اعمال می‌کند.
+- در `App.tsx` یک `MutationObserver` سراسری اضافه شد که هر تغییری در DOM داخل `#cpttf-erp-root-wrap` رخ دهد، تمام `.cptt-input`، `.cptt-select`، `.cptt-textarea`، `.cptt-dp-trigger` را force-style می‌کند. حتی اگر تم/پلاگین `class` یا `style` آن‌ها را عوض کند، بلافاصله بازنویسی می‌شود.
+- بازنویسی کامل `components/UI.tsx`: کامپوننت‌های `Input`, `NumberInput`, `Select`, `Textarea`, `SearchBar`, `JalaliDatePicker` همگی از `useForceStyle` استفاده می‌کنند.
+
+### اصلاح NumberInput (تداخل suffix با عدد)
+- ورودی عددی الان **راست‌چین** است (مثل سایر ورودی‌ها) با direction RTL.
+- suffix («تومان»، «قسط»، …) در سمت چپ pin شده با `position: absolute`.
+- `padding-left: 4.5rem` (فضای سخاوتمندانه) تا عدد هرگز زیر suffix نرود.
+- suffix از فونت Dana + background سفید + border-radius دارد تا تمیز جدا شود.
+- placeholder هم راست‌چین.
+
+### فونت چاپ/PDF/فاکتور (راه‌حل قطعی)
+- در نسخه قبل از `document.fonts.ready` استفاده می‌کردیم — اما این promise قبل از دانلود واقعی @font-face جدید resolve می‌شد.
+- الان در print window: `Promise.all([fonts.load("400 14px Dana"), fonts.load("500 14px Dana"), fonts.load("700 14px Dana"), fonts.load("400 14px Vazirmatn"), fonts.load("700 14px Vazirmatn")])` فراخوانی می‌شود تا فونت واقعاً دانلود و parse شود، سپس `setTimeout(print, 300)`.
+- `font-display: block` (نه swap) تا تا قبل از آماده شدن فونت، چاپ شروع نشود.
+- استفاده از فونت‌های محلی پلاگین `assets/fonts/Dana/Dana-FaNum-*.ttf` (آدرس مطلق از `CPTTF_ERP.assets.fontsBase`).
+- لیست خانواده فونت در همه CSS: `'Dana','Vazirmatn',Tahoma,sans-serif` (با fallback مناسب).
+
+### فایل‌های جدید/تغییر یافته
+- ✨ جدید: `src/utils/forceStyle.ts`
+- 🔁 بازنویسی: `src/components/UI.tsx` (همه فرم کنترل‌ها با useForceStyle)
+- 🔁 بازنویسی: `src/utils/exporter.ts` (explicit fonts.load قبل از print)
+- 🔁 بازنویسی: `src/App.tsx` (MutationObserver سراسری)
+- 🔁 بازنویسی: `src/index.css` (override block با ۴۶+ rule)
+- ✨ جدید: `assets/finance-ui/fonts.css` (فونت محلی)
+- 🔁 `includes/class-cptt-finance-erp.php`:
+  - enqueue `cpttf-erp-fonts` با priority بالا
+  - اضافه‌شدن `assets.fontsBase` به bootstrap
+- 🔁 bump version 7.4.0 → 7.5.0
+
+---
+
+## 🎨 تغییرات نسخه‌ی 7.4.0
+
+## 🎨 تغییرات نسخه‌ی 7.4.0 (اصلاحات UI/UX و قابلیت اعلان‌ها)
+
+### رعایت کامل قوانین
+- ❌ هیچ بازطراحی کلی UI انجام نشد
+- ❌ هیچ صفحه‌ای حذف نشد / Sidebar دست‌نخورده ماند
+- ❌ هیچ Dependency جدید UI نصب نشد
+- ✅ همه اصلاحات بر اساس ۵ موردِ گزارش‌شده توسط کاربر روی استایل‌های موجود اعمال شد
+
+### 1️⃣ اصلاح کامل استایل ورودی‌ها (Input)
+- گوشه‌های نرم (border-radius: 0.9rem) به جای مستطیل نوک‌تیز
+- متن داخل اینپوت‌ها راست‌چین (`direction: rtl; text-align: right`)
+- فیلدهای عددی به‌صورت `cptt-input-num` با `text-align: left + direction: ltr` و `tabular-nums`
+- فاصله بصری بین عدد و suffix «تومان» با gradient mask روی `cptt-input-suffix`
+- فوکوس indigo با ring نرم + hover ظریف
+
+### 2️⃣ بازطراحی استایل جدول‌ها
+- wrapper جدید `cptt-table-wrap` با border + shadow ملایم + rounded 1.1rem
+- header با gradient (`#f8fafc → #f1f5f9`) و فونت bold و فاصله مناسب
+- zebra striping روی ردیف‌های زوج (`#fbfcfd`)
+- hover روی ردیف‌ها برای خوانایی بهتر
+- spacing و padding یکدست در همه جداول ERP
+
+### 3️⃣ اصلاح کامل اعلان‌ها (Bell Notification)
+- دکمه «خواندم» الان درست کار می‌کند با state busy + toast
+- آیکن **حذف** (Trash2) برای هر اعلان اضافه شد با تایید کاربر
+- endpoint جدید PHP: `cpttf_erp_notif_delete` با `OPT_NOTIFS_DEL` در user_meta
+- `build_notifications()` اعلان‌های حذف‌شده را برای کاربر فیلتر می‌کند
+- آیکن‌های Check / CheckCheck برای خوانایی بهتر
+- dropdown با کلاس جدید `cptt-dropdown` (rounded-xl + shadow)
+
+### 4️⃣ بهبود استایل Dropdown‌ها
+- کلاس‌های جدید: `cptt-dropdown`, `cptt-dropdown-header`, `cptt-dropdown-item`
+- وضعیت `is-active` با background indigo ملایم
+- shadow ظریف + rounded-xl + انیمیشن باز شدن نرم
+
+### 5️⃣ فونت داخلی برای چاپ / PDF / فاکتور / Excel
+- بازنویسی `exporter.ts` با ثابت `FONT_CSS` شامل @font-face Dana
+- `printReport()` با CSS کامل (A4, header indigo, footer dashed) و `document.fonts.ready.then(() => window.print())`
+- `exportPdf()` = `printReport()` (Browser print-to-PDF با فونت آماده)
+- `exportExcel()` HTML با فونت Dana inline
+- نام شرکت از `window.CPTTF_ERP?.company?.name` خوانده می‌شود
+
+### 6️⃣ تقویم شمسی (Jalali DatePicker)
+- استایل جدید `cptt-dp-trigger`, `cptt-dp-panel`, `cptt-dp-grid`, `cptt-dp-cell.is-today / .is-selected`
+- روز جاری با حاشیه indigo، روز انتخاب‌شده با background indigo
+- نمایش ماه و سال در header قابل کلیک
+
+### فایل‌های تغییر یافته
+- `assets/finance-ui/app.css` + `app.js` (rebuild از sources)
+- `includes/class-cptt-finance-erp.php` — اضافه شدن `ajax_notif_delete`, `OPT_NOTIFS_DEL` و فیلتر در `build_notifications()`
+- `client-project-tracker.php` — bump به 7.4.0
+
+---
+
+## 💼 تغییرات نسخه‌ی 7.3.0 (فاز ۲ توسعه — چک، اقساط، پرداختنی‌ها، اعلان، پیوست)
+
+### 📋 رعایت کامل قوانین
+- ❌ هیچ بازطراحی UI انجام نشد
+- ❌ هیچ صفحه فعلی حذف نشد
+- ❌ Sidebar / Dashboard / Layout دست‌نخورده باقی ماند
+- ❌ هیچ کتابخانه UI جدید نصب نشد
+- ✅ همه قابلیت‌های جدید با UI Kit موجود (KPI, Modal, Tabs, SearchBar, Pagination, Field, Select, NumberInput, JalaliDatePicker, Toast) ساخته شدند
+
+### 1️⃣ مدیریت چک‌ها
+- منوی جدید: **خزانه‌داری → چک‌ها**
+- KPI: تعداد دریافتی، تعداد پرداختی، در جریان وصول، سررسید نشده، برگشتی
+- ۲ تب: چک‌های دریافتی / چک‌های پرداختی
+- فیلترها: وضعیت، بانک، شخص، پروژه، بازه تاریخ سررسید
+- ۶ وضعیت دریافتی + ۴ وضعیت پرداختی
+- فرم ثبت کامل: شماره، صیادی، بانک، شعبه، مبلغ، تاریخ صدور/سررسید، شخص، پروژه، حساب خزانه، توضیحات، پیوست
+- اتوماسیون: ثبت چک → سند JV خودکار / وصول → سند RV + بروزرسانی خزانه / پرداخت → سند PV + برداشت از خزانه
+
+### 2️⃣ اقساط
+- منوی جدید: **مطالبات مشتریان → اقساط**
+- KPI: اقساط فعال، معوق، سررسید‌شده، وصول‌شده، باقی‌مانده
+- فرم برنامه‌ساز: مشتری، پروژه، مبلغ کل، تعداد اقساط، فاصله روز، تاریخ اولین قسط
+- تولید خودکار جدول اقساط با محاسبه سررسید‌ها
+- وضعیت‌ها: پرداخت‌نشده / پرداخت‌شده / معوق (محاسبه خودکار)
+- عملیات دریافت هر قسط با ثبت RV + بروزرسانی خزانه
+
+### 3️⃣ حساب‌های پرداختنی (بدهی‌ها)
+- منوی جدید: **خزانه‌داری → بدهی‌ها و پرداختنی‌ها**
+- ۴ نوع شخص: کارشناس، پیمانکار، تامین‌کننده، سایر
+- KPI: بدهی کل، سررسید گذشته، پرداخت‌شده، تعداد پرونده‌ها
+- فیلترها: نوع، وضعیت، پروژه، بازه تاریخ
+- فرم: شخص، نوع، مبلغ، تاریخ، سررسید، پروژه، توضیحات
+- عملیات: پرداخت کامل / بخشی → ثبت PV + برداشت از خزانه + بروزرسانی صورت‌حساب
+
+### 4️⃣ بودجه و کنترل هزینه (توسعه مراکز هزینه)
+- KPI های جدید: بودجه کل، هزینه واقعی، مانده، درصد مصرف
+- کارت هر مرکز هزینه: بودجه، مصرف‌شده، مانده، Progress Bar
+- هشدار زرد (مصرف > 80٪) و قرمز (> 100٪)
+- محاسبه مصرف بر اساس IE با costCenterId
+
+### 5️⃣ سودآوری پروژه (توسعه حساب پروژه‌ها)
+- کارت جدید «تحلیل سودآوری» داخل Accordion هر پروژه:
+  - درآمد کل، هزینه مستقیم (کارشناسان)، هزینه غیرمستقیم (IE با projectId)
+  - سود ناخالص، سود خالص، درصد سود
+  - نمودار دوتایی درآمد vs هزینه
+
+### 6️⃣ سن مطالبات (Aging Report)
+- منوی جدید: **مطالبات مشتریان → سن مطالبات**
+- KPI با ۴ بازه: ۰-۳۰ سبز، ۳۰-۶۰ زرد، ۶۰-۹۰ نارنجی، +۹۰ قرمز
+- جدول: مشتری | مانده | سن بدهی | آخرین پرداخت | وضعیت
+- Export کامل (Excel/CSV/PDF/Print)
+
+### 7️⃣ پیوست فایل
+- کامپوننت جدید `AttachmentsBox` قابل استفاده در:
+  - اسناد حسابداری (Vouchers)
+  - چک‌ها
+  - بدهی‌ها
+- آپلود PDF / JPG / PNG / ZIP (حداکثر ۱۰MB)
+- نمایش آیکون فایل، گالری، Modal پیش‌نمایش (تصویر + iframe برای PDF)
+- ذخیره در WP media library
+
+### 8️⃣ مرکز اعلان مالی
+- آیکون 🔔 در **Navbar** با Badge تعداد خوانده‌نشده
+- اعلان‌های خودکار:
+  - سررسید چک (۷ روز آینده + گذشته)
+  - قسط معوق
+  - بدهی سررسید‌شده
+- Dropdown با لیست + دکمه «خواندم» و «همه را خوانده»
+- لینک به صفحه مرتبط
+
+### 9️⃣ داشبورد مالی پیشرفته
+- کارت جدید «وضعیت سلامت مالی» با ۵ شاخص:
+  - نسبت وصول مطالبات
+  - میانگین زمان وصول
+  - سود خالص ماه جاری
+  - درصد مصرف بودجه
+  - بدهی‌های سررسید گذشته
+
+### 🔟 API داخلی کامل
+همه قابلیت‌های جدید دارای:
+- Endpoint اختصاصی (۱۹ endpoint جدید)
+- nonce validation
+- capability check
+- toast notification
+- audit log یکپارچه
+- voucher engine (RV/PV/JV خودکار)
+- ledger entries در `wp_cptt_fin_ledger`
+
+### 📦 فایل‌های نصب
+- `/home/user/client-project-tracker-7.3.0.zip`
+
+## 🚀 تغییرات نسخه‌ی 7.2.0 (فاز ۱ توسعه — موتور سند + Audit + اشخاص + Permissions)
+
+### 📋 قوانین رعایت‌شده
+- ❌ هیچ بازطراحی UI انجام نشد
+- ❌ هیچ صفحه فعلی حذف نشد
+- ❌ Sidebar / Dashboard / Layout دست‌نخورده باقی ماند
+- ✅ تمام توسعه‌ها از UI Kit موجود (KPI, Modal, Tabs, SearchBar, Pagination, Field, Select, NumberInput, JalaliDatePicker, Toast) استفاده می‌کنند
+
+### 1️⃣ موتور سند حسابداری خودکار (Accounting Engine)
+- **انواع سند**: JV (روزنامه)، RV (دریافت)، PV (پرداخت)، TV (انتقال)، CV (اختتامیه)، OV (افتتاحیه)
+- **شماره‌گذاری استاندارد**: `RV-1405-000001`, `PV-1405-000001`, `JV-1405-000001` — جداگانه برای هر نوع و هر سال مالی
+- **رویدادهای اتوماتیک**:
+  - تسویه کارشناس → PV (سند پرداخت)
+  - پرداخت دستی کارشناس → PV
+  - دریافت پول از مشتری → آماده RV (مقدمه‌چینی شده)
+  - واریز/برداشت/انتقال → آماده RV/PV/TV
+- **فیلدهای کامل سند**: voucher_code, voucher_type, voucher_date, fiscal_year_id, status, created_by + ردیف‌های دوبل‌انتری با project_id, customer_id, expert_id
+
+### 2️⃣ توسعه صفحه اسناد حسابداری
+- **فیلترهای جدید**: بازه تاریخ شمسی، نوع سند، وضعیت، شماره سند، پروژه، شخص، ثبت‌کننده
+- **ستون‌های جدید در جدول**: نوع سند، شخص مرتبط، پروژه، ثبت‌کننده، تاریخ
+- **جزئیات سند در Accordion** با Header کامل + Rows + Footer (جمع بدهکار/بستانکار)
+
+### 3️⃣ حساب تفصیلی اشخاص
+- **گروه جدید** در کدینگ حساب‌ها: «تفصیلی اشخاص» با Tab مجزا
+- زیرمجموعه: مشتریان + کارشناسان
+- **ایجاد خودکار** هنگام شناسایی مشتری/کارشناس جدید
+- نمایش: کد، نام، نوع، مانده بدهکار، مانده بستانکار، وضعیت
+
+### 4️⃣ صورت‌حساب اشخاص (Party Statement)
+- منوی جدید زیر مطالبات: «صورت‌حساب اشخاص»
+- **فیلترها**: نوع شخص، شخص، پروژه، بازه زمانی
+- **KPI**: تعداد اشخاص، مانده بدهکار، مانده بستانکار، گردش دوره
+- **جدول کامل**: تاریخ | سند | شرح | بدهکار | بستانکار | مانده
+- نمایش «مانده ابتدای دوره»
+- **عملیات**: چاپ، PDF، Excel، CSV
+- لینک مستقیم از Receivables: دکمه «صورت‌حساب» در هر گروه مشتری
+
+### 5️⃣ Audit Trail (لاگ حسابرسی)
+- زیرمنوی جدید زیر سال مالی: «لاگ حسابرسی»
+- ثبت خودکار: ویرایش، حذف، تأیید، پرداخت، انتقال
+- ذخیره: کاربر، زمان، نوع عملیات، رکورد، **before/after به JSON**
+- **فیلترها**: کاربر، عملیات، تاریخ، موجودیت
+- **Modal جزئیات**: نمایش before/after با pretty-print
+- جدول دیتابیس جدید: `wp_cptt_erp_audit`
+
+### 6️⃣ توسعه خزانه‌داری
+- **فیلترهای جدید روی حساب‌ها**: نوع حساب (بانکی/نقدی)، ارز، فعال/غیرفعال
+- **ستون‌های جدید جدول گردش**: شماره سند، مرجع، پروژه، شخص، ثبت‌کننده
+- جستجو روی: شرح + شماره سند + پروژه + شخص
+
+### 7️⃣ توسعه داشبورد مالی
+- **Tooltip ⓘ** روی KPI ها (mouse hover برای توضیح)
+- **نمودار درآمد/هزینه**: انتخاب بازه ماهانه / فصلی / سالانه
+- **ستون نوع سند** در تراکنش‌های اخیر (badge RV/PV/...)
+
+### 8️⃣ توسعه گزارشات مالی
+- **فیلترهای مشترک** برای همه گزارشات: بازه زمانی، پروژه، مرکز هزینه، شخص، وضعیت سند
+- **Export Buttons** (Excel / CSV / PDF / Print) در Header هر گزارش
+
+### 9️⃣ سال مالی — بستن و افتتاح خودکار
+- پیام راهنمای واضح در صفحه: «هنگام بستن سال، سند اختتامیه (CV) ایجاد می‌شود، حساب‌های موقت صفر می‌شوند، سود/زیان به سرمایه منتقل می‌شود، سپس سند افتتاحیه (OV) برای سال بعد ایجاد می‌گردد»
+- آماده برای endpoint سرور (با fy_close موجود)
+
+### 🔟 سیستم Permissions
+- صفحه جدید «سطوح دسترسی» با ماتریس کامل
+- **۱۰ مجوز جزئی**: مشاهده اسناد، ثبت سند، تأیید سند، حذف سند، مشاهده گزارشات، مشاهده خزانه، پرداخت، مشاهده اطلاعات مالی پروژه، مشاهده لاگ حسابرسی، مدیریت تنظیمات
+- ۴ نقش: مدیرعامل، مدیر مالی، حسابدار، صندوق‌دار
+- ذخیره در WP option + سرور-side enforcement
+- استفاده در React با `can('voucher_create')` و ...
+
+### 🔧 endpointهای سرور جدید
+- `cpttf_erp_vouchers_list` — لیست اسناد با فیلتر
+- `cpttf_erp_party_statement` — صورت‌حساب شخص با مانده ابتدای دوره
+- `cpttf_erp_audit_list` — لاگ حسابرسی با فیلتر
+- `cpttf_erp_permissions_save` — ذخیره ماتریس مجوزها
+
+### 📦 فایل‌های نصب
+- `/home/user/client-project-tracker-7.2.0.zip`
 
 ## 🎨 تغییرات نسخه‌ی 7.1.0 (بازنویسی کامل UI + تقویم شمسی + رفع باگ‌ها)
 

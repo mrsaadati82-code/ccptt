@@ -1,0 +1,1490 @@
+════════════════════════════════════════════════════════════════════════════════
+  ERP_INTEGRATION_AUDIT — هماهنگ (Client Project Tracker) — v8.0.0
+  Integration & Data-Integrity Audit (نه فقط حسابداری — کل ERP)
+════════════════════════════════════════════════════════════════════════════════
+
+  منابع بازرسی (sourceهای واقعی، نه حدس):
+    • /home/user/ccptt/client-project-tracker.php  (entry, 8.0.0)
+    • /home/user/ccptt/includes/  (21 PHP class)
+       - class-cptt-core.php              (post types + tables + roles)
+       - class-cptt-admin.php             (classic admin pages)
+       - class-cptt-expert.php            (expert dashboard, 4900 خط)
+       - class-cptt-finance.php           (legacy ledger + finance shell)
+       - class-cptt-finance-erp.php       (ERP module, 8150+ خط)
+       - class-cptt-analytics.php         (separate analytics admin page)
+       - class-cptt-ai-assistant.php      (AI chat for expert dashboard)
+       - class-cptt-reminders.php         (on-screen reminder popups)
+       - class-cptt-payment.php           (online payments)
+       - class-cptt-bale.php              (Bale messenger bridge)
+       - class-cptt-sms.php               (SMS gateway)
+       - class-cptt-form-builder.php
+       - class-cptt-frontend.php
+       - class-cptt-file-manager.php
+       - class-cptt-auth.php
+       - class-cptt-settings.php
+       - class-cptt-report.php
+       - class-cptt-requests.php
+       - class-cptt-currency.php
+       - class-cptt-woocommerce.php
+       - includes/finance/  (7 legacy page renderers)
+    • /home/user/ccptt/assets/finance-ui/app.js  (446 KB minified React)
+    • /home/user/ccptt/assets/finance-ui/app.css (64 KB)
+
+  این Audit بر اساس کد واقعی استخراج شده. هیچ چیز حدس زده نشده.
+
+════════════════════════════════════════════════════════════════════════════════
+  ✻ یافته‌ی کلیدی این Audit (قبل از شروع):
+  ─────────────────────────────────────────────────────────────────────────────
+  در فازهای ۲ تا ۸ Roadmap قبلی، حدود **۸۰ endpoint جدید** به backend اضافه
+  شد ولی React app **هیچ‌کدام را صدا نمی‌زند**. تمام UIهای جدید فقط در
+  «صفحات Admin PHP-rendered» در منوی WordPress موجودند، نه در sidebar React.
+
+  React bundle فعلاً فقط ۴۷ endpoint می‌شناسد:
+    saveVoucher, approveVoucher, deleteVoucher, saveCoaNode, deleteCoaNode,
+    saveTreasury, deleteTreasury, transfer, deposit, withdraw, settleSteps,
+    payExpertManual, saveIncomeExpense, deleteIncomeExpense, saveCostCenter,
+    deleteCostCenter, createFiscalYear, closeFiscalYear, toggleLock,
+    saveFinanceCategory, deleteFinanceCategory, updateProjectStepFinance,
+    projectQuickPay, projectSettle, vouchersList, partyStatement, auditList,
+    savePermissions, exportReport, cheques, saveCheque, deleteCheque,
+    changeChequeStatus, installments, createInstallmentPlan, payInstallment,
+    deleteInstallmentPlan, payables, savePayable, payPayable, deletePayable,
+    notifications, markNotifRead, markAllNotifRead, deleteNotif,
+    uploadAttachment, listAttachments, deleteAttachment + full_bootstrap
+
+  ✗ React نمی‌داند: mapping_get/save, coa_balances, coa_import_standard,
+    period_check, fy_close_preview/execute, fy_reopen, lock_clear, cash_flow,
+    period_compare, budget_actual, aging_custom, aging_cheques, wip_report,
+    bank_recon, bank_recon_save, kpi_drilldown, voucher_batch,
+    voucher_unfinalize, voucher_reverse, recurring_*, chequebook_*,
+    cron_run_now, print_*, import_*, rates_*, currency_convert, invoice_*,
+    webhook_*, apikey_*, 2fa_*, bootstrap_core/treasury/projects/reports/kpis
+
+  این بزرگ‌ترین گپ Integration در پروژه است.
+════════════════════════════════════════════════════════════════════════════════
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ بخش ۱ — ماژول‌های سیستم                                                       │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+ماژول              وضعیت           درصد تکمیل   توضیح
+─────────────────────────────────────────────────────────────────────────────
+Dashboard          PARTIAL          70%          KPI/Monthly Series/Top
+                                                  Customers زنده هست، اما
+                                                  drill-down endpoint
+                                                  (kpi_drilldown) ساخته شده
+                                                  ولی React صدا نمی‌زند.
+                                                  داشبورد expert از _cptt_steps
+                                                  محاسبه می‌شود (شمارش پروژه،
+                                                  مرحله، due today/overdue)
+                                                  ولی **هیچ KPI مالی برای
+                                                  کارشناس نیست** (pending/paid).
+
+Projects           COMPLETE         95%          CPT cptt_project + post_meta
+                                                  _cptt_steps + _cptt_client_user_id
+                                                  + _cptt_is_settled کاملاً کار
+                                                  می‌کند. ProjectAccounting در
+                                                  React app کامل است. WIP report
+                                                  ساخته شده ولی React صدا نمی‌زند.
+
+Experts            PARTIAL          75%          نقش cptt_expert موجود است.
+                                                  Expert dashboard (shortcode)
+                                                  ۴۰۰۰ خط، با چت/notif/
+                                                  چک‌لیست/پروژه‌های فعال.
+                                                  اما **هیچ KPI مالی**:
+                                                  expert_paid, pendingBalance,
+                                                  productivity فقط در ERP
+                                                  module هستند نه در expert
+                                                  dashboard خود کارشناس.
+
+Customers          PARTIAL          50%          صفحه «👥 مشتریان» در classic
+                                                  admin هست (admin.php:123)
+                                                  ولی فقط فرم ویرایش پروفایل
+                                                  و bale_chat_id. **هیچ KPI
+                                                  مالی per customer در این
+                                                  صفحه نمایش داده نمی‌شود.**
+                                                  CRM واقعی نیست.
+
+CRM                NOT_IMPLEMENTED  15%          هیچ کلاس/ماژول جداگانه CRM
+                                                  وجود ندارد. اطلاعات مشتری
+                                                  فقط در wp_users + بعضی
+                                                  post_meta. بدون lead،
+                                                  opportunity، pipeline،
+                                                  contact log.
+                                                  partyAccounts در ERP فقط
+                                                  view مالی است.
+
+Accounting         COMPLETE         92%          Phase 1-3 پیاده شده:
+                                                  - Voucher Engine کامل با
+                                                    table‐backed CRUD
+                                                  - CoA با balance زنده
+                                                  - 6 گزارش استاندارد
+                                                  - Period locking
+                                                  - FY Close (PHP page only)
+
+Treasury           PARTIAL          80%          CRUD حساب‌ها + deposit/
+                                                  withdraw/transfer + voucher
+                                                  خودکار. اما:
+                                                  - Bank Reconciliation
+                                                    (Phase 6) فقط در PHP page
+                                                  - chequebook (Phase 7)
+                                                    فقط در PHP page
+                                                  - currency rates (Phase 8)
+                                                    فقط در PHP page
+
+Cost Centers       PARTIAL          65%          CRUD کامل + budget. ولی
+                                                  Budget vs Actual report
+                                                  (Phase 6) در PHP page است.
+                                                  در React app فقط Progress
+                                                  Bar محاسبه‌ی client-side
+                                                  بدون real-time data.
+
+Reports            PARTIAL          70%          ۶ گزارش کلاسیک (journal,
+                                                  ledger, subsidiary, trial,
+                                                  income, balance) در React.
+                                                  +۷ گزارش پیشرفته (cash flow,
+                                                  period compare, budget,
+                                                  aging custom, aging cheques,
+                                                  WIP, bank recon) فقط در
+                                                  PHP admin page → کاربر باید
+                                                  از ERP خارج شود.
+
+Fiscal Years       PARTIAL          65%          create/close ساده در React.
+                                                  بستن واقعی با CV/OV auto
+                                                  فقط در PHP page.
+                                                  Period lock enforcement
+                                                  در backend درست کار می‌کند.
+
+Automation         PARTIAL          60%          WP-Cron + Recurring
+                                                  Transactions + Webhooks +
+                                                  REST API + 2FA + Bulk Import
+                                                  همگی پیاده شده‌اند **ولی
+                                                  فقط در PHP page**. React app
+                                                  نمی‌بیند.
+
+Notifications      PARTIAL          70%          ۲ سیستم موازی:
+                                                  ۱) wp_cptt_notifications
+                                                     (Expert dashboard)
+                                                  ۲) build_notifications در
+                                                     ERP (محاسبه‌ای، خوانده/
+                                                     حذف per-user)
+                                                  هم‌گاه نیستند. کاربر در
+                                                  دو جا notif می‌بیند.
+                                                  Bale reminders از cron
+                                                  daily کار می‌کند.
+
+تعداد کل ماژول‌ها = ۱۲
+میانگین درصد تکمیل = ~۶۸٪
+ماژول‌های COMPLETE = ۲ (Projects, Accounting)
+ماژول‌های PARTIAL = ۹
+ماژول‌های NOT_IMPLEMENTED = ۱ (CRM)
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ بخش ۲ — Dependency Map                                                        │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+Projects (cptt_project CPT)
+  → استفاده می‌کند از:
+       wp_users (customer, expert)
+       _cptt_steps post_meta (نقطه‌ی محوری همه‌چیز)
+       _cptt_client_user_id, _cptt_is_settled
+       cptt_fin_ledger (هزینه/درآمد ledger خام)
+  → استفاده می‌شود توسط:
+       Accounting (build_projects_full, build_receivables, project_quick_pay,
+                  auto_voucher_expert_payout, WIP report)
+       Treasury (project_id در ledger insertها)
+       Experts (نمایش پروژه‌های assigned)
+       Dashboard (compute_kpis, monthly_series)
+       Reports (Income Statement, Aging, WIP)
+       Customers (نمایش پروژه‌ها per customer — قسمتی)
+       Notifications (none directly)
+       Cost Centers (costCenterId در voucher rows)
+
+Experts (cptt_expert role + wp_users)
+  → استفاده می‌کند از:
+       _cptt_steps[].expert_paid (پرداخت‌های قبلی)
+       _cptt_steps[].exp_to_expert (تعهد)
+       hook cptt_after_expert_payout
+       hook cptt_after_manual_expert_payment
+       wp_cptt_notifications (private notifs)
+  → استفاده می‌شود توسط:
+       Projects (assignment)
+       Accounting (build_experts_and_steps, settle_steps, settle_manual)
+       PartyStatement (expertId در voucher rows)
+       Payables (party_type=expert)
+       Payslip (Phase 7 print template)
+       Bale (notifications)
+
+Customers (wp_users with non-admin, non-expert roles)
+  → استفاده می‌کند از:
+       _cptt_client_user_id (project post_meta)
+       _cptt_bale_chat_id (user_meta)
+       billing_phone / cptt_phone (user_meta)
+  → استفاده می‌شود توسط:
+       Projects (single customer per project)
+       Receivables (customer-level aggregation)
+       PartyStatement (customerId در voucher rows)
+       Installments (customer_id + customer_name)
+       Aging Report
+       Invoices (customer_id + customer_name)
+       Statement Print
+
+Accounting (Voucher Engine)
+  → استفاده می‌کند از:
+       wp_cptt_erp_vouchers + voucher_rows (Phase 3 tables)
+       OPT_VOUCHERS (legacy fallback)
+       OPT_COA (chart of accounts)
+       OPT_ACCOUNT_MAPPING (Phase 2 nucleus)
+       OPT_VNUMBERS (voucher numbering)
+       OPT_FY (fiscal years)
+       OPT_LOCKS (period locks)
+       wp_cptt_fin_ledger (legacy ledger sync)
+  → استفاده می‌شود توسط:
+       Dashboard, Reports (همه شش-گانه)
+       Cash Flow, Period Compare, Budget vs Actual, WIP
+       PartyStatement, Bank Recon
+       Webhooks (voucher.created event)
+       REST API (/vouchers)
+       Print (print_voucher, print_invoice)
+
+Treasury (cptt_fin_accounts)
+  → استفاده می‌کند از:
+       cptt_fin_accounts (real DB)
+       cptt_fin_ledger (real DB)
+       OPT_TREASURY_COA_MAP (Phase 2)
+       OPT_BANK_RECON (Phase 6)
+  → استفاده می‌شود توسط:
+       Cheques (treasuryAccountId)
+       Installments (payment account)
+       Payables (payment account)
+       Voucher Engine (RV/PV rows reference treasury via map_treasury_to_coa)
+       Bank Reconciliation
+       Cash Flow report
+
+Cost Centers (OPT_COSTS)
+  → استفاده می‌کند از:
+       option array
+  → استفاده می‌شود توسط:
+       Voucher rows (costCenterId)
+       Budget vs Actual report
+       Income/Expense form
+       Project Accounting
+
+Cheques (wp_cptt_erp_cheques + OPT_CHEQUES)
+  → استفاده می‌کند از:
+       OPT_CHEQUEBOOKS (Phase 7 numbering)
+       Treasury (treasuryAccountId)
+       Customer/Expert (partyId, partyName)
+       Voucher Engine (auto JV on save, RV/PV on status change)
+  → استفاده می‌شود توسط:
+       Cheque Aging report
+       Notifications (cheque_due)
+       Bale reminders (daily cron)
+       Print cheque
+
+Installments (wp_cptt_erp_installments + rows)
+  → استفاده می‌کند از:
+       Customer (customer_id)
+       Project (project_id, optional)
+       Voucher Engine (RV on pay)
+       Treasury (payment account)
+  → استفاده می‌شود توسط:
+       Notifications (installment_due)
+       Bale reminders
+       Receivables (indirectly)
+
+Payables (wp_cptt_erp_payables + OPT_PAYABLES)
+  → استفاده می‌کند از:
+       Party (expert/contractor/supplier)
+       Voucher Engine (PV on pay)
+       Treasury (payment account)
+  → استفاده می‌شود توسط:
+       Notifications (payable_due)
+       PartyStatement (for experts)
+       Bale reminders
+
+Invoices (wp_cptt_erp_invoices + rows) — Phase 8
+  → استفاده می‌کند از:
+       Customer (customer_id, customer_name)
+       Project (project_id, project_name)
+       Voucher Engine (invoice_to_voucher → RV)
+  → استفاده می‌شود توسط:
+       REST API (/invoices)
+       Webhooks (invoice.saved, invoice.status)
+       Print invoice
+       (هیچ ماژول دیگر از فاکتورها نمی‌خواند — orphan-ish)
+
+Recurring (OPT_RECURRING) — Phase 7
+  → استفاده می‌کند از:
+       Treasury, Categories, Projects, CostCenters
+       Voucher Engine (RV/PV per run)
+  → استفاده می‌شود توسط:
+       cpttf_erp_hourly_cron (auto-execute)
+       (هیچ React UI ندارد)
+
+Notifications (build_notifications + OPT_NOTIFS_READ/DEL)
+  → استفاده می‌کند از:
+       Cheques, Installments, Payables, Receivables
+  → استفاده می‌شود توسط:
+       Navbar bell در React app
+       (موازی با wp_cptt_notifications که Expert dashboard استفاده می‌کند)
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ بخش ۳ — Data Source Audit                                                     │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+▼ Dashboard (React: DashboardBI)
+  ─────────────────────────────────────────────────────────────────────────
+  KPI Cards         LIVE_DATA       (CPTT_Finance::compute_kpis از _cptt_steps)
+  Monthly Series    DERIVED_DATA    (CPTT_Finance::monthly_series — تقریبی
+                                     بر اساس post_date_gmt پروژه‌ها)
+  Top Customers     DERIVED_DATA    (CPTT_Finance::top_customers_series — sum
+                                     paid per customer_id از _cptt_steps)
+  Category Breakdown LIVE_DATA      (CPTT_Finance::category_breakdown از
+                                     wp_cptt_fin_ledger)
+  Financial Health  DERIVED_DATA    (build_financial_health — collectionRatio
+                                     واقعی، avgCollectionDays=30 ثابت!)
+
+▼ Chart of Accounts (React)
+  ─────────────────────────────────────────────────────────────────────────
+  Tree              LIVE_DATA       (get_coa_with_balances — Phase 2)
+  Balance per node  LIVE_DATA       (محاسبه از vouchers FINALIZED)
+
+▼ Vouchers (React)
+  ─────────────────────────────────────────────────────────────────────────
+  KPIs              LIVE_DATA       (شمارش از wp_cptt_erp_vouchers)
+  Filter Bar        LIVE_DATA       (8 فیلتر، Phase v7.6)
+  Table             LIVE_DATA       (read_vouchers_from_table)
+  Approve workflow  LIVE_DATA       (ajax_voucher_approve)
+  Reverse button    NO_DATA         (در React UI نیست — backend هست)
+
+▼ FinancialReports / Journal (React tab)
+  ─────────────────────────────────────────────────────────────────────────
+  Filter Bar        LIVE_DATA       (Phase v7.6)
+  Table             LIVE_DATA       (از vouchers flat-mapped)
+  Synth fallback    DERIVED_DATA    (synth از incomesExpenses بدون voucher)
+
+▼ FinancialReports / Ledger + Subsidiary
+  ─────────────────────────────────────────────────────────────────────────
+  Account Select    LIVE_DATA       (همه CoA با parent chain)
+  Roll-up balances  LIVE_DATA       (Phase v7.6 fix)
+
+▼ FinancialReports / Trial Balance + Income Statement + Balance Sheet
+  ─────────────────────────────────────────────────────────────────────────
+  Aggregation       LIVE_DATA       (client-side از vouchers)
+  Account mapping   DERIVED_DATA    (بر اساس code prefix — نه mapping صریح)
+
+▼ IncomeExpense (React)
+  ─────────────────────────────────────────────────────────────────────────
+  KPIs              LIVE_DATA       (Phase v7.7 — حالا voucher gen دارد)
+  Filter Bar        LIVE_DATA
+  Table             LIVE_DATA       (از build_incomes_expenses)
+
+▼ ExpertSettlement (React)
+  ─────────────────────────────────────────────────────────────────────────
+  KPIs              LIVE_DATA       (pendingBalance, paidBalance)
+  3 Tabs            LIVE_DATA       (pending/done/history)
+  Steps list        LIVE_DATA       (از _cptt_steps)
+  History table     LIVE_DATA       (build_settlement_history)
+
+▼ Receivables (React)
+  ─────────────────────────────────────────────────────────────────────────
+  KPI Cards         LIVE_DATA       (per customer aggregation)
+  Filter Bar        LIVE_DATA       (Phase v7.6)
+  List per customer LIVE_DATA       (build_receivables با N+1 killer)
+  Quick Pay         LIVE_DATA       (ajax_project_quick_pay)
+
+▼ AgingReport (React)
+  ─────────────────────────────────────────────────────────────────────────
+  4 KPIs            DERIVED_DATA    (محاسبه client-side — تاریخ آخرین پرداخت
+                                     در payload نیست!)
+  Aging table       DERIVED_DATA    (بدون lastPaymentDate دقیق)
+  ⚠ گزارش Phase 6 (aging_custom) دقیق‌تر است ولی PHP-only.
+
+▼ Installments (React)
+  ─────────────────────────────────────────────────────────────────────────
+  KPIs              LIVE_DATA
+  Plan list         LIVE_DATA       (get_installment_plans_recomputed)
+  Pay-installment   LIVE_DATA       (ajax_installment_pay)
+
+▼ PartyStatement (React)
+  ─────────────────────────────────────────────────────────────────────────
+  Person Select     LIVE_DATA
+  Statement Table   LIVE_DATA       (ajax_party_statement)
+  Opening Balance   DERIVED_DATA    (محاسبه پیش از from-date)
+
+▼ Treasury (React)
+  ─────────────────────────────────────────────────────────────────────────
+  KPIs              LIVE_DATA       (sum balances)
+  Account Cards     LIVE_DATA       (از cptt_fin_accounts)
+  Turnover table    LIVE_DATA       (از incomesExpenses + settlementHistory)
+  Deposit/Withdraw  LIVE_DATA       (Phase v7.7 voucher generates)
+  Transfer          LIVE_DATA
+
+▼ Ledger View / گردش حساب یکپارچه (React)
+  ─────────────────────────────────────────────────────────────────────────
+  KPIs              LIVE_DATA
+  Table             LIVE_DATA       (از incomesExpenses + settlementHistory)
+  ⚠ نکته: چک‌ها/اقساط/payables در این تب دیده نمی‌شوند.
+
+▼ Cheques (React)
+  ─────────────────────────────────────────────────────────────────────────
+  KPI Cards (5)     LIVE_DATA
+  Filter Bar (7)    LIVE_DATA
+  List              LIVE_DATA       (get_cheques)
+  CRUD              LIVE_DATA
+
+▼ Payables (React)
+  ─────────────────────────────────────────────────────────────────────────
+  KPIs (4)          LIVE_DATA
+  Filter Bar (6)    LIVE_DATA
+  List              LIVE_DATA       (get_payables_recomputed)
+  CRUD/Pay          LIVE_DATA
+
+▼ ProjectAccounting (React)
+  ─────────────────────────────────────────────────────────────────────────
+  KPIs (5)          LIVE_DATA
+  Profitability     DERIVED_DATA    (client-side cost - expert_paid - direct_expenses)
+  Steps inline      LIVE_DATA
+
+▼ CostCenters (React)
+  ─────────────────────────────────────────────────────────────────────────
+  KPIs              LIVE_DATA
+  List + Progress   DERIVED_DATA    (consumption از voucher rows با
+                                     costCenterId — اما در v7.6 از client
+                                     محاسبه می‌شود نه از budget_actual endpoint)
+
+▼ Categories (React)
+  ─────────────────────────────────────────────────────────────────────────
+  List              LIVE_DATA       (از cptt_fin_categories)
+  CRUD              LIVE_DATA
+
+▼ FiscalYear (React)
+  ─────────────────────────────────────────────────────────────────────────
+  List              LIVE_DATA
+  Lock UI           LIVE_DATA       (Phase 5 enforce در backend)
+  Close button      PARTIAL         (فقط flag تغییر می‌کند، CV/OV واقعی
+                                     در PHP page دیگری است)
+
+▼ AuditLog (React)
+  ─────────────────────────────────────────────────────────────────────────
+  Filter            LIVE_DATA
+  Table             LIVE_DATA       (با pagination Phase 3)
+
+▼ Permissions (React)
+  ─────────────────────────────────────────────────────────────────────────
+  Matrix            LIVE_DATA       (Phase 4 backend enforce)
+
+▼ Expert Dashboard (shortcode — کلاسیک)
+  ─────────────────────────────────────────────────────────────────────────
+  Projects list     LIVE_DATA       (get_expert_projects)
+  Stats             LIVE_DATA       (collect_dashboard_stats: total, completed,
+                                     in_progress, open_steps, customer_pending,
+                                     today, overdue)
+  Notifications     LIVE_DATA       (wp_cptt_notifications)
+  ⚠ هیچ KPI مالی برای خود کارشناس وجود ندارد:
+     - مبلغ بدهی به او
+     - مبلغ تسویه‌شده
+     - مبلغ منتظر تسویه
+     - تاریخچه پرداخت‌ها
+     این فقط در ERP Module (مدیر) قابل دید است.
+
+▼ Classic Admin > Customers (مشتریان)
+  ─────────────────────────────────────────────────────────────────────────
+  Customer cards    LIVE_DATA       (wp_users + bale_chat_id)
+  Edit form         LIVE_DATA
+  ⚠ هیچ KPI مالی per-customer نیست:
+     - تعداد پروژه
+     - مجموع فاکتورها
+     - مجموع پرداختی
+     - مانده باز
+     - سن مطالبات
+     - سابقه چک‌ها
+
+▼ Phase 2-8 PHP Admin Pages
+  ─────────────────────────────────────────────────────────────────────────
+  🧭 نگاشت حساب‌ها           LIVE_DATA
+  🗓 بستن سال مالی          LIVE_DATA
+  📊 گزارش‌های پیشرفته       LIVE_DATA (7 tabs)
+  ⚙ عملیات و اتوماسیون      LIVE_DATA (4 tabs)
+  🔌 یکپارچه‌سازی           LIVE_DATA (5 tabs)
+  🧾 فاکتورها                LIVE_DATA
+  ⚠ هیچ‌یک از این صفحات در React app sidebar نیست!
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ بخش ۴ — Project Integration Audit                                             │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+پروژه‌ها (cptt_project) به این موارد متصل‌اند؟
+
+اتصال                         وضعیت        مسیر/توضیح
+─────────────────────────────────────────────────────────────────────────────
+درآمد (Income)                CONNECTED    project_quick_pay → ledger + voucher
+                                            با project_id در ref. compute_kpis
+                                            از _cptt_steps[].paid محاسبه می‌شود.
+
+هزینه (Expense)               PARTIAL      IncomeExpense form فیلد projectId
+                                            دارد و در ledger ذخیره می‌شود.
+                                            voucher row هم projectId دارد.
+                                            ✗ ولی project_finance_view تجمیع
+                                            خاصی برای «هزینه per project» ندارد.
+                                            ProjectAccounting profitability فقط
+                                            ledger.project_id=pid را sum می‌کند
+                                            (در client side).
+
+پرداخت کارشناسان              CONNECTED    cptt_after_expert_payout hook →
+                                            auto_voucher_expert_payout(project_id)
+                                            رکورد در _cptt_steps[].expert_paid
+                                            + ledger با project_id + voucher با
+                                            ref_id=project_id
+
+سود (Profit)                  PARTIAL      ProjectAccounting در React profit
+                                            client-side محاسبه می‌کند:
+                                            profit = paid - expert_paid - direct
+                                            ✗ ولی overhead allocation نیست.
+                                            ✗ WIP report (Phase 6) PHP-only
+                                            است و React نمی‌بیند.
+
+خزانه (Treasury)              CONNECTED    project_quick_pay از حساب treasury
+                                            دریافت می‌کند. transfer/deposit/
+                                            withdraw مستقیماً به ledger می‌نویسند
+                                            ولی **project_id ندارند**.
+
+مرکز هزینه                    PARTIAL      costCenterId در voucher rows
+                                            هست اما در _cptt_steps post_meta
+                                            نیست. پروژه نمی‌تواند ذاتاً به
+                                            یک cost center متصل شود.
+                                            هزینه‌های پروژه از طریق
+                                            project_id ↔ costCenterId در
+                                            voucher rows جدا قابل گزارش است
+                                            ولی integration ضعیف است.
+
+اسناد حسابداری                CONNECTED    auto-voucher در رویدادهای:
+                                            - expert_payout (PV)
+                                            - manual_payment (PV)
+                                            - project_quick_pay (RV) - Phase 1
+                                            - ie_save (RV/PV) - Phase 1
+                                            - installment_pay (RV)
+                                            - payable_pay (PV)
+                                            - cheque_save (JV)
+                                            - cheque_status (RV/PV)
+                                            - treasury_transfer (TV) - Phase 1
+                                            - treasury_deposit (RV) - Phase 1
+                                            - treasury_withdraw (PV) - Phase 1
+                                            ✓ همگی project_id را در voucher row
+                                              ذخیره می‌کنند (اگر متعلق به پروژه)
+
+خلاصه Project Integration:
+  ✅ ۴ CONNECTED:  درآمد، پرداخت کارشناسان، خزانه، اسناد
+  🟡 ۳ PARTIAL:   هزینه، سود، مرکز هزینه
+  ❌ ۰ DISCONNECTED
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ بخش ۵ — Expert Integration Audit                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+اطلاعات هر کارشناس از داده‌ی واقعی تغذیه می‌شود؟
+
+▼ در Expert Dashboard (shortcode_dashboard — تجربه‌ی خود کارشناس):
+
+مورد                     وضعیت    منبع داده
+─────────────────────────────────────────────────────────────────────────────
+پروژه‌های فعال            LIVE     get_expert_projects(user_id) - شمارش از _cptt_steps
+پروژه‌های تکمیل‌شده       LIVE     progress_data($pid) — status === 'completed'
+درآمد ایجاد شده           STATIC   ✗ هیچ KPI نمایش داده نمی‌شود
+پرداخت‌ها (تاریخچه)       STATIC   ✗ تاریخچه payouts برای کارشناس نمایش
+                                    داده نمی‌شود
+مانده تسویه (pending)     STATIC   ✗ نمایش داده نمی‌شود
+بهره‌وری (productivity)   STATIC   ✗ فقط در صفحه Analytics مدیر (CPTT_Analytics)
+
+▼ در ERP Module (تجربه‌ی مدیر — ExpertSettlement React):
+
+مورد                     وضعیت    منبع داده
+─────────────────────────────────────────────────────────────────────────────
+لیست کارشناسان            LIVE     build_experts_and_steps
+pendingBalance            LIVE     sum(exp_to_expert - expert_paid) per expert
+paidBalance               LIVE     sum(expert_paid)
+projectsCount             LIVE     distinct project_id count
+تاریخچه تسویه‌ها          LIVE     build_settlement_history
+3 تب                      LIVE     pending / done / history
+
+▼ در CPTT_Analytics > گزارش‌گیری عملکرد (PHP page دیگر):
+
+مورد                     وضعیت    منبع داده
+─────────────────────────────────────────────────────────────────────────────
+گزارش بهره‌وری per expert  LIVE     محاسبه از _cptt_steps + completed steps
+                                    (ولی این یک صفحه‌ی جداست در منوی
+                                     edit.php?post_type=cptt_project)
+
+خلاصه Expert Integration:
+  Expert Dashboard (خود کارشناس)   = STATIC برای ۴/۶ مورد مالی
+  ERP Module (مدیر)                = LIVE برای ۶/۶
+  Analytics Page                    = LIVE اما جدا
+
+  ❗ گپ بزرگ: خود کارشناس نمی‌تواند مانده‌ی تسویه‌اش را در dashboard
+     شخصی‌اش ببیند. باید مدیر به او بگوید.
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ بخش ۶ — Customer Integration Audit                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+اطلاعات مشتری از حسابداری تغذیه می‌شود؟
+
+▼ Classic Admin > مشتریان (admin.php:123 render_customers_page):
+
+مورد                     وضعیت
+─────────────────────────────────────────────────────────────────────────────
+تعداد پروژه‌های مشتری     ✗ NO        (هیچ شمارشی نمایش داده نمی‌شود)
+ارزش پروژه‌ها             ✗ NO        (هیچ مبلغی نمایش داده نمی‌شود)
+پرداخت‌ها                 ✗ NO
+بدهی                     ✗ NO
+مطالبات                  ✗ NO
+سودآوری                  ✗ NO
+
+این صفحه فقط فرم ویرایش پروفایل + bale_chat_id است.
+
+▼ ERP Module > Receivables (React):
+این صفحه یک «نمای مالی per customer» می‌دهد، اما از منوی Customers
+نیست. کاربر باید جداگانه به ERP وارد شود.
+
+مورد                     وضعیت
+─────────────────────────────────────────────────────────────────────────────
+تعداد پروژه‌های مشتری     LIVE (count per customer از receivables)
+مجموع فاکتورها           LIVE (cost sum)
+پرداخت‌ها                 LIVE (paid sum)
+مانده                    LIVE (remain)
+سن مطالبات                PARTIAL (در AgingReport جدا — بدون lastPaymentDate
+                                  دقیق)
+سودآوری per customer      ✗ NO
+
+▼ ERP Module > PartyStatement (React):
+این یک «صورت‌حساب per customer» می‌دهد.
+
+▼ ERP Module > Phase 8 Invoices:
+این مشتری را نگهداری می‌کند ولی هیچ ارجاعی به profile مشتری نمی‌دهد.
+
+خلاصه Customer Integration:
+  ❗ صفحه‌ی Customers در Classic Admin فقط Profile است، **هیچ KPI مالی ندارد**.
+  ❗ Receivables/PartyStatement/Invoices در ERP module جدا هستند.
+  ❗ CRM واقعی وجود ندارد (lead, opportunity, pipeline, communication log).
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ بخش ۷ — Accounting Integration Audit                                          │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+برای هر رویداد مالی، کدام بخش‌ها آپدیت می‌شوند؟
+
+▼ Customer Payment (project_quick_pay)
+  ────────────────────────────────────────────────────────────────────────
+  Voucher              ✓ COMPLETE   (Phase 1 - RV با bank/customer/project)
+  Ledger               ✓ COMPLETE   (cptt_fin_ledger با project_id)
+  _cptt_steps[].paid   ✓ COMPLETE   (allocation greedy)
+  Customer Balance     ✓ COMPLETE   (محاسبه‌ای از receivables)
+  Receivable           ✓ COMPLETE   (build_receivables بازمحاسبه)
+  Dashboard KPI        ✓ COMPLETE   (compute_kpis از _cptt_steps)
+  Project KPI          ✓ COMPLETE   (ProjectAccounting)
+  Reports              ✓ COMPLETE   (در Journal, Ledger, Trial, IS, BS)
+  Bale notification    ✓ COMPLETE   (به مشتری)
+  Activity log         ✓ COMPLETE   (CPTT_Core::activity_log)
+  Status: COMPLETE
+
+▼ Expert Payment (settle_steps + auto_voucher_expert_payout)
+  ────────────────────────────────────────────────────────────────────────
+  Voucher              ✓ COMPLETE   (PV با expert_payroll + bank_default)
+  Ledger               ⚠ PARTIAL    (CPTT_Core::ledger_add با user_id, نه
+                                     wp_cptt_fin_ledger)
+  _cptt_steps[].expert_paid ✓ COMPLETE
+  Expert pendingBalance ✓ COMPLETE   (محاسبه‌ای)
+  Expert paidBalance   ✓ COMPLETE
+  Dashboard KPI (expert_payouts)  ✓ COMPLETE
+  Reports              ✓ COMPLETE
+  Settlement History   ✓ COMPLETE   (build_settlement_history)
+  Bale notification    ✓ COMPLETE   (به کارشناس)
+  Status: COMPLETE
+
+▼ Manual Expert Payment (settle_manual)
+  ────────────────────────────────────────────────────────────────────────
+  Voucher              ✓ COMPLETE   (PV via auto_voucher_manual_payment)
+  Ledger               ⚠ PARTIAL    (CPTT_Core::ledger_add + cptt_fin_ledger
+                                     دوگانه)
+  Treasury balance     ✓ COMPLETE
+  Settlement History   ✓ COMPLETE
+  Bale                 ✓ COMPLETE
+  Status: COMPLETE
+
+▼ Income (ie_save type=INCOME) — Phase 1 fix
+  ────────────────────────────────────────────────────────────────────────
+  Voucher              ✓ COMPLETE   (RV با bank + revenue_default)
+  Ledger               ✓ COMPLETE   (cptt_fin_ledger با project_id, ref_type)
+  Customer Balance     ⚠ PARTIAL    (اگر customer_id داشت — معمولاً نه)
+  Receivable           ⚠ PARTIAL    (IE معمولاً receivable را به‌روز نمی‌کند
+                                     چون از _cptt_steps محاسبه می‌شود)
+  Dashboard KPI        ✓ COMPLETE   (در monthly + category breakdown)
+  Reports              ✓ COMPLETE
+  Status: COMPLETE
+
+▼ Expense (ie_save type=EXPENSE) — Phase 1 fix
+  ────────────────────────────────────────────────────────────────────────
+  Voucher              ✓ COMPLETE   (PV با expense_default + bank)
+  Ledger               ✓ COMPLETE
+  Cost Center          ⚠ PARTIAL    (اگر costCenterId در form ست شده باشد —
+                                     در voucher row هست ولی در ledger خیر)
+  Project Profit       ⚠ PARTIAL    (اگر projectId ست شده باشد)
+  Dashboard KPI        ✓ COMPLETE
+  Reports              ✓ COMPLETE
+  Status: COMPLETE
+
+▼ Installment Payment (installment_pay)
+  ────────────────────────────────────────────────────────────────────────
+  Voucher              ✓ COMPLETE   (RV با bank + receivable)
+  Ledger               ✓ COMPLETE
+  Plan.installments[].paidAmount ✓ COMPLETE
+  Plan.installments[].status ✓ COMPLETE  (auto recomputed)
+  Customer Balance     ⚠ PARTIAL    (installments جدا از receivables هست)
+  Notifications        ✓ COMPLETE   (در صورت overdue)
+  Status: COMPLETE
+
+▼ Cheque (cheque_save → status change)
+  ────────────────────────────────────────────────────────────────────────
+  Voucher (save)       ✓ COMPLETE   (JV با notes_receivable/payable + counter)
+  Voucher (collect)    ✓ COMPLETE   (RV با bank + notes_receivable)
+  Voucher (pay-out)    ✓ COMPLETE   (PV با notes_payable + bank)
+  Ledger               ✗ NO         (چک به cptt_fin_ledger نمی‌رود!)
+  Treasury balance     ⚠ PARTIAL    (فقط از طریق voucher; نه مستقیم)
+  Notifications        ✓ COMPLETE   (cheque_due)
+  Bale reminders       ✓ COMPLETE   (cron daily)
+  Status: PARTIAL  ⚠ ledger نمی‌نویسد ⇒ Bank Recon ممکن است mismatch بدهد
+
+▼ Treasury Transfer (transfer)
+  ────────────────────────────────────────────────────────────────────────
+  Voucher              ✓ COMPLETE   (TV) Phase 1
+  Ledger               ✓ COMPLETE   (دو ledger linked)
+  Treasury balance     ✓ COMPLETE
+  Reports              ✓ COMPLETE
+  Status: COMPLETE
+
+▼ Payable Payment (payable_pay)
+  ────────────────────────────────────────────────────────────────────────
+  Voucher              ✓ COMPLETE   (PV با payable_default + bank)
+  Ledger               ✓ COMPLETE
+  Payable.paidAmount   ✓ COMPLETE
+  Payable.remain       ✓ COMPLETE
+  Notifications        ✓ COMPLETE
+  Status: COMPLETE
+
+▼ Invoice → Voucher (Phase 8)
+  ────────────────────────────────────────────────────────────────────────
+  Voucher              ✓ COMPLETE   (RV)
+  Ledger               ✗ NO         (invoice_to_voucher فقط voucher می‌سازد
+                                     نه ledger entry — mismatch!)
+  Invoice.voucherId    ✓ COMPLETE
+  Customer Balance     ⚠ PARTIAL    (وابسته به receivable_default mapping)
+  Status: PARTIAL
+
+خلاصه Accounting Integration:
+  ✅ COMPLETE:  ۸ رویداد (customer pay, expert pay, manual, income, expense,
+                installment, transfer, payable)
+  🟡 PARTIAL:   ۲ رویداد (cheque، invoice → voucher بدون ledger)
+  ❌ BROKEN:    ۰
+  ⚠ مشکل دو-منبعی: CPTT_Core::ledger_add (user_meta-based ledger) و
+     cptt_fin_ledger (table) برای expert payments هم‌گاه نیستند.
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ بخش ۸ — Automation Chain Audit                                                │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+▼ Trigger: Customer pays for project (project_quick_pay)
+  Modules: Projects, Accounting, Treasury, Customer, Dashboard
+  Tables: post_meta(_cptt_steps), cptt_fin_ledger, wp_cptt_erp_vouchers,
+          wp_cptt_erp_voucher_rows, wp_cptt_erp_audit
+  Dashboards: ERP Dashboard, ProjectAccounting, Receivables, PartyStatement
+  Reports: Journal, Ledger, Income Statement, Cash Flow, WIP, Aging
+  Bale: Customer
+  ✅ زنجیره کامل
+
+▼ Trigger: Settle expert step (settle_steps)
+  Modules: Projects, Experts, Accounting, Treasury, Dashboard
+  Tables: post_meta(_cptt_steps), CPTT_Core::ledger_add (user_meta!),
+          cptt_fin_ledger, wp_cptt_erp_vouchers, wp_cptt_erp_voucher_rows
+  Dashboards: ExpertSettlement, ProjectAccounting, PartyStatement, Dashboard
+  Reports: Journal, Ledger, Income Statement, Cash Flow
+  Bale: Expert
+  ⚠ تقریباً کامل — ولی دو ledger موازی هم‌گاه‌سازی نشده.
+
+▼ Trigger: Save income/expense (ie_save)
+  Modules: Accounting, Treasury, Project (اگر projectId), CostCenter (اگر set)
+  Tables: cptt_fin_ledger, wp_cptt_erp_vouchers, wp_cptt_erp_voucher_rows
+  Dashboards: Dashboard, IncomeExpense, Treasury, ProjectAccounting
+  Reports: ALL Phase 6 (در PHP page)
+  ✅ زنجیره کامل (Phase 1 fix)
+
+▼ Trigger: Treasury transfer
+  Modules: Treasury, Accounting
+  Tables: cptt_fin_ledger (×2 linked), wp_cptt_erp_vouchers (TV)
+  Dashboards: Treasury, Dashboard, Ledger View
+  Reports: Cash Flow, Bank Recon
+  ✅ زنجیره کامل
+
+▼ Trigger: Cheque status change to collected/paid
+  Modules: Cheques, Accounting, Treasury, Notifications
+  Tables: wp_cptt_erp_cheques, wp_cptt_erp_vouchers
+  ⚠ به cptt_fin_ledger نمی‌رود!
+  Dashboards: Cheques, Dashboard
+  Reports: Aging cheques (Phase 6 PHP page)
+  ⚠ گزارش‌های ledger-based (Treasury turnover, Bank Recon) چک‌ها را
+     نمی‌بینند چون مستقیم به ledger نمی‌نویسند.
+
+▼ Trigger: Installment pay
+  Modules: Installments, Accounting, Treasury, Customer
+  Tables: wp_cptt_erp_installments + rows, cptt_fin_ledger, wp_cptt_erp_vouchers
+  Dashboards: Installments, Receivables, Dashboard
+  Reports: Journal, Ledger
+  ✅ زنجیره کامل
+
+▼ Trigger: Payable pay
+  Modules: Payables, Accounting, Treasury
+  Tables: wp_cptt_erp_payables, cptt_fin_ledger, wp_cptt_erp_vouchers
+  Dashboards: Payables, Dashboard
+  Reports: Journal, Ledger
+  ✅ زنجیره کامل
+
+▼ Trigger: Recurring transaction execution (cron hourly)
+  Modules: Accounting, Treasury
+  Tables: OPT_RECURRING, cptt_fin_ledger, wp_cptt_erp_vouchers
+  Dashboards: مشاهده در PHP «⚙ عملیات» — نه در React
+  Reports: در گزارش‌ها دیده می‌شود
+  ⚠ کاربر در React app نمی‌بیند که recurring اجرا شده.
+
+▼ Trigger: Voucher saved (manual) → fire_webhook('voucher.created')
+  Modules: Webhooks
+  Tables: -
+  External: HTTP POST به URL ثبت‌شده
+  ✅ کامل (در صورت ثبت webhook)
+
+▼ Trigger: Invoice saved → fire_webhook('invoice.saved')
+  Modules: Webhooks
+  ✅ کامل
+
+▼ Trigger: Cron daily
+  Modules: Cheques, Installments, Payables, Notifications, Bale, Audit
+  Tables: wp_cptt_erp_audit (prune > 1 year)
+  Effect: bale messages sent for due items, overdue recomputed
+  ✅ کامل
+
+▼ Trigger: Save mapping (mapping_save)
+  Modules: Account Mapping
+  Tables: OPT_ACCOUNT_MAPPING, OPT_TREASURY_COA_MAP
+  Effect: future voucher generations از mapping جدید استفاده می‌کنند
+  ⚠ vouchers قبلی هیچ به‌روزرسانی‌ای نمی‌گیرند (تاریخی)
+
+▼ Trigger: Close fiscal year (fy_close_execute)
+  Modules: FY, Accounting, Lock
+  Tables: OPT_FY, OPT_LOCKS, wp_cptt_erp_vouchers (CV + maybe OV)
+  Dashboards: تأثیر در همه گزارش‌ها (locked period)
+  ⚠ React app نمی‌داند که FY بسته شده — وقتی کاربر سعی می‌کند voucher ثبت
+     کند، 423 می‌گیرد ولی UI پیامش را به‌خوبی نشان نمی‌دهد.
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ بخش ۹ — Dead UI Detection                                                     │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+UIهایی که داده ندارند / mock / همیشه صفر / backend ندارند:
+
+#  Page             Component                     Issue                              Required Fix          Priority
+─-────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 1 Expert Dashboard  KPI «درآمد ایجاد شده»         وجود ندارد — کارشناس            افزودن KPI box +     HIGH
+                                                    نمی‌داند چقدر کسب کرده          query از _cptt_steps
+                                                    است
+ 2 Expert Dashboard  KPI «مانده تسویه»             وجود ندارد                       افزودن — query از    HIGH
+                                                                                     _cptt_steps[].
+                                                                                     exp_to_expert -
+                                                                                     expert_paid
+ 3 Expert Dashboard  KPI «تاریخچه پرداخت‌ها»        وجود ندارد                       افزودن جدول از       MEDIUM
+                                                                                     ledger
+ 4 Customers (admin) KPI «مانده بدهی»             وجود ندارد                       افزودن sum از        HIGH
+                                                                                     receivables
+ 5 Customers (admin) KPI «تعداد پروژه»             وجود ندارد                       افزودن count از      MEDIUM
+                                                                                     _cptt_client_user_id
+ 6 Customers (admin) دکمه «صورت‌حساب»              وجود ندارد                       افزودن لینک به       MEDIUM
+                                                                                     PartyStatement
+ 7 React Dashboard   KPI Drill-down                kpi_drilldown endpoint           اتصال click handler  HIGH
+                                                    موجود ولی صدا زده نمی‌شود
+ 8 ERP Sidebar       تب «نگاشت حساب‌ها»            وجود ندارد در sidebar            افزودن tab          HIGH
+                                                    React. فقط PHP page             جدید + React
+                                                                                     component
+ 9 ERP Sidebar       تب «بستن سال مالی»            وجود ندارد در sidebar            افزودن tab          HIGH
+                                                    React
+10 ERP Sidebar       تب «گزارش‌های پیشرفته»         وجود ندارد                       افزودن tab با 7     HIGH
+                                                                                     subreport
+11 ERP Sidebar       تب «عملیات و اتوماسیون»        وجود ندارد                       افزودن tab          MEDIUM
+12 ERP Sidebar       تب «یکپارچه‌سازی»             وجود ندارد                       افزودن tab          MEDIUM
+13 ERP Sidebar       تب «فاکتورها»                 وجود ندارد                       افزودن tab          HIGH
+14 React Vouchers    دکمه «↻ برگشت سند»            voucher_reverse endpoint         اتصال در UI         HIGH
+                                                    موجود، کاربر نمی‌بیند
+15 React Vouchers    دکمه «Unfinalize»             voucher_unfinalize موجود         اتصال               MEDIUM
+                                                    ولی فقط در PHP
+16 React Aging       لیست با lastPaymentDate       payload backend ندارد            افزودن به            HIGH
+                                                    این فیلد را                      build_receivables
+17 React Ledger View چک‌ها/اقساط/payables          فقط incomesExpenses +            ادغام در tab         HIGH
+                                                    settlementHistory               یکپارچه
+18 React FiscalYear  دکمه «بستن سال مالی»          فقط flag تغییر می‌کند            integrate با
+                                                    CV/OV واقعی در PHP page        fy_close_execute
+                                                    دیگری است                       endpoint           HIGH
+19 React Permissions Matrix در UI                  ذخیره می‌شود ولی pre-           اتصال به
+                                                    Phase4 enforcement نبود.        rolePermissions
+                                                    حالا backend درست،              source-of-truth
+                                                    ولی UI labels قدیمی‌اند        update
+                                                    (نام perm جدید نیست)            HIGH
+20 React Categories  Income vs Expense tabs        کار می‌کند                       —                   ✓ OK
+21 React DashboardBI nodes «بدون داده»             monthlySeries خالی برای         افزودن fallback     LOW
+                                                    سایت‌های جدید                   skeleton state
+22 React Treasury    transfer modal initialMode    کار می‌کند                       —                   ✓ OK
+23 PHP Customers     فرم ساده                      بدون KPI                         افزودن آمار        HIGH
+24 PHP Mapping       نگاشت + رشته‌های لاتین        فقط 12 purpose                   افزودن branch       LOW
+                                                                                     خاص هر شرکت
+25 PHP FY Close      دکمه «اجرای بستن»             می‌نویسد ولی برگشت                افزودن preview      LOW
+                                                    سند نشان نمی‌دهد                history table
+26 PHP Reports       Bank Recon save               کار می‌کند                       —                   ✓ OK
+27 PHP Ops           Cheque-book "next number"     در alert نمایش می‌دهد            تبدیل به            LOW
+                                                    (نه integrate در cheque         autocomplete در
+                                                    form)                           cheque_save form
+28 PHP Integrations  Webhook test                  کار می‌کند                       —                   ✓ OK
+29 PHP Invoices      صفحه و چاپ                    کار می‌کند                       —                   ✓ OK
+30 Frontend          shortcode cptt_experts_hub    کار می‌کند                       —                   ✓ OK
+31 Notifications     wp_cptt_notifications +       دو سیستم موازی                  ادغام در یک        HIGH
+                     build_notifications                                            stream
+32 React Ledger      Voucher synthesis (legacy)    Phase 1 voucher engine          حذف synthesis      LOW
+                                                    کامل شد، synth کارش             — همه vouchers
+                                                    تمام است                         واقعی هستند
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ بخش ۱۰ — Orphan Features Detection                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+قابلیت‌هایی که ساخته شده ولی توسط هیچ ماژولی استفاده نمی‌شوند:
+
+ORPHAN-A (Endpoint های فاز ۲ تا ۸ بدون React UI):
+─────────────────────────────────────────────────────────────────────────────
+این Endpoint ها در PHP موجود و در React app هیچ صدا زده نمی‌شوند:
+
+Phase 1 leftovers:
+  - cpttf_erp_voucher_reverse        (دکمه در React نیست)
+  - cpttf_erp_voucher_unfinalize     (Phase 7 — React نیست)
+
+Phase 2:
+  - cpttf_erp_mapping_get
+  - cpttf_erp_mapping_save
+  - cpttf_erp_coa_balances
+  - cpttf_erp_coa_import_standard
+  - cpttf_erp_coa_treasury_map_save
+
+Phase 3:
+  - cpttf_erp_migration_status
+  - cpttf_erp_bootstrap_core
+  - cpttf_erp_bootstrap_treasury
+  - cpttf_erp_bootstrap_projects
+  - cpttf_erp_bootstrap_reports
+  - cpttf_erp_bootstrap_kpis
+  (React هنوز full_bootstrap را صدا می‌زند)
+
+Phase 5:
+  - cpttf_erp_period_check
+  - cpttf_erp_fy_close_preview
+  - cpttf_erp_fy_close_execute
+  - cpttf_erp_fy_reopen
+  - cpttf_erp_lock_clear
+
+Phase 6:
+  - cpttf_erp_cash_flow
+  - cpttf_erp_period_compare
+  - cpttf_erp_budget_actual
+  - cpttf_erp_aging_custom
+  - cpttf_erp_aging_cheques
+  - cpttf_erp_wip_report
+  - cpttf_erp_bank_recon
+  - cpttf_erp_bank_recon_save
+
+Phase 7:
+  - cpttf_erp_kpi_drilldown
+  - cpttf_erp_voucher_batch
+  - cpttf_erp_recurring_list/save/delete/run_now
+  - cpttf_erp_chequebook_list/save/delete/next
+  - cpttf_erp_cron_run_now
+  - cpttf_erp_print_voucher/cheque/payslip/statement (دکمه چاپ در React هم نیست)
+
+Phase 8:
+  - cpttf_erp_import_preview/commit
+  - cpttf_erp_rates_list/save/delete
+  - cpttf_erp_currency_convert
+  - cpttf_erp_invoice_list/save/delete/status/to_voucher
+  - cpttf_erp_print_invoice
+  - cpttf_erp_webhook_list/save/delete/test
+  - cpttf_erp_apikey_list/create/revoke
+  - cpttf_erp_2fa_status/enable/verify/disable
+
+  → جمعاً ~۸۰ endpoint بدون React UI
+
+ORPHAN-B (جدول‌ها/option های بدون consumer در React):
+─────────────────────────────────────────────────────────────────────────────
+  - wp_cptt_erp_invoices       (فقط در PHP page و REST API)
+  - wp_cptt_erp_invoice_rows
+  - OPT_RECURRING              (فقط در PHP page و cron)
+  - OPT_CHEQUEBOOKS            (فقط در PHP page)
+  - OPT_CURRENCY_RATES         (فقط در PHP page و convert endpoint)
+  - OPT_WEBHOOKS               (فقط در PHP page + fire_webhook trigger)
+  - OPT_API_KEYS               (فقط در PHP page + REST validate)
+  - OPT_2FA                    (فقط در PHP page)
+  - OPT_BANK_RECON             (فقط در PHP page)
+  - OPT_CRON_LOG               (فقط در PHP page)
+  - OPT_ACCOUNT_MAPPING        (فقط در PHP page + backend voucher gen)
+  - OPT_TREASURY_COA_MAP       (فقط در PHP page + backend voucher gen)
+
+ORPHAN-C (Class های بدون استفاده‌ی کامل):
+─────────────────────────────────────────────────────────────────────────────
+  - class-cptt-expert-panel.php  (فقط ۱ خط comment! orphan کامل)
+  - بعضی صفحات finance/ legacy (مثل page-payouts.php) — بعد از ERP module
+    بی‌استفاده هستند
+
+ORPHAN-D (Print templates):
+─────────────────────────────────────────────────────────────────────────────
+  - print_voucher / print_cheque / print_payslip / print_statement /
+    print_invoice همگی URL مستقیم می‌خواهند ولی **هیچ دکمه‌ای در ERP
+    React** آن‌ها را trigger نمی‌کند. کاربر باید URL را دستی بسازد.
+
+ORPHAN-E (REST API namespace):
+─────────────────────────────────────────────────────────────────────────────
+  - /wp-json/cpttf-erp/v1/health, vouchers, accounts, receivables, cheques,
+    payables, invoices, kpis
+  - بدون مستندات public، کاربر نمی‌داند موجود است (فقط در Integration page
+    code-block نشان داده می‌شود)
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ بخش ۱۱ — Cross-Module Consistency                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+اگر عددی در چند جا نمایش داده شود، آیا از یک منبع است؟
+
+▼ «مانده مطالبات» (Receivables Total)
+  Dashboard KPI:           compute_kpis() → sum(_cptt_steps[].cost-paid)
+  Receivables page:        build_receivables() → sum(_cptt_steps[].cost-paid)
+  Aging Report (React):    از payload receivables
+  Aging Custom (PHP):      از build_receivables (Phase 6)
+  PartyStatement total:    voucher rows با customer_id
+  ✅ همگی از _cptt_steps می‌خوانند → **consistent**
+
+▼ «درآمد کل»
+  Dashboard KPI «total_revenue»:  compute_kpis → sum _cptt_steps[].paid
+  Monthly Series income:           بخشی از ledger + project paid
+  IncomeStatement (Report):        voucher rows با account گروه ۵
+  Cash Flow operating:             حساب‌های گروه ۱/۳ counter to cash
+  ⚠ inconsistency:
+    - compute_kpis از _cptt_steps[].paid → فقط پول مشتری
+    - Income Statement از voucher → ممکن است شامل deposit دستی هم باشد
+       (که چون به a5_2/other_income می‌رود)
+    - Cash Flow → ممکن است هر دو را با هم نشان دهد
+  → بسته به source، اعداد متفاوت‌اند.
+
+▼ «هزینه کل»
+  Dashboard KPI «expert_payouts»:  از _cptt_steps[].expert_paid
+  Monthly Series expense:           از ledger
+  IncomeStatement expense:          voucher rows با account گروه ۶
+  ⚠ inconsistency:
+    - expert_payouts فقط دستمزد است (نه هزینه‌های اداری)
+    - Income Statement همه هزینه‌ها را شامل می‌شود
+    - Monthly Series ledger خام
+  → کاربر می‌بیند سه عدد مختلف.
+
+▼ «سود ناخالص (gross_profit)»
+  Dashboard KPI:           compute_kpis → total_paid - expert_payouts
+  Financial Health:        از monthly series last month
+  Income Statement:        revenue - expense (voucher-based)
+  Period Compare:          از compute_pl_range
+  WIP Report:              over/under billing
+  ⚠ inconsistency بزرگ:
+    - Dashboard فقط مزد کارشناس را کم می‌کند
+    - Income Statement همه هزینه‌ها را کم می‌کند
+    - period_compare voucher-based است
+  → ممکن است در یک جا 100M و در جای دیگر 50M سود ببینید.
+
+▼ «موجودی Treasury»
+  Treasury page KPI:           sum cptt_fin_accounts.balance
+  Dashboard KPI:               در counts_summary
+  Bank Reconciliation:         از cptt_fin_ledger
+  Balance Sheet «assets»:      voucher rows با account a1_1_*
+  ⚠ inconsistency محتمل:
+    - cptt_fin_accounts.balance یک column است (storage)
+    - cptt_fin_ledger sum یک محاسبه است (روند)
+    - voucher rows یک منبع سوم
+  → اگر هم‌گاه نشوند، Balance Sheet با Treasury page mismatch دارد.
+
+▼ «تعداد چک‌های در جریان وصول»
+  Cheques KPI:             from get_cheques status=in_collection
+  Aging Cheques (Phase 6): from get_cheques status=in_collection
+  Notifications:           build_notifications از get_cheques
+  ✅ همگی یک منبع → consistent
+
+▼ «بدهی به کارشناس X»
+  ExpertSettlement pendingBalance:  _cptt_steps[].exp_to_expert - expert_paid
+  PartyStatement balance:           sum voucher rows با expertId
+  Payables (party_type=expert):    بدهی‌های manually-entered
+  ⚠ inconsistency بزرگ:
+    - pendingBalance فقط از پروژه‌ها
+    - PartyStatement از همه vouchers (شامل bonus، manual payment که از فرم
+       payables ثبت شده)
+    - Payables module یک جدول جداگانه است
+  → سه عدد متفاوت برای یک سؤال.
+
+▼ «تعداد پروژه‌های مشتری Y»
+  Customers page (admin):       (نمایش داده نمی‌شود)
+  Receivables grouped:          count distinct project_id where customer_id=Y
+  CRM واقعی:                    وجود ندارد
+  → فقط در یک جا قابل دیدن است.
+
+▼ «مجموع فاکتورهای پروژه Z»
+  ProjectAccounting:            sum _cptt_steps[].cost
+  PartyStatement debit:         voucher rows با project_id
+  Receivables.cost:             _cptt_steps[].cost
+  Invoices (Phase 8):           جدا — مستقل از پروژه واقعی!
+  ⚠ Invoice module با Project یکپارچه نیست. می‌توان فاکتور ثبت کرد بدون
+     اینکه در _cptt_steps چیزی تغییر کند.
+
+▼ «بدهی پایان دوره (closing balance)»
+  Trial Balance debit total:    sum voucher.debit
+  Balance Sheet assets:         گروه ۱ + ۲ delta
+  FY Close preview permanent:   fy_permanent_balances (Phase 5)
+  ⚠ احتمال inconsistency:
+    - اگر بعضی vouchers status=DRAFT باشند، Trial Balance آن‌ها را
+       می‌شمارد ولی fy_permanent_balances فقط FINALIZED را می‌شمارد.
+
+خلاصه Cross-Module Consistency:
+  ✅ ۲ مورد consistent:        Receivables total، Cheques status counts
+  ⚠ ۵ مورد inconsistent:        درآمد، هزینه، سود، Treasury، بدهی به کارشناس
+  ⚠ ۲ مورد disconnected:        Customer projects، Invoice ↔ Project
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ بخش ۱۲ — ERP Readiness V2                                                    │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+دامنه                                  امتیاز   مقایسه v1 (Audit قبلی)
+─────────────────────────────────────────────────────────────────────────────
+Project Management                     85/100   ↑ از 80
+                                                ➕ WIP report اضافه شد
+                                                ➖ overhead allocation ندارد
+
+Accounting                             88/100   ↑ از 55
+                                                ➕ Voucher Engine کامل
+                                                ➕ Account Mapping
+                                                ➕ Period Lock
+                                                ➕ FY Close (CV/OV)
+                                                ➖ ledger/voucher dual-source
+                                                   هنوز در expert payment
+
+CRM                                    30/100   ↓ از 35
+                                                ➖ هیچ ماژول جدید نیامد
+                                                ➖ Customer profile هیچ KPI ندارد
+                                                ➖ بدون pipeline, lead, opportunity
+
+Treasury                               80/100   ↑ از 70
+                                                ➕ Bank Recon MVP
+                                                ➕ chequebook numbering
+                                                ➕ multi-currency rates
+                                                ➖ همه فقط در PHP — React بی‌خبر
+
+Automation                             80/100   ↑ از 45
+                                                ➕ WP-Cron daily + hourly
+                                                ➕ Recurring transactions
+                                                ➕ Webhooks
+                                                ➕ Bale reminders
+                                                ➖ React UI ندارد
+
+Reporting                              78/100   ↑ از 60
+                                                ➕ Cash Flow, Period Compare,
+                                                  Budget vs Actual, Aging Custom,
+                                                  Aging Cheques, WIP
+                                                ➖ همه فقط در PHP page
+                                                ➖ inconsistency بین reportها
+
+Security                               80/100   ↑ از 55
+                                                ➕ RBAC واقعی backend enforce
+                                                ➕ MIME validation
+                                                ➕ Rate limiting
+                                                ➕ Audit log کامل
+                                                ➕ 2FA (سبک)
+                                                ➖ cptt_expert downgrade شد
+                                                   (downgrade مهم) اما UI
+                                                   هنوز ربط ندارد
+
+Integration                            45/100   ⚠⚠ نقطه‌ضعف اصلی
+                                                ➖ ۸۰ endpoint بدون React UI
+                                                ➖ دو ledger موازی
+                                                ➖ دو سیستم notification موازی
+                                                ➖ Invoice با Project قطع است
+                                                ➖ Customer page بدون KPI
+                                                ➖ Expert dashboard بدون KPI مالی
+
+Data Integrity                         70/100   مفهوم جدید — این Audit
+                                                ✅ Voucher validation
+                                                ✅ Period lock
+                                                ✅ Audit log
+                                                ⚠ Cross-module inconsistency
+                                                   (5 مورد) — ۳۰ امتیاز کسر
+
+Scalability                            75/100   ↑ از 40
+                                                ➕ ۹ جدول جدید
+                                                ➕ INDEX روی ledger
+                                                ➕ N+1 killer
+                                                ➖ React هنوز full_bootstrap
+                                                   با ۳۰+ کوئری می‌گیرد
+                                                ➖ chunked bootstrap بدون React
+
+Enterprise Readiness                   72/100   ↑ از 50
+                                                ➕ REST API
+                                                ➕ Webhooks
+                                                ➕ Multi-currency
+                                                ➕ Invoice/Quote
+                                                ➖ یکپارچگی UI ضعیف
+
+میانگین کلی                            71/100   (پیش از v8: 54)
+
+  ↑ بزرگ‌ترین رشد:    Accounting (+33), Scalability (+35), Automation (+35)
+  ↓ بزرگ‌ترین کاهش:   CRM (-5)
+  ⚠ بزرگ‌ترین گپ:    Integration (45) — همه‌ی فاز ۲-۸ از React جدا هستند
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ بخش ۱۳ — Action Plan                                                          │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+  ❶ Critical Fixes — قبل از هر توسعه جدید
+═══════════════════════════════════════════════════════════════════════════════
+
+C-01  Persist کردن source های React در `ccptt/.ui-src/`
+      Why: بدون این، هر تغییر در فاز بعدی همان مشکل قبل را دارد. الان نه
+      `/tmp/mali` و نه upstream repo، source نسخه ۸.۰ را ندارند.
+      Effort: SMALL  |  Priority: CRITICAL
+
+C-02  rebuild App.tsx + Sidebar + AppContext.tsx برای پشتیبانی از:
+      Voucher Reverse, Voucher Unfinalize, kpi drilldown, period_check
+      Why: ۷ endpoint بحرانی فاز ۱-۵ که React نمی‌بیند.
+      Effort: MEDIUM  |  Priority: CRITICAL
+
+C-03  حل dual-ledger در expert payment
+      Why: CPTT_Core::ledger_add در user_meta و cptt_fin_ledger در table
+      موازی‌اند. اعداد گزارش‌ها واگرا می‌شوند.
+      Fix: یا CPTT_Core::ledger_add را به cptt_fin_ledger هم بنویسد، یا
+           گزارش‌ها فقط از یک منبع بخوانند.
+      Effort: MEDIUM  |  Priority: CRITICAL
+
+C-04  حل dual notification
+      Why: wp_cptt_notifications (expert) و build_notifications (manager)
+      جدا هستند. کاربر در دو جا notif می‌بیند.
+      Fix: یک stream یکپارچه، با کلید (user_id, source).
+      Effort: MEDIUM  |  Priority: CRITICAL
+
+C-05  Cheque → ledger sync
+      Why: cheque save/status فقط voucher می‌سازد. cptt_fin_ledger به‌روز
+      نمی‌شود → Bank Recon mismatch، Treasury turnover ناقص.
+      Fix: در ajax_cheque_status حالت collected/paid، یک ledger_insert هم
+           اضافه شود.
+      Effort: SMALL  |  Priority: HIGH
+
+C-06  Invoice → ledger
+      Why: invoice_to_voucher فقط voucher می‌سازد. ledger نمی‌نویسد.
+      Fix: همراه voucher، ledger_insert هم انجام شود.
+      Effort: SMALL  |  Priority: HIGH
+
+C-07  enforce permissions UI updates
+      Why: Permissions React UI هنوز perm keys نسخه قدیم را نشان می‌دهد
+      (12 perm جدید فاز ۴ در UI نیست).
+      Fix: rebuild Permissions.tsx با لیست جدید.
+      Effort: SMALL  |  Priority: HIGH
+
+═══════════════════════════════════════════════════════════════════════════════
+  ❷ Integration Fixes — اتصالاتی که ناقص هستند
+═══════════════════════════════════════════════════════════════════════════════
+
+I-01  اضافه‌کردن ۶ تب جدید به React Sidebar
+      - 🧭 نگاشت حساب‌ها (Phase 2)
+      - 🗓 بستن سال مالی (Phase 5)
+      - 📊 گزارش‌های پیشرفته (Phase 6 — ۷ subreport)
+      - ⚙ عملیات (Phase 7)
+      - 🔌 یکپارچه‌سازی (Phase 8)
+      - 🧾 فاکتورها (Phase 8)
+      Effort: LARGE (6 React component جدید)
+      Priority: HIGH
+
+I-02  تبدیل chunked bootstrap به استفاده‌ی واقعی
+      Why: bootstrap_core/treasury/projects/reports/kpis ساخته شد ولی
+      React هنوز full_bootstrap را صدا می‌زند.
+      Fix: AppContext.tsx به ۵ chunk lazy تقسیم شود + Sidebar tab change
+           فقط chunk مربوطه را re-fetch کند.
+      Effort: MEDIUM
+      Priority: HIGH
+
+I-03  دکمه «↻ برگشت سند» و «Unfinalize» در Vouchers
+      Why: backend موجود، UI نیست.
+      Effort: SMALL
+      Priority: HIGH
+
+I-04  KPI Drill-down در Dashboard
+      Why: backend kpi_drilldown موجود.
+      Fix: کلیک روی هر KPI → Modal با لیست تراکنش‌ها + لینک به voucher.
+      Effort: SMALL
+      Priority: HIGH
+
+I-05  Aging با lastPaymentDate دقیق
+      Why: payload backend این فیلد را برنمی‌گرداند.
+      Fix: build_receivables به هر row فیلد lastPaymentTs اضافه کند، AgingReport
+           از آن استفاده کند به‌جای شمارش ساده.
+      Effort: SMALL
+      Priority: HIGH
+
+I-06  Ledger View (گردش حساب یکپارچه) → شامل چک‌ها/اقساط/payables
+      Why: الان فقط incomesExpenses + settlementHistory.
+      Fix: build_ledger_unified() در PHP که همه‌ی منابع را merge کند.
+      Effort: MEDIUM
+      Priority: MEDIUM
+
+I-07  React FiscalYear → اتصال به fy_close_execute
+      Why: دکمه «بستن سال مالی» در React فقط status flag را تغییر می‌دهد.
+      Fix: replace با fy_close_preview + fy_close_execute (با Modal preview).
+      Effort: MEDIUM
+      Priority: HIGH
+
+I-08  Invoice ↔ Project link
+      Why: فاکتور بدون پروژه قابل صدور است. کاربر گم می‌شود.
+      Fix: dropdown «انتخاب پروژه» در فرم فاکتور، و سپس update _cptt_steps
+           (اضافه‌کردن یک step از نوع invoice).
+      Effort: MEDIUM
+      Priority: MEDIUM
+
+I-09  Customer Profile با KPI مالی
+      Why: صفحه‌ی classic Customers فقط فرم edit است.
+      Fix: افزودن ۴ KPI: مانده بدهی، تعداد پروژه، آخرین پرداخت، نرخ وصول.
+      Effort: SMALL
+      Priority: HIGH
+
+I-10  Expert Dashboard با KPI مالی
+      Why: کارشناس مانده‌ی تسویه‌اش را نمی‌داند.
+      Fix: افزودن ۳ KPI به shortcode_dashboard:
+           - مانده تسویه (pendingBalance)
+           - مجموع تسویه‌شده (paidBalance)
+           - تعداد پروژه‌های فعال (موجود)
+           + جدول تاریخچه‌ی پرداخت‌ها
+      Effort: MEDIUM
+      Priority: HIGH
+
+I-11  Print buttons در صفحات React
+      Why: print_voucher/cheque/payslip/statement/invoice موجود، دکمه نیست.
+      Fix: در Vouchers، Cheques، ExpertSettlement, PartyStatement، Invoices —
+           دکمه «🖨 چاپ» با لینک به PHP endpoint.
+      Effort: SMALL
+      Priority: MEDIUM
+
+═══════════════════════════════════════════════════════════════════════════════
+  ❸ Dead UI Fixes — صفحاتی که فقط نمایشی هستند
+═══════════════════════════════════════════════════════════════════════════════
+
+D-01  Expert Dashboard KPI‌های مالی        (HIGH)
+      تأثیر: یک کارشناس برای پیگیری پرداخت‌هایش الان باید از مدیر بپرسد.
+
+D-02  Customer Profile KPI‌های مالی        (HIGH)
+      تأثیر: یک ادمین برای دیدن وضعیت یک مشتری باید بین صفحات سویچ کند.
+
+D-03  Sidebar React بدون تب‌های فاز ۲-۸    (HIGH × 6 تب)
+      تأثیر: کاربر ERP اصلاً نمی‌داند که Bank Reconciliation وجود دارد.
+
+D-04  Vouchers بدون reverse/unfinalize     (HIGH)
+      تأثیر: کاربر مجبور است سند را حذف کند (نه برگشت بدهد).
+
+D-05  Dashboard KPI بدون drill-down        (HIGH)
+      تأثیر: KPI «درآمد» را می‌بیند ولی نمی‌داند از کجاست.
+
+D-06  FiscalYear React بدون CV/OV          (HIGH)
+      تأثیر: کاربر فکر می‌کند «بستن سال» انجام شد ولی فقط flag تغییر کرده.
+
+D-07  AgingReport client-side ناقص         (HIGH)
+      تأثیر: aging buckets بر اساس اطلاعات ناقص محاسبه می‌شوند.
+
+D-08  Ledger View ناقص                     (HIGH)
+      تأثیر: کاربر فکر می‌کند گردش حساب کامل است، در حالی که چک‌ها نیستند.
+
+D-09  Permissions UI با perm keys قدیمی    (MEDIUM)
+      تأثیر: کاربر نمی‌تواند ۵ permission جدید (voucher_reverse, mapping_manage
+              و …) را در UI تنظیم کند.
+
+D-10  CRM (NOT_IMPLEMENTED)                (MEDIUM-CRITICAL برای کسب‌وکار)
+      تأثیر: پیگیری lead/opportunity نیست. مشتریان جدید فقط از طریق پروژه
+              ثبت می‌شوند (یعنی باید قبل از فروش، پروژه ساخته شود).
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  Roadmap پیشنهادی پس از این Audit
+═══════════════════════════════════════════════════════════════════════════════
+
+  Phase 9 (Critical Integration):
+    - C-01 (Persist React source)
+    - C-02 (rebuild App + Sidebar + Context)
+    - C-03 (dual-ledger fix)
+    - C-04 (dual-notification fix)
+    - C-05 (Cheque → ledger)
+    - C-06 (Invoice → ledger)
+    - I-01 (۶ تب جدید Sidebar)
+    - I-02 (chunked bootstrap actual usage)
+    - I-03 (دکمه reverse/unfinalize)
+
+  Phase 10 (UI Restoration):
+    - I-04 (KPI Drill-down)
+    - I-05 (Aging دقیق)
+    - I-06 (Ledger یکپارچه)
+    - I-07 (FY Close واقعی)
+    - I-11 (Print buttons)
+    - D-09 (Permissions UI update)
+
+  Phase 11 (Stakeholder Experience):
+    - D-01 / I-10 (Expert dashboard KPI)
+    - D-02 / I-09 (Customer profile KPI)
+    - I-08 (Invoice ↔ Project link)
+
+  Phase 12 (CRM Build-out):
+    - D-10 (CRM ماژول جدید: leads, opportunities, pipeline, activities)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  END OF INTEGRATION AUDIT
+  تاریخ تهیه: 1405/03/30 (2026-06-20)
+  Auditor: Internal (source-based، بدون حدس)
+  
+  منبع‌های بازرسی:
+    /home/user/ccptt/client-project-tracker.php       (v8.0.0)
+    /home/user/ccptt/includes/class-cptt-finance-erp.php  (8,150 خط)
+    /home/user/ccptt/includes/class-cptt-finance.php       (1,000+ خط)
+    /home/user/ccptt/includes/class-cptt-expert.php        (4,900+ خط)
+    /home/user/ccptt/includes/class-cptt-admin.php         (2,000+ خط)
+    /home/user/ccptt/includes/class-cptt-core.php
+    /home/user/ccptt/includes/class-cptt-analytics.php
+    /home/user/ccptt/includes/class-cptt-reminders.php
+    /home/user/ccptt/includes/class-cptt-ai-assistant.php
+    /home/user/ccptt/includes/class-cptt-bale.php
+    /home/user/ccptt/includes/class-cptt-sms.php
+    /home/user/ccptt/assets/finance-ui/app.js (446 KB minified bundle)
+    
+  نتیجه‌گیری: ERP «هماهنگ» در نسخه v8.0.0 یک backend بالغ دارد ولی
+              یکپارچگی UI/data نیاز به یک فاز کامل integration دارد.
+              
+              Integration Score = 45/100  ← اولویت اصلاح
+              Average Readiness  = 71/100
+════════════════════════════════════════════════════════════════════════════════

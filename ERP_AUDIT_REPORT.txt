@@ -1,0 +1,1449 @@
+════════════════════════════════════════════════════════════════════════════════
+  ERP_AUDIT_REPORT — هماهنگ (Client Project Tracker) — Phase 3 Pre-Audit
+════════════════════════════════════════════════════════════════════════════════
+  این گزارش بر اساس بازرسی واقعی سورس‌کد (نه حدس) تولید شده است:
+    • PHP backend  : /home/user/ccptt/includes/class-cptt-finance-erp.php
+    • React source : /tmp/mali/src/  (build → /home/user/ccptt/assets/finance-ui/)
+    • Plugin shell : /home/user/ccptt/client-project-tracker.php
+════════════════════════════════════════════════════════════════════════════════
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ بخش اول — خلاصه پروژه                                                          │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+Version                : 7.6.0
+Build Date             : 2026-06-12 (Asia/Tehran)
+Plugin name            : هماهنگ - افزونه ی مدیریت پروژه و تیم
+Author                 : امیرحسین سعادتی
+WordPress Capability   : edit_cptt_projects  (gates the ERP page)
+
+تعداد ماژول‌ها           : 18 ماژول کاربردی
+                          (Dashboard, Chart of Accounts, Vouchers, IncomeExpense,
+                           ExpertSettlement, Receivables, AgingReport, Installments,
+                           PartyStatement, Treasury, Transfers, Ledger, Cheques,
+                           Payables, ProjectAccounting, CostCenters, Categories,
+                           FiscalYear + AuditLog + Permissions + FinancialReports[6 tabs])
+
+تعداد صفحات (Tab IDs)    : 26
+                          [dashboard, coding, vouchers, journal, ledger,
+                           subsidiary_ledger, trial_balance, income_statement,
+                           balance_sheet, income_expense, settlements, receivables,
+                           aging_report, installments, party_statement, treasury,
+                           transfers, ledger_view, cheques, payables,
+                           project_accounting, cost_centers, categories,
+                           fiscal_year, audit_log, permissions]
+
+تعداد AJAX Endpoints     : 52  (همگی با پیشوند `cpttf_erp_`)
+                           ↳ کل پلاگین (شامل ماژول‌های قدیمی) : 127 endpoint
+
+تعداد Database Tables    : 11 جدول سفارشی (cptt_* + cptt_fin_* + cptt_erp_*)
+                           ↳ ERP-specific          : 1  (wp_cptt_erp_audit)
+                           ↳ Finance shared        : 3  (cptt_fin_accounts, cptt_fin_categories, cptt_fin_ledger)
+                           ↳ بقیه قدیمی پلاگین      : 7
+
+تعداد React Components   : 27 component فایل (در /src/components/)
+                           ↳ Pages         : 21
+                           ↳ Shared UI Kit : 1 (UI.tsx)
+                           ↳ Shell/Chrome  : 3 (Sidebar, Navbar, CommandPalette)
+                           ↳ Helpers       : 2 (ExportButtons, AttachmentsBox)
+
+تعداد Context           : 1  (AppContext.tsx — تنها منبع state اپ)
+
+تعداد Hooks             : 2 custom hook
+                          ↳ useApp()         (consume AppContext)
+                          ↳ useForceStyle()  (anti-theme inline-style enforcer)
+
+حجم Bundle              : 
+                          dist/index.html      : 510 KB (raw, single-file)
+                          gzip                 : ~131 KB
+                          extracted app.js     : 436 KB
+                          extracted app.css    : 64 KB
+                          extracted fonts.css  : 1.4 KB
+
+تعداد خطوط سورس کل      : ~7,072 خط (PHP ERP + React + utils)
+                          ↳ PHP ERP module   : 2,355 خط (class-cptt-finance-erp.php)
+                          ↳ React TS sources : 3,984 خط (components/)
+                          ↳ Utils + Context  : ~733 خط
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ بخش دوم — ماژول‌ها                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+═══ ماژول 1: Dashboard (DashboardBI.tsx) ═══
+
+Purpose
+  نمای کلی مالی شرکت: KPIهای استراتژیک، نمودار درآمد/هزینه ماهانه،
+  Top Customers، تفکیک هزینه بر اساس دسته، Financial Health.
+
+UI Sections
+  - KPI Cards (4-8 KPI: cash, revenue, expense, profit, …)
+  - Monthly Series Chart (Recharts/SVG inline)
+  - Top Customers Card
+  - Category Breakdown (income/expense pie)
+  - Financial Health badge (collectionRatio, avgCollectionDays, …)
+
+Fields
+  read-only — مصرف‌کننده‌ی payload از `kpis`, `monthlySeries`, `topCustomers`,
+  `categoryBreakdownExpense`, `categoryBreakdownIncome`, `financialHealth`.
+
+Operations
+  - Read only (No CRUD)
+
+API Endpoints
+  - cpttf_erp_kpis              (legacy, separate)
+  - داده‌ها از full_bootstrap می‌آیند
+
+Database Usage
+  - مستقیماً به هیچ جدولی نمی‌نویسد. مصرف‌کننده‌ی aggregateهای
+    CPTT_Finance::compute_kpis(), ::monthly_series(), …
+
+Permissions
+  - reports_view (همه‌ی ۴ نقش)
+
+Current Status
+  COMPLETE
+
+Missing Items
+  - بدون قابلیت drill-down روی KPI
+  - فاقد فیلتر دوره‌ی زمانی روی نمودار monthly
+  - بدون تنظیم target / budget vs actual
+
+Technical Debt
+  - kpis از payload bootstrap بدون lazy load می‌آید → اگر داده‌ها زیاد شوند سنگین
+  - منطق محاسبه‌ی financial_health در PHP ساده‌سازی‌شده است
+
+
+═══ ماژول 2: Chart of Accounts (ChartOfAccounts.tsx) ═══
+
+Purpose
+  کدینگ حساب‌ها — درخت ۴-سطحی (group → general → subsidiary → detail) با مانده.
+
+UI Sections
+  - Tree View با expand/collapse
+  - Add/Edit Modal (name, code, type, parent)
+  - Search
+
+Fields
+  id, code, name, type, parentId, balance, children
+
+Operations
+  - Read, Create, Update, Delete (delete با sanity check)
+
+API Endpoints
+  - cpttf_erp_coa_save
+  - cpttf_erp_coa_delete
+  - cpttf_erp_accounts  (legacy)
+
+Database Usage
+  - Option key: cpttf_erp_coa_nodes  (آرایه‌ای از node ها)
+
+Permissions
+  - settings_manage (CEO فقط)
+
+Current Status
+  PARTIAL — درخت ذخیره می‌شود اما mapping آن با cptt_fin_accounts (جدول
+  واقعی) دوگانه است. balance روی node ها همیشه ۰ است (هنوز aggregate
+  نشده از voucherها).
+
+Missing Items
+  - محاسبه‌ی balance زنده بر اساس voucherها
+  - Drag-and-drop reorder
+  - Import/Export کدینگ استاندارد ایران (سرفصل اصلی)
+  - چاپ درخت حساب‌ها
+
+Technical Debt
+  - دو منبع حقیقت (option وردپرس + جدول cptt_fin_accounts) که هم‌گاه نیستند
+
+
+═══ ماژول 3: Vouchers / اسناد حسابداری (Vouchers.tsx) ═══
+
+Purpose
+  ثبت سند روزنامه دوبل‌انتری با گردش‌کار تأیید چندسطحی.
+
+UI Sections
+  - KPI Cards (4 KPI: کل، پیش‌نویس، در حال تأیید، نهایی)
+  - FilterBar (۸ فیلتر: جستجو، شماره، وضعیت، نوع، از/تا تاریخ، پروژه، شخص)
+  - Voucher List (collapsible rows با expand برای جزئیات)
+  - Add Voucher Modal (با Table ردیف‌های debit/credit)
+  - Approve/Delete buttons
+
+Fields
+  id, voucherNumber, voucherCode, voucherType (JV|RV|PV|TV|CV|OV),
+  date, description, status (DRAFT|ACCOUNTANT_APPROVED|MANAGER_APPROVED|FINALIZED),
+  companyId, branchId, fiscalYearId, currency, exchangeRate,
+  rows[], createdBy, approvedByAccountant, approvedByManager, approvedByCEO,
+  isAutoGenerated, sourceType, refType, refId
+  rows row: accountId, accountName, debit, credit, description,
+            costCenterId, projectId, customerId, expertId
+
+Operations
+  - Create, Read, Approve (workflow), Delete
+  - Export (Excel/CSV/PDF/Print) via ExportButtons
+  - Attach files (AttachmentsBox)
+
+API Endpoints
+  - cpttf_erp_voucher_save
+  - cpttf_erp_voucher_approve
+  - cpttf_erp_voucher_delete
+  - cpttf_erp_vouchers_list
+
+Database Usage
+  - Option key: cpttf_erp_vouchers      (آرایه — همه‌ی اسناد)
+  - Option key: cpttf_erp_voucher_numbers  (شمارنده‌ی هر نوع در هر سال)
+
+Permissions
+  - voucher_view, voucher_create, voucher_approve, voucher_delete
+
+Current Status
+  PARTIAL — UI و workflow کامل، اما ذخیره در wp_options (نه جدول) برای
+  مقیاس بزرگ ناپایدار است.
+
+Missing Items
+  - شماره‌گذاری per-fiscal-year — منطق ساده است
+  - بدون validation محکم برای تساوی debit=credit در backend
+  - بدون reverse voucher
+  - بدون batch voucher
+
+Technical Debt
+  - **CRITICAL**: ذخیره‌ی همه vouchers در یک wp_option row →
+    payload با ~1000 voucher به MB می‌رسد و autoload نیست ولی همچنان
+    بدشدنی است. باید به جدول اختصاصی منتقل شود.
+
+
+═══ ماژول 4: Financial Reports (FinancialReports.tsx) ═══
+
+Purpose
+  گزارشات استاندارد حسابداری: دفتر روزنامه، دفتر کل، دفتر معین،
+  تراز آزمایشی، صورت سود و زیان، ترازنامه.
+
+UI Sections
+  - PageHeader با toggle فیلتر
+  - Tabs (۶ گزارش)
+  - FilterBar (۶ فیلتر: dateFrom/To, status, project, costCenter, person)
+  - بخش هر گزارش: KPIها + Table + Export
+
+Fields
+  filter: dateFrom, dateTo, projectId, costCenterId, personId, voucherStatus
+
+Operations
+  - Read-only گزارش + Export
+
+API Endpoints
+  - بدون endpoint اختصاصی — همگی روی client از vouchers محاسبه می‌شوند
+  - cpttf_erp_ledger (legacy, استفاده نشده در UI)
+
+Database Usage
+  - مصرف‌کننده‌ی vouchers + accounts + incomesExpenses + settlementHistory
+
+Permissions
+  - reports_view
+
+Current Status
+  PARTIAL — حالا (v7.6.0) با voucher synthesis از incomesExpenses/
+  settlementHistory پر می‌شود ولی این یک workaround است. اعداد می‌توانند
+  در صورت‌حساب اشخاص (که از endpoint جداگانه می‌آید) و گزارش‌های voucher-
+  based متفاوت باشند.
+
+Missing Items
+  - دفتر معین واقعی per-subsidiary (الان aggregation با parent chain است)
+  - گزارش مقایسه‌ای دوره‌ای (period vs period)
+  - صورت جریان وجوه نقد (Cash Flow Statement)
+  - یادداشت‌های توضیحی صورت‌های مالی
+  - افتتاحیه/اختتامیه‌ی خودکار سال مالی
+  - گزارش گردش حساب‌های کنترلی
+
+Technical Debt
+  - LedgerReport: تمام محاسبات client-side روی بزرگ‌ترین payload (vouchers
+    + synth). با ۱۰۰۰+ voucher کند می‌شود.
+  - مرجع account codeها (۱/۲ → دارایی، ۳ → بدهی، ۴ → سرمایه، …) hardcode است
+
+
+═══ ماژول 5: Income & Expense (IncomeExpense.tsx) ═══
+
+Purpose
+  ثبت سریع تراکنش‌های نقدی (درآمد/هزینه) بدون نیاز به سند کامل.
+
+UI Sections
+  - KPI Cards (۴: درآمد، هزینه، خالص، تعداد)
+  - FilterBar (۴ فیلتر: جستجو، نوع، حساب، پروژه)
+  - Table با امکان حذف
+  - Add Modal (نوع، عنوان، مبلغ، تاریخ، حساب، دسته، پروژه، مرکز هزینه)
+
+Fields
+  id, type (INCOME|EXPENSE), title, amount, currency, date, category,
+  projectId, costCenterId, accountId, bankAccountId, description, voucherId
+
+Operations
+  - Create, Read, Delete  (بدون Update)
+
+API Endpoints
+  - cpttf_erp_ie_save
+  - cpttf_erp_ie_delete
+
+Database Usage
+  - جدول: wp_cptt_fin_ledger (مستقیم — از طریق CPTT_Finance::ledger_insert)
+
+Permissions
+  - treasury_payment (به‌صورت ضمنی)
+
+Current Status
+  PARTIAL — ذخیره می‌شود اما **voucher تولید نمی‌کند**. این یعنی در
+  دفتر روزنامه/تراز/ترازنامه واقعی دیده نمی‌شود مگر از طریق
+  synth-voucher موقتی نسخه ۷.۶.
+
+Missing Items
+  - Update (ویرایش)
+  - bulk import از CSV
+  - recurring transactions (ماهانه/سالانه)
+  - voucher واقعی به جای ledger خام
+
+Technical Debt
+  - **HIGH**: ledger و voucher دو منبع جداگانه‌اند. باعث mismatch می‌شود
+    در گزارش‌ها (الان با synth حل می‌شود ولی workaround است).
+
+
+═══ ماژول 6: Expert Settlement (ExpertSettlement.tsx) ═══
+
+Purpose
+  تسویه‌ی کارشناسان بر اساس مراحل تأییدشده‌ی پروژه + پرداخت دستی.
+
+UI Sections
+  - KPI Cards (۴: مطالبات، تسویه‌شده، کارشناسان، رکوردها)
+  - Tabs (۳: منتظر تسویه، تسویه‌شده، تاریخچه)
+  - لیست کارشناسان + لیست مراحل قابل انتخاب
+  - Selected sum + payment account
+  - Manual Payment Modal
+  - History Tab با FilterBar (۴ فیلتر) + Table + Pagination
+
+Fields
+  expert (id, name, role, pendingBalance, paidBalance, projectsCount)
+  step   (id, projectId, projectName, expertId, stepName, amount, status, date)
+  settlement (id, expertId, expertName, amount, date, paymentMethod, voucherId,
+              description)
+
+Operations
+  - Read, Settle (bulk), Manual Pay
+  - Export از History (به صورت غیرمستقیم)
+
+API Endpoints
+  - cpttf_erp_settle_steps
+  - cpttf_erp_settle_manual
+
+Database Usage
+  - WordPress post_meta `_cptt_steps` روی cptt_project
+  - WordPress user_meta (از طریق CPTT_Core::ledger_add)
+  - wp_cptt_fin_ledger (treasury impact)
+  - hook `cptt_after_expert_payout` → auto_voucher_expert_payout()
+  - hook `cptt_after_manual_expert_payment` → auto_voucher_manual_payment()
+  - Option: cpttf_erp_vouchers (sample insert)
+
+Permissions
+  - treasury_payment
+
+Current Status
+  COMPLETE (v7.6.0)
+
+Missing Items
+  - undo/reverse settlement
+  - payslip print per expert
+  - گزارش تجمیعی پایان دوره
+
+Technical Debt
+  - تطبیق step id با pattern `ps_<projectId>_<stepId>_<expertId>` شکننده است
+
+
+═══ ماژول 7: Receivables / مطالبات مشتریان (Receivables.tsx) ═══
+
+Purpose
+  مدیریت مانده‌های دریافتنی از مشتریان (پروژه‌محور).
+
+UI Sections
+  - KPI Cards (۴)
+  - FilterBar (۳ فیلتر: جستجو، وضعیت، حداقل مانده)
+  - گروه‌بندی بر اساس مشتری
+  - Quick Pay Modal
+  - لینک به صورت‌حساب شخص + لینک ادمین وردپرس
+
+Fields
+  projectId, projectTitle, customerId, customerName, customerRole,
+  cost, paid, remain, isSettled
+
+Operations
+  - Read, Quick Receive
+
+API Endpoints
+  - cpttf_erp_project_quick_pay
+
+Database Usage
+  - post_meta `_cptt_steps` پروژه (برای cost/paid)
+  - wp_cptt_fin_ledger (income insert)
+
+Permissions
+  - project_finance_view
+
+Current Status
+  COMPLETE
+
+Missing Items
+  - فاکتور رسمی برای پرداخت
+  - دوگانه پرداخت partial allocation
+  - **voucher واقعی برای دریافت** (الان فقط ledger است)
+
+Technical Debt
+  - quick_pay sub-allocation بین stepها بدون UI تأیید (greedy fill)
+
+
+═══ ماژول 8: Aging Report / سن مطالبات (AgingReport.tsx) ═══
+
+Purpose
+  گزارش aging بر اساس بازه‌های ۰-۳۰، ۳۰-۶۰، ۶۰-۹۰، ۹۰+ روز.
+
+UI Sections
+  - KPI Cards (۴ بازه با رنگ‌بندی)
+  - Table با ستون‌های aging
+  - Export
+
+Fields
+  customer, totalRemain, lastPaymentDate, age, status
+
+Operations
+  - Read only + Export
+
+API Endpoints
+  - بدون endpoint اختصاصی — محاسبه روی client از receivables
+
+Database Usage
+  - مصرف‌کننده‌ی receivables payload
+
+Permissions
+  - project_finance_view
+
+Current Status
+  PARTIAL — محاسبه‌ی aging بر اساس "lastPaymentDate" کامل پشتیبانی نمی‌شود
+  چون این فیلد در payload backend وجود ندارد.
+
+Missing Items
+  - تاریخ آخرین پرداخت per-customer
+  - drill-down به صورت‌حساب
+  - بازه‌های قابل تنظیم
+  - بستن aging از یک تاریخ خاص
+
+Technical Debt
+  - aging logic روی client سینکرون با voucher نیست
+
+
+═══ ماژول 9: Installments / اقساط (Installments.tsx) ═══
+
+Purpose
+  برنامه‌ساز اقساط مشتریان + ثبت پرداخت هر قسط.
+
+UI Sections
+  - KPI Cards
+  - List of plans (expandable)
+  - Plan creator (customer, project, totalAmount, count, interval, firstDue)
+  - Pay-installment modal
+
+Fields
+  plan: id, customerId, customerName, projectId, projectName, totalAmount,
+        installmentsCount, intervalDays, firstDueDate, description,
+        installments[], createdAt
+  install row: no, dueDate, amount, paidAmount, paidDate, status (unpaid|paid|overdue)
+
+Operations
+  - Create plan, Pay installment, Delete plan
+
+API Endpoints
+  - cpttf_erp_installments_list
+  - cpttf_erp_installment_plan_create
+  - cpttf_erp_installment_pay
+  - cpttf_erp_installment_delete
+
+Database Usage
+  - Option: cpttf_erp_installments
+  - wp_cptt_fin_ledger (income insert on pay)
+  - voucher RV (auto via gen_voucher)
+
+Permissions
+  - treasury_payment
+
+Current Status
+  COMPLETE
+
+Missing Items
+  - reschedule
+  - late fee / penalty
+  - SMS reminder قبل از سررسید
+  - چاپ سررسید با QR
+
+Technical Debt
+  - installment status (`overdue`) در backend با cron بازمحاسبه نمی‌شود؛
+    فقط هنگام درخواست list
+
+
+═══ ماژول 10: Party Statement / صورت‌حساب اشخاص (PartyStatement.tsx) ═══
+
+Purpose
+  گردش حساب تفصیلی هر مشتری یا کارشناس.
+
+UI Sections
+  - KPI Cards (۴)
+  - FilterBar (۶ فیلتر)
+  - Table گردش با مانده‌ی running
+  - Export
+
+Fields
+  date, voucherCode, description, debit, credit, balance
+
+Operations
+  - Read + Export
+
+API Endpoints
+  - cpttf_erp_party_statement  (با partyType, partyId, date_from/to, project_id)
+
+Database Usage
+  - aggregation از vouchers بر اساس expertId/customerId در rows
+
+Permissions
+  - project_finance_view
+
+Current Status
+  COMPLETE
+
+Missing Items
+  - چاپ صورت‌حساب با template رسمی (هدر شرکت)
+  - گزارش aging per-party
+  - ارسال صورت‌حساب از طریق ایمیل/SMS
+
+Technical Debt
+  - opening_balance دقیق نیست (محاسبه‌ی قبل از from-date کامل نیست)
+
+
+═══ ماژول 11: Treasury / خزانه‌داری (Treasury.tsx) ═══
+
+Purpose
+  مدیریت صندوق‌ها و حساب‌های بانکی + واریز/برداشت/انتقال.
+
+UI Sections
+  - KPI Cards (۴)
+  - FilterBar (۲ فیلتر)
+  - Account cards grid (انتخاب حساب)
+  - عملیات: واریز / برداشت / انتقال
+  - FilterBar دوم (جستجوی گردش)
+  - Table گردش حساب با pagination
+  - ۲ Modal: Transfer + Deposit/Withdraw
+
+Fields
+  TreasuryAccount: id, name, type (BANK|CASH), accountNumber, balance, currency
+
+Operations
+  - Read, Deposit, Withdraw, Transfer (between accounts)
+  - prop `initialMode='transfer'` → Modal auto-open
+
+API Endpoints
+  - cpttf_erp_treasury_save
+  - cpttf_erp_treasury_delete
+  - cpttf_erp_treasury_transfer
+  - cpttf_erp_treasury_deposit
+  - cpttf_erp_treasury_withdraw
+
+Database Usage
+  - wp_cptt_fin_accounts (CRUD)
+  - wp_cptt_fin_ledger (همه‌ی حرکت‌ها)
+
+Permissions
+  - treasury_view, treasury_payment
+
+Current Status
+  PARTIAL — کار می‌کند ولی **voucher تولید نمی‌کند** (transfer/deposit/
+  withdraw → فقط ledger insert). در دفتر روزنامه/تراز دیده نمی‌شوند.
+
+Missing Items
+  - voucher TV واقعی برای transfer
+  - voucher RV/PV برای deposit/withdraw
+  - cheque-book برای صندوق نقدی
+  - گزارش روزانه‌ی صندوق (Cash Position)
+  - تطبیق صورت حساب بانکی (Bank Reconciliation)
+  - currency conversion گردش بین حساب‌های ارزی مختلف
+
+Technical Debt
+  - **HIGH**: نبود voucher روی تراکنش‌های treasury باعث mismatch با
+    دفتر کل می‌شود
+
+
+═══ ماژول 12: Transfers (تب جدا در سایدبار) ═══
+
+Purpose
+  shortcut به Treasury با Modal "انتقال بین حساب‌ها" باز.
+
+UI Sections
+  - همان Treasury با initialMode='transfer'
+
+Operations
+  - Transfer
+
+API Endpoints
+  - cpttf_erp_treasury_transfer
+
+Current Status
+  COMPLETE (v7.6.0)
+
+Missing Items
+  - تاریخچه‌ی جداگانه‌ی فقط انتقالات
+
+
+═══ ماژول 13: Ledger View / گردش حساب یکپارچه (Ledger.tsx) ═══
+
+Purpose
+  نمای یکپارچه‌ی تمام تراکنش‌های مالی (income/expense + settlement).
+
+UI Sections
+  - KPI Cards (۴)
+  - FilterBar (۳)
+  - Table با pagination
+
+Fields
+  date, type (IN|OUT), title, accountId, accountName, amount, category, source
+
+Operations
+  - Read only
+
+API Endpoints
+  - بدون endpoint اختصاصی — aggregation روی client از payload bootstrap
+
+Database Usage
+  - مصرف از incomesExpenses + settlementHistory + treasuryAccounts
+
+Permissions
+  - treasury_view
+
+Current Status
+  COMPLETE
+
+Missing Items
+  - دیدن چک‌ها / اقساط / payables در همین تب
+  - جستجوی full-text در همه‌ی جدول‌ها
+  - Export
+
+Technical Debt
+  - daughter منبع — اگر backend تغییر کند، client باید هم‌گاه شود
+
+
+═══ ماژول 14: Cheques / مدیریت چک‌ها (Cheques.tsx) ═══
+
+Purpose
+  ثبت چک‌های دریافتی/پرداختی + تغییر وضعیت.
+
+UI Sections
+  - KPI Cards (۵: دریافتی، پرداختی، در جریان، نشده، برگشتی)
+  - Tabs (دریافتی/پرداختی)
+  - FilterBar (۷)
+  - List collapsible
+  - ۲ Modal: Add/Edit + Change Status
+
+Fields
+  id, kind (receivable|payable), number, sayyadi, bank, branch, amount,
+  issueDate, dueDate, partyType, partyId, partyName, projectId,
+  treasuryAccountId, status (received|in_collection|collected|bounced|
+  transferred|cancelled|issued|awaiting_due|paid|cancelled_pay), description
+
+Operations
+  - Create, Update, Delete, Change Status, Attach files
+
+API Endpoints
+  - cpttf_erp_cheques_list
+  - cpttf_erp_cheque_save
+  - cpttf_erp_cheque_delete
+  - cpttf_erp_cheque_status
+
+Database Usage
+  - Option: cpttf_erp_cheques
+  - voucher JV (auto on save) — gen_voucher با account ids هاردکد شده
+  - voucher RV/PV (on status change to collected/paid)
+
+Permissions
+  - treasury_payment
+
+Current Status
+  PARTIAL
+
+Missing Items
+  - cheque-book numbering خودکار
+  - تطابق شماره‌ی صیادی با مسدودسازی duplicate
+  - چاپ چک
+  - دستهٔ چک (cheque chain)
+  - گزارش aging چک
+
+Technical Debt
+  - **MEDIUM**: hardcoded account IDs `a1_1_3`, `a3_1_1`, … در voucher
+    rows. اگر کاربر کدینگ را تغییر دهد، voucherها به حساب اشتباه می‌روند.
+
+
+═══ ماژول 15: Payables / بدهی‌ها (Payables.tsx) ═══
+
+Purpose
+  مدیریت بدهی به کارشناسان، پیمانکاران، تامین‌کنندگان، و سایرین.
+
+UI Sections
+  - KPI Cards (۴)
+  - FilterBar (۶)
+  - List collapsible
+  - ۲ Modal: Add/Edit + Pay
+
+Fields
+  id, partyType (expert|contractor|supplier|other), partyId, partyName,
+  amount, paidAmount, remain, issueDate, dueDate, projectId, description,
+  status (open|partially_paid|paid|overdue)
+
+Operations
+  - Create, Update, Pay (partial), Delete, Attach files
+
+API Endpoints
+  - cpttf_erp_payables_list
+  - cpttf_erp_payable_save
+  - cpttf_erp_payable_pay
+  - cpttf_erp_payable_delete
+
+Database Usage
+  - Option: cpttf_erp_payables
+  - wp_cptt_fin_ledger (expense on pay)
+  - voucher PV (auto on pay)
+
+Permissions
+  - treasury_payment
+
+Current Status
+  COMPLETE
+
+Missing Items
+  - تطبیق بدهی پیمانکار با پروژه (multi-step)
+  - 1099-style report (مالیات تکلیفی)
+  - reminder قبل از سررسید
+
+Technical Debt
+  - **MEDIUM**: status `overdue` فقط بر اساس compare ساده با امروز محاسبه
+    می‌شود (در recomputed)
+
+
+═══ ماژول 16: Project Accounting / حساب پروژه‌ها (ProjectAccounting.tsx) ═══
+
+Purpose
+  جزئیات مالی هر پروژه: فاکتور، دریافتی، مانده، سودآوری، مراحل.
+
+UI Sections
+  - KPI Cards (۵)
+  - FilterBar (۴)
+  - List collapsible
+  - Profitability card per project
+  - Pagination
+
+Fields
+  ProjectFull: id, numericId, title, customerId, customerName, totalCost,
+  totalPaid, totalExtraCost, totalExtraPaid, expertPaid, isSettled, steps[]
+
+Operations
+  - Read, Step Update (inline), Settle Project (toggle)
+
+API Endpoints
+  - cpttf_erp_project_step_update
+  - cpttf_erp_project_settle
+  - cpttf_erp_project_quick_pay (هم در Receivables)
+
+Database Usage
+  - post_meta `_cptt_steps`
+  - post_meta `_cptt_is_settled`
+  - wp_cptt_fin_ledger
+
+Permissions
+  - project_finance_view
+
+Current Status
+  COMPLETE
+
+Missing Items
+  - تخصیص هزینه‌ی سربار (overhead allocation)
+  - گزارش WIP (Work-In-Progress)
+  - باز کردن استعلام مالی پروژه برای مشتری
+
+Technical Debt
+  - profitability calc روی client و بدون factor allocation روش است
+
+
+═══ ماژول 17: Cost Centers / مراکز هزینه (CostCenters.tsx) ═══
+
+Purpose
+  ثبت مراکز هزینه با بودجه و مقایسه‌ی واقعی.
+
+UI Sections
+  - KPI Cards (۴)
+  - List of CCs
+  - Add/Edit Modal
+  - Progress bar مصرف بودجه
+
+Fields
+  id, name, type (PROJECT|UNIT|TEAM|BRANCH), code, budget
+
+Operations
+  - Create, Update, Delete
+
+API Endpoints
+  - cpttf_erp_cc_save
+  - cpttf_erp_cc_delete
+
+Database Usage
+  - Option: cpttf_erp_cost_centers
+
+Permissions
+  - settings_manage
+
+Current Status
+  COMPLETE
+
+Missing Items
+  - hierarchy (مرکز هزینه‌ی والد/فرزند)
+  - تخصیص بودجه‌ی ماهانه
+  - گزارش مقایسه‌ای بودجه vs واقعی per period
+
+
+═══ ماژول 18: Finance Categories / دسته‌بندی مالی (Categories.tsx) ═══
+
+Purpose
+  دسته‌بندی برای IncomeExpense.
+
+UI Sections
+  - Tabs (درآمد/هزینه)
+  - List + Add/Edit Modal
+
+Fields
+  id, name, type (income|expense), color, icon
+
+Operations
+  - Create, Update, Delete
+
+API Endpoints
+  - cpttf_erp_fincat_save
+  - cpttf_erp_fincat_delete
+
+Database Usage
+  - جدول wp_cptt_fin_categories
+
+Permissions
+  - settings_manage
+
+Current Status
+  COMPLETE
+
+
+═══ ماژول 19: Fiscal Year / سال مالی (FiscalYear.tsx) ═══
+
+Purpose
+  مدیریت سال‌های مالی + قفل دوره‌ای.
+
+UI Sections
+  - List of fiscal years
+  - Create modal
+  - Lock period UI
+
+Fields
+  FiscalYear: id, companyId, name, startDate, endDate, status (OPEN|CLOSED)
+  Lock: id, fiscalYearId, startDate, endDate, isLocked, lockedBy
+
+Operations
+  - Create, Close fiscal year
+  - Toggle lock for date range
+
+API Endpoints
+  - cpttf_erp_fy_create
+  - cpttf_erp_fy_close
+  - cpttf_erp_lock_toggle
+
+Database Usage
+  - Option: cpttf_erp_fiscal_years
+  - Option: cpttf_erp_locks
+
+Permissions
+  - settings_manage
+
+Current Status
+  PARTIAL — close و lock فقط flag در option، **enforcement سمت backend
+  نیست**. می‌توان سند روی دوره‌ی بسته ثبت کرد.
+
+Missing Items
+  - بستن سال مالی واقعی + سند اختتامیه‌ی خودکار
+  - افتتاحیه‌ی سال مالی جدید
+  - prevent post-to-closed-period
+
+Technical Debt
+  - **HIGH**: lock صرفاً نمایشی است
+
+
+═══ ماژول 20: Audit Log (AuditLog.tsx) ═══
+
+Purpose
+  گزارش رخدادهای حسابرسی روی تمام عملیات.
+
+UI Sections
+  - Filter (action, entity, user, dateFrom/To)
+  - Table با before/after data
+
+Fields
+  id, user_id, user_name, action_type, entity_type, entity_id,
+  before_data, after_data, created_at, date_fa
+
+Operations
+  - Read only
+
+API Endpoints
+  - cpttf_erp_audit_list
+
+Database Usage
+  - **جدول واقعی**: wp_cptt_erp_audit  (تنها جدول اختصاصی ERP)
+
+Permissions
+  - audit_view
+
+Current Status
+  COMPLETE — تنها جدولی که properly indexed است
+
+Missing Items
+  - Pagination در backend (الان `LIMIT 500`)
+  - Export to CSV
+  - تشخیص الگوهای مشکوک
+
+Technical Debt
+  - بعضی operationها audit_log صدا نمی‌زنند (IncomeExpense, Treasury)
+
+
+═══ ماژول 21: Permissions (Permissions.tsx) ═══
+
+Purpose
+  ماتریس دسترسی ۴ نقش × 10 capability.
+
+UI Sections
+  - Matrix table با چک‌باکس‌ها
+
+Fields
+  rolePermissions: { ceo, financial_manager, accountant, cashier } × 10 perms
+
+Operations
+  - Read, Save (matrix)
+
+API Endpoints
+  - cpttf_erp_permissions_save
+
+Database Usage
+  - Option: cpttf_erp_role_permissions
+
+Permissions
+  - manage_options (WordPress core, نه ERP)
+
+Current Status
+  PARTIAL — UI کار می‌کند ولی **enforcement در backend ضعیف است**.
+  همه‌ی endpointها فقط `edit_cptt_projects` را چک می‌کنند، نه perm های
+  ریز.
+
+Missing Items
+  - enforcement واقعی per-endpoint
+  - role audit log
+  - دسترسی per-fiscal-year
+
+Technical Debt
+  - **HIGH**: تنها check واقعی `edit_cptt_projects` است در `check()`
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ بخش سوم — Database Audit                                                       │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+═══ جدول 1: wp_cptt_fin_accounts ═══
+Columns:
+  id            BIGINT UNSIGNED  AUTO_INCREMENT  PRIMARY KEY
+  name          VARCHAR(190)     NOT NULL
+  type          VARCHAR(20)      NOT NULL          (BANK|CASH)
+  account_number VARCHAR(64)     NULL
+  currency      VARCHAR(8)       NULL
+  initial_balance DECIMAL(18,2)  DEFAULT 0
+  status        TINYINT          DEFAULT 1
+Row Count: ≈ تعداد حساب‌های treasury (مدیریت توسط CPTT_Finance)
+Relationships:
+  - referenced by cptt_fin_ledger.account_id
+Problems: ندارد
+Recommendation: اضافه‌کردن INDEX روی (status, type)
+
+═══ جدول 2: wp_cptt_fin_categories ═══
+Columns:
+  id, name, type (income|expense), color, icon, sort_order
+Row Count: ~۲۰ دسته
+Relationships:
+  - referenced by cptt_fin_ledger.category_id
+Problems: type فقط با ENUM-style validate می‌شود، نه DB constraint
+Recommendation: INDEX روی (type, sort_order)
+
+═══ جدول 3: wp_cptt_fin_ledger ═══
+Columns:
+  id, account_id, category_id, type, direction (1|-1), amount,
+  project_id, customer_id, description, date_at (INT UNIX),
+  ref_type, linked_id
+Row Count: گرومی (هر تراکنش = ۱-۲ row)
+Relationships:
+  - account_id → cptt_fin_accounts
+  - category_id → cptt_fin_categories
+  - project_id → wp_posts (cptt_project)
+  - customer_id → wp_users
+  - linked_id → خود-ارجاع (transfer)
+Problems:
+  - **CRITICAL**: ندارد FK constraint
+  - فاقد INDEX روی (date_at), (project_id), (customer_id)
+  - هیچ ارتباطی با voucherها نیست — این درست همان dual-source problem است
+Recommendation:
+  - افزودن INDEX روی date_at, project_id, customer_id, ref_type
+  - افزودن ستون voucher_id برای ربط دادن به سند
+
+═══ جدول 4: wp_cptt_erp_audit ═══
+Columns:
+  id, user_id, user_name, action_type, entity_type, entity_id,
+  before_data LONGTEXT (JSON), after_data LONGTEXT (JSON),
+  created_at INT, date_fa VARCHAR(40)
+Indexes: PRIMARY, user_idx, action_idx, entity_idx
+Row Count: متناسب با فعالیت (هر CRUD ۱ ردیف)
+Relationships:
+  - user_id → wp_users
+  - entity_id → polymorphic (هر چیزی)
+Problems:
+  - rows با LONGTEXT (JSON) سنگین می‌شوند
+  - بدون retention policy (auto-prune)
+Recommendation:
+  - cron برای prune > 1 سال
+  - JSON_VALID() validation
+  - INDEX روی date_fa برای فیلتر تاریخ
+
+═══ جدول‌های قدیمی پلاگین (نه ERP، ولی مستندسازی شده) ═══
+  - wp_cptt_activity        (لاگ فعالیت کاربری)
+  - wp_cptt_expert_chats    (چت کارشناس-مشتری)
+  - wp_cptt_invoices        (فاکتورها — جداگانه از voucher)
+  - wp_cptt_ledger          (legacy ledger، استفاده نمی‌شود توسط ERP)
+  - wp_cptt_notifications   (سیستم اعلان قدیمی)
+  - wp_cptt_project_files   (فایل‌های پروژه)
+  - wp_cptt_requests        (درخواست‌های مشتری)
+
+Problems کل database:
+  - **DUAL SOURCE OF TRUTH**: ledger خام (cptt_fin_ledger) + voucher آرایه‌ای
+    (cpttf_erp_vouchers option) دو منبع جداگانه‌اند
+  - نبود FK constraints
+  - بسیاری از داده‌ی ERP در wp_options است نه جدول
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ بخش چهارم — Options Audit                                                       │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+Key                                Size (تخمینی)   Est Rows   Risk
+─────────────────────────────────────────────────────────────────────
+cpttf_erp_vouchers                 ~۱۰ KB - چندین MB   ۰-۱۰۰۰۰+   CRITICAL
+cpttf_erp_fiscal_years             < ۱ KB              ۰-۱۰      LOW
+cpttf_erp_coa_nodes                ~۲-۲۰ KB           ۲۰-۲۰۰     MEDIUM
+cpttf_erp_cost_centers             < ۲ KB              ۰-۵۰      LOW
+cpttf_erp_locks                    < ۱ KB              ۰-۲۰      LOW
+cpttf_erp_companies                < ۱ KB              ۱-۵       LOW
+cpttf_erp_branches                 < ۱ KB              ۱-۲۰      LOW
+cpttf_erp_cheques                  ~۱-۵۰ KB           ۰-۵۰۰     HIGH
+cpttf_erp_installments             ~۱-۵۰ KB           ۰-۵۰۰     HIGH
+cpttf_erp_payables                 ~۱-۵۰ KB           ۰-۵۰۰     HIGH
+cpttf_erp_voucher_numbers          < ۱ KB              ۶-۶۰       LOW
+cpttf_erp_role_permissions         < ۱ KB              ۴ نقش     LOW
+cpttf_erp_attachments              ~۱-۲۰ KB           ۰-۲۰۰     MEDIUM
+cpttf_erp_notifs_read              < ۲ KB              ۰-۱۰۰     LOW (per-user)
+cpttf_erp_notifs_deleted           < ۲ KB              ۰-۱۰۰     LOW (per-user)
+
+نکات Risk Level:
+  - CRITICAL: cpttf_erp_vouchers
+      دلیل: تمام اسناد در یک option ذخیره می‌شوند. با ۵۰۰۰ سند ≈ ۵-۲۰ MB.
+      هر CRUD کل آرایه را decode/encode می‌کند. در نسخه‌ی production
+      با حجم متوسط حافظه‌ی PHP را می‌خورد و query کند می‌شود.
+  - HIGH: cheques/installments/payables — همین مشکل، ولی حجم کمتر
+  - MEDIUM: coa_nodes — درخت می‌تواند بزرگ شود
+  - autoload: همه با `update_option(..., false)` ذخیره می‌شوند ✓ (good)
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ بخش پنجم — Voucher Engine Audit                                                │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+رویداد                              Generates Voucher?   مسیر
+────────────────────────────────────────────────────────────────────────────────
+Customer Payment (project_quick_pay)    NO              فقط cptt_fin_ledger.insert
+                                                          (income, direction=+1)
+                                                          + update _cptt_steps post_meta
+                                                          هیچ gen_voucher صدا نمی‌خورد!
+
+Expert Settlement (settle_steps)         YES (auto)      hook `cptt_after_expert_payout`
+                                                          → auto_voucher_expert_payout()
+                                                          → gen_voucher(type=PV)
+                                                          rows: a3_1_2 / a1_1_1 (hardcoded)
+
+Manual Expert Payment (settle_manual)    YES (auto)      hook `cptt_after_manual_expert_payment`
+                                                          → auto_voucher_manual_payment()
+                                                          → gen_voucher(type=PV)
+
+Income / Expense (ie_save)               NO              فقط CPTT_Finance::ledger_insert
+                                                          (در v7.6.0 با voucher synthesis
+                                                          روی client نمایش داده می‌شود)
+
+Treasury Deposit (treasury_deposit)      NO              فقط CPTT_Finance::ledger_insert
+
+Treasury Withdraw (treasury_withdraw)    NO              فقط CPTT_Finance::ledger_insert
+
+Treasury Transfer (treasury_transfer)    NO              ۲ تا ledger_insert با linked_id
+                                                          (هیچ TV voucher تولید نمی‌شود)
+
+Cheque (cheque_save)                     PARTIAL (JV)    فقط روی save جدید (نه edit)
+                                                          gen_voucher(type=JV) با
+                                                          account ids HARDCODED:
+                                                          - receivable: a1_1_3 / a1_2_1
+                                                          - payable:    a3_1_1 / a3_1_2
+
+Cheque Status → Collected/Paid           PARTIAL         در cheque_status هم gen_voucher
+                                                          صدا زده می‌شود (RV یا PV)
+                                                          باز هم با account ids hardcoded
+
+Installment Pay (installment_pay)        YES             gen_voucher(type=RV) با
+                                                          a1_1_1 / a1_2_1 hardcoded
+                                                          + ledger insert
+
+Payable Pay (payable_pay)                YES             gen_voucher(type=PV) با
+                                                          a3_1_2 / a1_1_1 hardcoded
+                                                          + ledger insert
+
+خلاصه‌ی Voucher Engine Audit
+  ✅ YES (۴ مورد):  settle_steps, settle_manual, installment_pay, payable_pay
+  🟡 PARTIAL (۳):   cheque save/status (hardcoded accounts)
+  ❌ NO  (۴ مورد):  customer_quick_pay, ie_save, treasury_deposit/withdraw/transfer
+
+این Gap بزرگ‌ترین مشکل حسابداری پروژه است. باعث می‌شود:
+  - دفتر روزنامه‌ی واقعی ناقص باشد
+  - تراز آزمایشی غیرواقعی باشد
+  - صورت سود و زیان underreport کند
+  - reconciliation با bank statement سخت باشد
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ بخش ششم — Performance Audit                                                   │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+Metric                              Status      توضیح
+─────────────────────────────────────────────────────────────────────────────
+Bootstrap Payload Size              MEDIUM      یک‌جا ~۲۰-۵۰ KB JSON بدون داده‌ی
+                                                واقعی؛ با ۱۰۰ پروژه + ۱۰۰۰ voucher
+                                                می‌رسد به ~۲-۵ MB
+Full Bootstrap Time                 MEDIUM      ~۲۰+ کوئری در single request
+                                                (companies, branches, fy, coa, vouchers,
+                                                 experts, steps, settlements, ie,
+                                                 treasury, locks, categories,
+                                                 receivables, projectsFull, kpis,
+                                                 monthlySeries, topCustomers,
+                                                 categoryBreakdownExpense, Income,
+                                                 partyAccounts, rolePermissions,
+                                                 cheques, installmentPlans, payables,
+                                                 notifications, financialHealth)
+Number of Queries (bootstrap)       HIGH        ~۳۰-۵۰ کوئری
+Largest Tables                      LOW         wp_cptt_fin_ledger (با گذر زمان)
+Largest Options                     CRITICAL    cpttf_erp_vouchers می‌تواند MB شود
+React Render Bottlenecks            MEDIUM      MutationObserver سراسری در App.tsx
+                                                هر تغییر DOM را sweep می‌کند
+                                                (rAF throttle شده ولی همچنان expensive)
+N+1 Query Risks                     HIGH        build_receivables() — برای هر پروژه
+                                                get_post_meta + get_userdata
+                                                build_experts_and_steps() — مشابه
+                                                در dashboard با ۲۰۰+ پروژه کند می‌شود
+
+Worst Offenders:
+  1. CRITICAL: Vouchers in wp_options — هر فراخوانی full_bootstrap همه را decode
+  2. HIGH:     N+1 در build_projects_full/receivables/experts
+  3. HIGH:     ۳۰+ کوئری در یک full_bootstrap
+  4. MEDIUM:   MutationObserver روی هر کلیک sweep می‌شود
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ بخش هفتم — Security Audit                                                       │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+Check                          Status     Detail
+─────────────────────────────────────────────────────────────────────────────
+Nonce Validation               PASS       همه‌ی ۵۲ endpoint از check_ajax_referer
+                                          استفاده می‌کنند (در private check())
+Capability Checks              WARNING    همه فقط edit_cptt_projects چک می‌کنند.
+                                          permissions matrix در DB ذخیره می‌شود
+                                          ولی در backend enforcement ندارد.
+                                          روی نقش ها فقط در client filter می‌شود.
+SQL Injection Risks            PASS       استفاده از $wpdb->prepare() در ۱۵ مورد.
+                                          ۱ مورد LIMIT $limit به‌صورت direct ولی
+                                          $limit از طریق (int) cast شده (LOW risk).
+                                          Update/insert از $wpdb->update/insert
+                                          استفاده می‌کنند (auto-escape).
+XSS Risks                      WARNING    رشته‌های ورودی با sanitize_text_field
+                                          محدود می‌شوند. اما description / note
+                                          می‌تواند markdown/html بپذیرد و در
+                                          chrome React رندر شود.
+                                          React بهینه (default escape) ولی
+                                          attachments URL ها از باند نمی‌گذرند.
+CSRF Risks                     PASS       با nonce محافظت می‌شود (POST + nonce)
+File Upload Risks              PASS       check ext در whitelist:
+                                          [pdf, jpg, jpeg, png, zip]
+                                          از wp_handle_upload استفاده می‌شود
+                                          MIME validation ندارد (فقط ext)
+                                          recommendation: MIME check اضافه شود
+Privilege Escalation           WARNING    یک کاربر cptt_expert با
+                                          edit_cptt_projects می‌تواند:
+                                          - تمام voucherها را ببیند
+                                          - voucher تأیید/حذف کند
+                                          - بدهی/قسط/چک هر کسی را تغییر دهد
+                                          فقط ajax_permissions_save چک
+                                          manage_options می‌کند.
+
+Critical Security Issues:
+  - role-based access control واقعی نیست
+  - role 'cptt_expert' default → 'accountant' در ERP — کارشناس به
+    ERP کامل دسترسی دارد!
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ بخش هشتم — Permission Audit                                                    │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+ماتریس فعلی (از DEFAULT_PERMISSIONS در AppContext + از get_role_permissions backend):
+
+Role                voucher  voucher  voucher  voucher  reports  treasury  treasury    project   audit   settings
+                     view     create   approve  delete   view     view      payment     finance   view    manage
+                                                                                        view
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+CEO                  ✓        ✓        ✓        ✓        ✓        ✓         ✓           ✓         ✓       ✓
+Financial Manager    ✓        ✓        ✓        ✗        ✓        ✓         ✓           ✓         ✓       ✗
+Accountant           ✓        ✓        ✓        ✗        ✓        ✓         ✗           ✓         ✗       ✗
+Cashier              ✓        ✗        ✗        ✗        ✗        ✓         ✓           ✗         ✗       ✗
+
+Mapping صریح ماژول × Permission (Frontend Only):
+
+Module                      View                  Create               Edit               Delete             Approve            Export
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Vouchers                    voucher_view          voucher_create       voucher_create     voucher_delete     voucher_approve    reports_view
+IncomeExpense               treasury_view         treasury_payment     —                  treasury_payment   —                  reports_view
+ExpertSettlement            project_finance_view  treasury_payment     —                  —                  —                  —
+Receivables                 project_finance_view  —                    —                  —                  —                  reports_view
+PartyStatement              project_finance_view  —                    —                  —                  —                  reports_view
+Treasury                    treasury_view         treasury_payment     —                  settings_manage    —                  —
+Cheques                     treasury_view         treasury_payment     treasury_payment   treasury_payment   —                  —
+Payables                    treasury_view         treasury_payment     treasury_payment   treasury_payment   —                  —
+Installments                project_finance_view  treasury_payment     —                  treasury_payment   —                  —
+ProjectAccounting           project_finance_view  —                    —                  —                  —                  —
+CostCenters                 settings_manage       settings_manage      —                  settings_manage    —                  —
+Categories                  settings_manage       settings_manage      —                  settings_manage    —                  —
+FiscalYear                  settings_manage       settings_manage      —                  —                  —                  —
+AuditLog                    audit_view            —                    —                  —                  —                  —
+Permissions                 (manage_options)      —                    (manage_options)   —                  —                  —
+FinancialReports            reports_view          —                    —                  —                  —                  reports_view
+Dashboard                   reports_view          —                    —                  —                  —                  —
+
+⚠ نکته‌ی مهم: این جدول reflect می‌کند آن‌چه در client `can()` چک می‌شود.
+   در backend اعلام شد که هیچ‌کدام enforce نمی‌شوند — فقط
+   `edit_cptt_projects` چک می‌شود.
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ بخش نهم — UI Audit                                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+صفحه                          KPI   Tables   Modals   Filters   Tabs   تراکم
+─────────────────────────────────────────────────────────────────────────────
+Dashboard                     4-8   2        0        1         0      متعادل
+ChartOfAccounts               0     1 (Tree) 1        0         0      کم‌اطلاعات
+Vouchers                      4     1        1        8         0      شلوغ
+Journal (Report tab)          0     1        0        6         (parent)متعادل
+Ledger (Report tab)           1     1        0        6         (parent)متعادل
+SubsidiaryLedger              1     1        0        6         (parent)متعادل
+TrialBalance                  0     1        0        6         (parent)متعادل
+IncomeStatement               3     0        0        6         (parent)کم‌اطلاعات
+BalanceSheet                  3     0        0        6         (parent)کم‌اطلاعات
+IncomeExpense                 4     1        1        4         0      متعادل
+ExpertSettlement              4     1        2        1         3      متعادل
+Receivables                   4     1        1        3         0      متعادل
+AgingReport                   4     1        0        2         0      متعادل
+Installments                  4     1        2        2         0      متعادل
+PartyStatement                4     1        0        6         0      متعادل
+Treasury                      4     1        2        2+2       0      شلوغ
+Ledger (View)                 4     1        0        3         0      متعادل
+Cheques                       5     1        2        7         2      شلوغ
+Payables                      4     1        2        6         0      متعادل
+ProjectAccounting             5     1        0        4         0      متعادل
+CostCenters                   4     1        1        0         0      متعادل
+Categories                    0     1        1        0         2      کم‌اطلاعات
+FiscalYear                    1     1        1        0         0      کم‌اطلاعات
+AuditLog                      0     1        0        5         0      متعادل
+Permissions                   0     1        0        0         0      کم‌اطلاعات
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ بخش دهم — Missing Features Audit                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+# | Feature                                              | Priority   | Complexity
+─-+──────────────────────────────────────────────────────+────────────+──────────────
+ 1| Voucher generation برای Customer Quick Pay         | CRITICAL   | MEDIUM
+ 2| Voucher generation برای IncomeExpense              | CRITICAL   | MEDIUM
+ 3| Voucher generation برای Treasury Transfer/Dep/Wd   | CRITICAL   | MEDIUM
+ 4| Account-mapping قابل پیکربندی (نه hardcoded)       | CRITICAL   | LARGE
+ 5| Migrate vouchers از wp_options به جدول اختصاصی    | CRITICAL   | LARGE
+ 6| Backend enforcement واقعی permissions matrix      | CRITICAL   | LARGE
+ 7| Lock period enforcement (jail بستن دوره)          | HIGH       | MEDIUM
+ 8| Closing/Opening فیزیکی سال مالی                  | HIGH       | LARGE
+ 9| Cash Flow Statement (صورت جریان نقدی)            | HIGH       | LARGE
+10| Bank Reconciliation                              | HIGH       | LARGE
+11| Period-over-period comparison reports             | HIGH       | MEDIUM
+12| Reverse voucher                                    | HIGH       | SMALL
+13| Voucher batch entry                                | MEDIUM     | MEDIUM
+14| Recurring transactions                             | MEDIUM     | MEDIUM
+15| Multi-currency real (exchange rate dynamic)        | MEDIUM     | LARGE
+16| Invoice/Quote module                              | MEDIUM     | VERY_LARGE
+17| Payslip print per expert                          | MEDIUM     | MEDIUM
+18| Drag-drop reorder COA                             | LOW        | SMALL
+19| Import standard COA (Iran)                        | MEDIUM     | MEDIUM
+20| Print voucher (template رسمی)                     | MEDIUM     | SMALL
+21| Print cheque                                       | LOW        | SMALL
+22| Drill-down KPI ها در Dashboard                    | MEDIUM     | MEDIUM
+23| Cron برای recompute overdue statuses              | MEDIUM     | SMALL
+24| SMS/Bale reminder چک/قسط/بدهی                    | MEDIUM     | MEDIUM
+25| Audit log retention (auto-prune)                  | MEDIUM     | SMALL
+26| MIME type validation روی upload                   | HIGH       | SMALL
+27| Bulk import (CSV) برای IE / Vouchers             | MEDIUM     | MEDIUM
+28| Cheque book numbering خودکار                     | LOW        | SMALL
+29| Aging report با تاریخ پایه‌ی قابل تنظیم          | MEDIUM     | SMALL
+30| FK constraints در ledger table                    | HIGH       | MEDIUM
+31| Index بهینه روی ledger                           | HIGH       | SMALL
+32| WIP report (Work In Progress) per project         | MEDIUM     | MEDIUM
+33| Overhead allocation                               | MEDIUM     | LARGE
+34| Budget vs Actual report                           | MEDIUM     | MEDIUM
+35| Email/PDF صورت‌حساب اشخاص                        | MEDIUM     | MEDIUM
+36| Standalone print template (هدر شرکت)             | LOW        | SMALL
+37| Dark mode actual implementation                   | LOW        | MEDIUM
+38| Mobile app (PWA) — manifest فقط                  | LOW        | VERY_LARGE
+39| Two-Factor Auth برای settings                     | LOW        | MEDIUM
+40| Webhook outbound برای رخدادهای مالی               | LOW        | MEDIUM
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ بخش یازدهم — ERP Readiness Score                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+دامنه                                       امتیاز   توضیح
+─────────────────────────────────────────────────────────────────────────────
+Accounting                                  55/100   COA + voucher دستی هست،
+                                                     ولی auto-voucher ناقص،
+                                                     gap بزرگ روی IE/Treasury،
+                                                     دفتر کل با synth کار می‌کند.
+
+Project Management                          80/100   پروژه/مرحله/کارشناس کامل،
+                                                     حساب پروژه + profitability
+                                                     کار می‌کند، فقط overhead و
+                                                     WIP نیست.
+
+CRM                                         35/100   لیست مشتری از receivables
+                                                     می‌آید، صورت‌حساب هست،
+                                                     ولی segment, lead, opportunity،
+                                                     pipeline، contact کامل نیست.
+
+Treasury                                    70/100   صندوق/بانک + deposit/withdraw/
+                                                     transfer کار می‌کند، multi-
+                                                     currency پایه، ولی reconcile
+                                                     ندارد و voucher nest نمی‌زند.
+
+Automation                                  45/100   auto-voucher روی expert payouts،
+                                                     overdue recompute روی fetch،
+                                                     ولی بدون cron، بدون reminder.
+
+Reporting                                   60/100   ۶ گزارش کلاسیک + Export کامل
+                                                     + Print/PDF/Excel با فونت فارسی،
+                                                     ولی cash flow و budget vs actual
+                                                     نیست، period comparison نیست.
+
+Security                                    55/100   nonce + cap check + sanitize
+                                                     خوب، ولی RBAC فقط در client
+                                                     enforce می‌شود؛ کارشناس به
+                                                     ERP کامل دسترسی دارد.
+
+Scalability                                 40/100   wp_options برای vouchers/
+                                                     cheques/payables/installments
+                                                     در volume بالا فاجعه می‌شود.
+                                                     bootstrap با ۳۰+ کوئری.
+                                                     N+1 در aggregation.
+
+Enterprise Readiness                        50/100   چندشرکته/چندشعبه ساده،
+                                                     audit log قوی، RBAC ضعیف،
+                                                     period locking فقط نمایشی،
+                                                     migration پایگاه‌داده ندارد.
+
+میانگین کلی                                 54/100   نسخه‌ای کاربردی برای کسب‌وکار
+                                                     کوچک تا متوسط، با چالش‌های
+                                                     جدی برای Enterprise.
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ بخش دوازدهم — Roadmap                                                          │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+▓▓▓ Must Fix Before Phase 3 (بحرانی) ▓▓▓
+  1. Voucher Engine کامل — برای customer pay, IncomeExpense, Treasury
+     (transfer/deposit/withdraw). بدون این، حسابداری معتبر نیست.
+  2. Account Mapping قابل پیکربندی — حذف hardcoded a1_1_1, a3_1_2, …
+     جایگزین با تنظیم در صفحه‌ی "نگاشت حساب پیش‌فرض".
+  3. Backend enforcement RBAC — endpoint چک کند کاربر چه perm دارد،
+     نه فقط edit_cptt_projects. (در غیر این صورت ۴ سطح دسترسی بی‌معناست.)
+  4. Migrate vouchers/cheques/payables/installments از wp_options به جدول.
+  5. MIME type validation روی attachment upload.
+
+▓▓▓ Recommended Before Phase 3 (مهم) ▓▓▓
+  6. Period Locking enforcement — جلوگیری از ثبت روی دوره‌ی بسته‌شده.
+  7. INDEX روی wp_cptt_fin_ledger (date_at, project_id, customer_id).
+  8. WP-Cron برای recompute overdue + auto-prune audit log.
+  9. ستون voucher_id در ledger برای حذف dual-source.
+ 10. Bootstrap به chunkهای lazy تقسیم شود (هر ماژول endpoint جدا).
+ 11. Cash Flow Statement.
+ 12. Bank Reconciliation MVP.
+ 13. Reverse Voucher (یک کلیک سند معکوس).
+
+▓▓▓ Phase 3 Ready Features (آماده‌ی توسعه) ▓▓▓
+  ✓ Invoice/Quote module (مستقل از voucher engine)
+  ✓ Multi-currency با نرخ روزانه (پایه آماده است)
+  ✓ Period comparison reports
+  ✓ Drill-down KPI Dashboard
+  ✓ Payslip print
+  ✓ WIP report
+  ✓ Budget vs Actual
+  ✓ SMS/Bale reminder integration (CPTT_Bale و CPTT_SMS موجودند)
+  ✓ Standard Iran COA import
+  ✓ Print voucher template رسمی
+
+▓▓▓ Long Term Improvements (بلندمدت) ▓▓▓
+  ◆ Overhead allocation + Activity-Based Costing
+  ◆ Real Cost Center hierarchy
+  ◆ Mobile PWA / Native App
+  ◆ Webhook outbound + REST API عمومی
+  ◆ Two-Factor Auth برای settings
+  ◆ Multi-tenant / SaaS-ready
+  ◆ AI Assistant integration (CPTT_AI_Assistant موجود است)
+  ◆ Predictive cash flow (ML-based)
+  ◆ Iran TAX integration (سامانه مالیات‌ها)
+  ◆ Direct Sayyadi banking integration
+  ◆ Receipt scanner OCR
+  ◆ E-invoice (صورت‌حساب الکترونیکی)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  END OF AUDIT REPORT
+  تاریخ تهیه: 2026-06-12
+  Auditor: Internal (سورس‌بنیاد، بدون حدس)
+  منبع‌ها:
+    /home/user/ccptt/includes/class-cptt-finance-erp.php  (۲۳۵۵ خط)
+    /tmp/mali/src/  (۳۹۸۴ خط React TS)
+    /home/user/ccptt/client-project-tracker.php
+    /home/user/ccptt/assets/finance-ui/  (build output)
+════════════════════════════════════════════════════════════════════════════════
